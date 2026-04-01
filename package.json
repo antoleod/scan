@@ -1,0 +1,47 @@
+{
+  "name": "barra-scanner",
+  "version": "1.0.0",
+  "main": "expo/AppEntry",
+  "scripts": {
+    "start": "expo start",
+    "tunnel": "expo start --tunnel",
+    "postinstall": "node scripts/patch-ngrok.js",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "web": "expo start --web",
+    "typecheck": "tsc --noEmit",
+    "test": "tsc -p tsconfig.tests.json && node .test-dist/tests/run-tests.js"
+  },
+  "dependencies": {
+    "@expo/vector-icons": "^15.0.2",
+    "@react-native-async-storage/async-storage": "2.2.0",
+    "@react-native-community/datetimepicker": "8.6.0",
+    "expo": "~55.0.5",
+    "expo-av": "16.0.8",
+    "expo-camera": "~55.0.9",
+    "expo-clipboard": "~55.0.8",
+    "expo-file-system": "~55.0.10",
+    "expo-font": "~55.0.4",
+    "expo-haptics": "~55.0.9",
+    "expo-image-picker": "~55.0.11",
+    "expo-sharing": "~55.0.11",
+    "expo-status-bar": "~55.0.4",
+    "firebase": "^12.10.0",
+    "jsbarcode": "^3.12.3",
+    "react": "19.2.0",
+    "react-dom": "^19.2.0",
+    "react-native": "0.83.2",
+    "react-native-nfc-manager": "3.17.2",
+    "react-native-qrcode-svg": "^6.3.1",
+    "react-native-safe-area-context": "5.6.2",
+    "react-native-svg": "15.4.0",
+    "react-native-web": "^0.21.0"
+  },
+  "devDependencies": {
+    "@expo/ngrok": "^4.1.3",
+    "@types/react": "~19.2.2",
+    "babel-preset-expo": "^55.0.10",
+    "typescript": "~5.9.2"
+  },
+  "private": true
+}

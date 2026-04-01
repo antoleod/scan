@@ -1,0 +1,13 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1024" height="1024" rx="240" fill="var(--bg, #071427)"/>
+  <circle cx="512" cy="512" r="286" stroke="var(--line, #DCE8FF)" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="512" cy="512" r="186" stroke="var(--line, #DCE8FF)" stroke-width="22" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="512" cy="512" r="76" fill="var(--accent, #2F6BFF)"/>
+  <circle cx="512" cy="512" r="116" stroke="var(--line, #DCE8FF)" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M512 228V796" stroke="var(--line, #DCE8FF)" stroke-width="24" stroke-linecap="round"/>
+  <path d="M228 512H796" stroke="var(--line, #DCE8FF)" stroke-width="24" stroke-linecap="round"/>
+  <path d="M362 362H304V420" stroke="var(--accent, #2F6BFF)" stroke-width="22" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M662 362H720V420" stroke="var(--accent, #2F6BFF)" stroke-width="22" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M362 662H304V604" stroke="var(--accent, #2F6BFF)" stroke-width="22" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M662 662H720V604" stroke="var(--accent, #2F6BFF)" stroke-width="22" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
