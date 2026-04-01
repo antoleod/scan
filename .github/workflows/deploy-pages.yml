@@ -31,6 +31,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Install Expo web runtime for static render
+        run: npm install --no-save @expo/metro-runtime
+
       - name: Configure Pages
         uses: actions/configure-pages@v5
         with:
