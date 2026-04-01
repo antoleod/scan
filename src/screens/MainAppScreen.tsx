@@ -1269,29 +1269,27 @@ function MainApp() {
   const selectedDateLabel = selectedDate ? selectedDate.toLocaleDateString() : null;
   const tabOrder: Tab[] = ['scan', 'history', 'notes', 'settings'];
 
-  const swipeResponder = useMemo(
-    () =>
-      PanResponder.create({
-        onStartShouldSetPanResponder: () => Platform.OS !== 'web' && false,
-        onMoveShouldSetPanResponder: (_, gestureState) => {
-          if (Platform.OS === 'web') return false;
-          const isHorizontal = Math.abs(gestureState.dx) > 28 && Math.abs(gestureState.dx) > Math.abs(gestureState.dy) * 1.2;
-          return isHorizontal;
-        },
-        onPanResponderRelease: (_, gestureState) => {
-          const currentIndex = tabOrder.indexOf(activeTab);
-          if (currentIndex < 0) return;
-          if (gestureState.dx < -50 && currentIndex < tabOrder.length - 1) {
-            setActiveTab(tabOrder[currentIndex + 1]);
-          } else if (gestureState.dx > 50 && currentIndex > 0) {
-            setActiveTab(tabOrder[currentIndex - 1]);
-          }
-        },
-      }),
-    [activeTab]
-  );
+  const swipeResponder = useMemo(() => {
+    if (Platform.OS === 'web') return null;
+    return PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponder: (_, gestureState) => {
+        const isHorizontal = Math.abs(gestureState.dx) > 28 && Math.abs(gestureState.dx) > Math.abs(gestureState.dy) * 1.2;
+        return isHorizontal;
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        const currentIndex = tabOrder.indexOf(activeTab);
+        if (currentIndex < 0) return;
+        if (gestureState.dx < -50 && currentIndex < tabOrder.length - 1) {
+          setActiveTab(tabOrder[currentIndex + 1]);
+        } else if (gestureState.dx > 50 && currentIndex > 0) {
+          setActiveTab(tabOrder[currentIndex - 1]);
+        }
+      },
+    });
+  }, [activeTab]);
 
-  const webPanHandlers = Platform.OS === 'web' ? {} : swipeResponder.panHandlers;
+  const webPanHandlers = swipeResponder ? swipeResponder.panHandlers : {};
 
   const content = (
     <SafeAreaView style={[styles.safe, { backgroundColor: palette.bg }]}>

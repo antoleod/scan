@@ -591,7 +591,9 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
               />
               <Text style={[styles.statusText, { color: theme.textSecondary }]}>
                 {!firebase.enabled
-                  ? 'Firebase disabled in live environment (missing secrets).'
+                  ? (firebase.missingRequiredEnv.length
+                    ? `Firebase not configured in this deploy. Missing: ${firebase.missingRequiredEnv.join(', ')}`
+                    : 'Firebase not configured in this deploy.')
                   : connectionState === 'connected'
                     ? 'Firebase ready'
                     : 'Connectivity check limited (login may still work)'}

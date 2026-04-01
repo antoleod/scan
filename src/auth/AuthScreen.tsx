@@ -19,18 +19,19 @@ import { useAuth } from './useAuth';
 function AuthBackgroundEffects() {
   const pulse = React.useRef(new Animated.Value(0)).current;
   const drift = React.useRef(new Animated.Value(0)).current;
+  const useNativeDriver = Platform.OS !== 'web';
 
   React.useEffect(() => {
     const pulseLoop = Animated.loop(
       Animated.sequence([
-        Animated.timing(pulse, { toValue: 1, duration: 2600, useNativeDriver: true }),
-        Animated.timing(pulse, { toValue: 0, duration: 2600, useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 1, duration: 2600, useNativeDriver }),
+        Animated.timing(pulse, { toValue: 0, duration: 2600, useNativeDriver }),
       ])
     );
     const driftLoop = Animated.loop(
       Animated.sequence([
-        Animated.timing(drift, { toValue: 1, duration: 4200, useNativeDriver: true }),
-        Animated.timing(drift, { toValue: 0, duration: 4200, useNativeDriver: true }),
+        Animated.timing(drift, { toValue: 1, duration: 4200, useNativeDriver }),
+        Animated.timing(drift, { toValue: 0, duration: 4200, useNativeDriver }),
       ])
     );
     pulseLoop.start();

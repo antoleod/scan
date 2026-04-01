@@ -47,7 +47,7 @@ export function toFriendlyAuthError(error: unknown): string {
 
   const message = readFirebaseErrorMessage(error);
   if (message.toLowerCase().includes('firebase not configured') || message.toLowerCase().includes('missing variables')) {
-    return 'Service temporarily unavailable. Configuration in progress.';
+    return message;
   }
 
   return 'Authentication failed. Please try again.';
@@ -74,8 +74,8 @@ export async function getFirebaseGuardState(): Promise<FirebaseGuardState> {
   return {
     enabled: false,
     message: missing
-      ? 'Service temporarily unavailable. Configuration in progress.'
-      : 'Service temporarily unavailable. Configuration in progress.',
+      ? `Firebase not configured. Missing variables: ${missing}`
+      : 'Firebase not configured in this build.',
     missingRequiredEnv: runtime.missingRequiredEnv,
     missingOptionalEnv: runtime.missingOptionalEnv,
   };

@@ -36,7 +36,8 @@ export default function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
   const handleSubmit = async () => {
     setError(null);
     if (!firebase.enabled) {
-      setError('Firebase no esta configurado. Activa las variables/secrets primero.');
+      const missing = firebase.missingRequiredEnv.join(', ');
+      setError(missing ? `Firebase not configured. Missing: ${missing}` : 'Firebase not configured in this build.');
       return;
     }
 
