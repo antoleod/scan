@@ -1,4 +1,4 @@
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+﻿import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import {
     getAuth,
     GoogleAuthProvider,
@@ -24,7 +24,7 @@ import {
 
 const FAKE_DOMAIN = "@barrascanner.local";
 const ENV_ERROR =
-    "Firebase is not available in this environment. Use 'firebase serve' (http://localhost:5000) or Firebase Hosting.";
+    "Firebase is not available in this environment. Define runtime config via /__/firebase/init.json or window.__BARRA_FIREBASE_CONFIG__.";
 
 async function tryGetJson(url) {
     try {
@@ -38,43 +38,26 @@ async function tryGetJson(url) {
     }
 }
 
+function getWindowConfig() {
+    const cfg = window.__BARRA_FIREBASE_CONFIG__;
+    if (!cfg || typeof cfg !== 'object') return null;
+    return cfg;
+}
+
 async function loadFirebaseConfig() {
-    // Skip fetching init.json on typical Live Server ports to avoid 404 console errors
-    let shouldFetchInit = true;
-    if (window.location.hostname === "127.0.0.1" || window.location.hostname === "localhost") {
-        if (window.location.port === "5500" || window.location.port === "8080") shouldFetchInit = false;
-    }
-    if (window.location.hostname === "oryxen.tech" || window.location.hostname.endsWith("github.io")) shouldFetchInit = false;
+    const hostingConfig = await tryGetJson("/__/firebase/init.json");
+    if (hostingConfig) return hostingConfig;
 
-    if (shouldFetchInit) {
-        const hostingConfig = await tryGetJson("/__/firebase/init.json");
-        if (hostingConfig) return hostingConfig;
-    }
+    const runtimeConfig = getWindowConfig();
+    if (runtimeConfig) return runtimeConfig;
 
-    // --- CONFIGURACIÓN MANUAL DE RESPALDO ---
-    // Rellena esto con los datos de tu proyecto desde la consola de Firebase
-    // (Project Settings > General > Your apps > Web app > SDK setup and configuration)
-    return {
-        apiKey: "AIzaSyBIwE2kuScBVJBK1aTSFo8IlM2HyjVasLc",
-        authDomain: "lectorqr-45291.firebaseapp.com",
-        projectId: "lectorqr-45291",
-        storageBucket: "lectorqr-45291.appspot.com",
-        messagingSenderId: "751229393866",
-        appId: "1:751229393866:web:1cce5fa16380435ca94d33",
-        measurementId: "G-BE9R1XH54E"
-    };
+    return null;
 }
 
 async function createFirebaseRuntime() {
     const firebaseConfig = await loadFirebaseConfig();
     if (!firebaseConfig) {
         console.warn("[firebase-service]", ENV_ERROR);
-        return { app: null, auth: null, db: null, enabled: false };
-    }
-
-    // Verificación de seguridad: Detectar si se usan las credenciales de ejemplo
-    if (firebaseConfig.apiKey === "TU_API_KEY_AQUI") {
-        console.error("[firebase-service] MISSING CONFIGURATION: Replace values in 'firebase-service.js' with your Firebase project's.");
         return { app: null, auth: null, db: null, enabled: false };
     }
 
@@ -110,17 +93,11 @@ export const fbService = {
         });
     },
 
-    /**
-     * Returns a Promise that resolves with the initial user authentication state.
-     * This is crucial for implementing a route guard that waits for auth to be resolved.
-     */
     getInitialUser() {
         return new Promise((resolve, reject) => {
             if (!this.enabled) {
                 return resolve(null);
             }
-            
-            // Failsafe: If auth takes too long (e.g. offline/404), resolve null to unblock UI.
             let resolved = false;
             const timer = setTimeout(() => {
                 if (!resolved) {
@@ -130,13 +107,11 @@ export const fbService = {
                 }
             }, 3000);
 
-            // onAuthStateChanged fires immediately with the current state.
-            // We only want the first result for our initial guard check.
             const unsubscribe = onAuthStateChanged(this.auth, user => {
                 if (resolved) return;
                 resolved = true;
                 clearTimeout(timer);
-                unsubscribe(); // Stop listening after the first result
+                unsubscribe();
                 this.currentUser = user;
                 resolve(user);
             }, err => {
@@ -220,66 +195,49 @@ export const fbService = {
     },
 
     async logout() {
-        if (!runtime.enabled) return;
-        await signOut(runtime.auth);
+        if (!runtime.enabled) return unavailableResult();
+        try {
+            await signOut(runtime.auth);
+            return { success: true };
+        } catch (error) {
+            return { success: false, error: error.message };
+        }
     },
 
-    async syncScans(localPendingScans) {
-        if (!runtime.enabled) throw new Error(ENV_ERROR);
-        if (!this.currentUser) throw new Error("Not authenticated");
-
-        const uid = this.currentUser.uid;
-        const userScansRef = collection(runtime.db, "users", uid, "scans");
-        let pushedCount = 0;
-        const errors = [];
-
-        for (const scan of localPendingScans) {
-            try {
-                const docId = scan.date ? new Date(scan.date).getTime().toString() : Date.now().toString();
-                await setDoc(
-                    doc(userScansRef, docId),
-                    {
-                        ...scan,
-                        syncedAt: Timestamp.now(),
-                        uid,
-                    },
-                    { merge: true }
-                );
-                pushedCount++;
-            } catch (error) {
-                console.error("Error uploading scan", scan, error);
-                errors.push({ scan, error });
-            }
+    async saveScan(scanData) {
+        if (!runtime.enabled || !this.currentUser) return unavailableResult();
+        try {
+            const scanRef = doc(collection(runtime.db, "users", this.currentUser.uid, "scans"));
+            await setDoc(scanRef, {
+                ...scanData,
+                createdAt: serverTimestamp(),
+                localTimestamp: Date.now(),
+            });
+            return { success: true, id: scanRef.id };
+        } catch (error) {
+            return { success: false, error: error.message };
         }
-
-        // Si todos los intentos de subida fallaron, es un error grave que hay que reportar.
-        if (errors.length > 0 && errors.length === localPendingScans.length) {
-            const firstErrorCode = errors[0].error.code;
-            if (firstErrorCode === 'permission-denied') {
-                throw new Error("Permission error. Check Firestore security rules.");
-            }
-            throw new Error(`Upload failed for ${errors.length} records.`);
-        }
-
-        const q = query(userScansRef);
-        const querySnapshot = await getDocs(q);
-        const serverScans = [];
-        querySnapshot.forEach((snapshotDoc) => {
-            const data = snapshotDoc.data();
-            if (data.syncedAt && data.syncedAt.toDate) {
-                delete data.syncedAt;
-            }
-            serverScans.push(data);
-        });
-
-        return { pushedCount, serverScans };
     },
 
-    getUserDisplay() {
-        if (!this.currentUser) return "";
-        if (this.currentUser.email.endsWith(FAKE_DOMAIN)) {
-            return this.currentUser.email.replace(FAKE_DOMAIN, "").toUpperCase();
+    async getScans() {
+        if (!runtime.enabled || !this.currentUser) return [];
+        try {
+            const scansQuery = query(collection(runtime.db, "users", this.currentUser.uid, "scans"));
+            const snapshot = await getDocs(scansQuery);
+            return snapshot.docs.map(docSnap => {
+                const data = docSnap.data();
+                const ts = data.createdAt instanceof Timestamp
+                    ? data.createdAt.toMillis()
+                    : (typeof data.createdAt === "number" ? data.createdAt : Date.now());
+                return {
+                    id: docSnap.id,
+                    ...data,
+                    createdAt: ts,
+                };
+            });
+        } catch (error) {
+            console.error("Error getting scans:", error);
+            return [];
         }
-        return this.currentUser.displayName || this.currentUser.email;
-    },
+    }
 };

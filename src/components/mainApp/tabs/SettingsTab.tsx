@@ -36,14 +36,32 @@ type AppThemeName = 'euBlue' | 'dark' | 'light' | 'parliament' | 'custom' | 'noi
 const PASSWORD_WORDS = ['amber', 'cactus', 'signal', 'orbit', 'raven', 'velvet', 'anchor', 'matrix', 'ember', 'breeze', 'atlas', 'comet', 'lumen', 'solace', 'harbor', 'zenith', 'pixel', 'vector'];
 const PASSWORD_PHRASE_WORDS = ['one', 'two', 'sun', 'moon', 'play', 'win', 'glow', 'spark', 'night', 'day', 'stone', 'flow', 'north', 'east'];
 
-function SectionCard({ title, subtitle, accent, children, defaultOpen = false }: { title: string; subtitle?: string; accent: string; children: React.ReactNode; defaultOpen?: boolean }) {
+function SectionCard({
+  title,
+  subtitle,
+  accent,
+  subtitleColor,
+  cardBackground,
+  cardBorder,
+  children,
+  defaultOpen = false,
+}: {
+  title: string;
+  subtitle?: string;
+  accent: string;
+  subtitleColor: string;
+  cardBackground: string;
+  cardBorder: string;
+  children: React.ReactNode;
+  defaultOpen?: boolean;
+}) {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <View style={[styles.sectionCard, { borderLeftColor: accent }]}>
+    <View style={[styles.sectionCard, { borderLeftColor: accent, backgroundColor: cardBackground, borderColor: cardBorder }]}>
       <Pressable onPress={() => setOpen((v) => !v)} style={styles.sectionHeader}>
         <View style={{ flex: 1 }}>
           <Text style={[styles.sectionTitle, { color: accent }]}>{title}</Text>
-          {subtitle ? <Text style={styles.sectionSubtitle}>{subtitle}</Text> : null}
+          {subtitle ? <Text style={[styles.sectionSubtitle, { color: subtitleColor }]}>{subtitle}</Text> : null}
         </View>
         <Text style={[styles.chevron, { color: accent }]}>{open ? 'v' : '>'}</Text>
       </Pressable>
@@ -186,7 +204,7 @@ export function SettingsTab({
           <Text style={[styles.pageSubtitle, { color: palette.muted }]}>Pick a complete visual theme and tune integrations.</Text>
         </View>
 
-        <SectionCard title="Theme options" subtitle="Same catalog as BarraV2." accent={palette.accent} defaultOpen>
+        <SectionCard title="Theme options" subtitle="Same catalog as BarraV2." accent={palette.accent} subtitleColor={palette.muted} cardBackground={palette.card} cardBorder={palette.border} defaultOpen>
           <View style={styles.themeGrid}>
             {themeOptions.map((item) => (
               <ThemeCard
@@ -213,7 +231,7 @@ export function SettingsTab({
           ) : null}
         </SectionCard>
 
-        <SectionCard title="Barcode formats" subtitle="Default and hardware-only matrix." accent={palette.accent}>
+        <SectionCard title="Barcode formats" subtitle="Default and hardware-only matrix." accent={palette.accent} subtitleColor={palette.muted} cardBackground={palette.card} cardBorder={palette.border}>
           <View style={styles.formatGrid}>
             {barcodeOptions.map((format) => {
               const selected = barcodeOutputFormat === format.name;
@@ -237,13 +255,13 @@ export function SettingsTab({
           <Text style={[styles.helperLine, { color: palette.muted }]}>Active scan types: {visibleBarcodeTypes.join(', ') || 'none'}</Text>
         </SectionCard>
 
-        <SectionCard title="Scan options" subtitle="Demo controls for realistic behavior." accent={palette.accent}>
+        <SectionCard title="Scan options" subtitle="Demo controls for realistic behavior." accent={palette.accent} subtitleColor={palette.muted} cardBackground={palette.card} cardBorder={palette.border}>
           <View style={styles.toggleRow}><Text style={[styles.toggleLabel, { color: palette.fg }]}>Auto detect</Text><Switch value={settings.autoDetect} onValueChange={(value) => onPatchSettings({ autoDetect: value, scanProfile: value ? 'auto' : settings.scanProfile })} /></View>
           <View style={styles.toggleRow}><Text style={[styles.toggleLabel, { color: palette.fg }]}>Open URL</Text><Switch value={settings.openUrls ?? true} onValueChange={(value) => onPatchSettings({ openUrls: value })} /></View>
           <View style={styles.toggleRow}><Text style={[styles.toggleLabel, { color: palette.fg }]}>OCR correction</Text><Switch value={settings.ocrCorrection} onValueChange={(value) => onPatchSettings({ ocrCorrection: value })} /></View>
         </SectionCard>
 
-        <SectionCard title="Bulk import" subtitle="Paste list (one per line, comma or tab)." accent={palette.accent}>
+        <SectionCard title="Bulk import" subtitle="Paste list (one per line, comma or tab)." accent={palette.accent} subtitleColor={palette.muted} cardBackground={palette.card} cardBorder={palette.border}>
           <TextInput
             multiline
             value={bulkInput}
@@ -263,7 +281,7 @@ export function SettingsTab({
           ) : null}
         </SectionCard>
 
-        <SectionCard title="Data + Sync" subtitle="Export and cloud sync actions." accent={palette.accent}>
+        <SectionCard title="Data + Sync" subtitle="Export and cloud sync actions." accent={palette.accent} subtitleColor={palette.muted} cardBackground={palette.card} cardBorder={palette.border}>
           <View style={styles.bulkActions}>
             <Pressable onPress={onExportCsv} style={[styles.bulkButton, { backgroundColor: activeAccent }]}><Text style={[styles.bulkButtonText, { color: '#111' }]}>Export CSV</Text></Pressable>
             <Pressable onPress={onExportBackup} style={[styles.bulkButton, { backgroundColor: activeAccent }]}><Text style={[styles.bulkButtonText, { color: '#111' }]}>Export backup</Text></Pressable>
@@ -272,7 +290,7 @@ export function SettingsTab({
           </View>
         </SectionCard>
 
-        <SectionCard title="Password generator" subtitle="Simple words, stronger structure." accent={palette.accent}>
+        <SectionCard title="Password generator" subtitle="Simple words, stronger structure." accent={palette.accent} subtitleColor={palette.muted} cardBackground={palette.card} cardBorder={palette.border}>
           <View style={styles.passwordModeRow}>
             <Pressable onPress={() => setPassMode('short')} style={[styles.passwordModeButton, { borderColor: palette.border }, passMode === 'short' && styles.passwordModeButtonActive]}>
               <Text style={[styles.passwordModeText, { color: passMode === 'short' ? '#111' : palette.fg }]}>Short</Text>
@@ -304,7 +322,7 @@ export function SettingsTab({
           ) : null}
         </SectionCard>
 
-        <SectionCard title="ServiceNow" subtitle="Editable links and query fragments." accent={palette.accent}>
+        <SectionCard title="ServiceNow" subtitle="Editable links and query fragments." accent={palette.accent} subtitleColor={palette.muted} cardBackground={palette.card} cardBorder={palette.border}>
           <View style={styles.field}>
             <Text style={[styles.fieldLabel, { color: activeAccent }]}>Instance URL</Text>
             <TextInput style={[styles.input, { borderColor: palette.border, color: palette.fg, backgroundColor: palette.card }]} value={serviceNow.baseUrl} onChangeText={(text) => setServiceNow((prev) => ({ ...prev, baseUrl: text }))} />
@@ -322,7 +340,15 @@ export function SettingsTab({
           </Pressable>
         </SectionCard>
 
-        <SectionCard title="Account" subtitle="Current session." accent={palette.accent}>
+        <SectionCard title="Privacy + Security" subtitle="No secrets are hardcoded in the app bundle." accent={palette.accent} subtitleColor={palette.muted} cardBackground={palette.card} cardBorder={palette.border}>
+          <Text style={{ color: palette.muted }}>Firebase config source: runtime only (`/__/firebase/init.json` or `window.__BARRA_FIREBASE_CONFIG__`).</Text>
+          <Text style={{ color: palette.muted, marginTop: 4 }}>Session mode: {isGuest ? 'Local only (guest)' : 'Authenticated cloud sync'}</Text>
+          <View style={styles.bulkActions}>
+            <Pressable onPress={onRecheckFirebase} style={[styles.bulkButton, { backgroundColor: activeAccent }]}><Text style={[styles.bulkButtonText, { color: '#111' }]}>Validate runtime config</Text></Pressable>
+          </View>
+        </SectionCard>
+
+        <SectionCard title="Account" subtitle="Current session." accent={palette.accent} subtitleColor={palette.muted} cardBackground={palette.card} cardBorder={palette.border}>
           <Text style={{ color: palette.muted }}>Mode: {isGuest ? 'Guest' : 'Authenticated'}</Text>
           {userEmail ? <Text style={{ color: palette.fg, marginTop: 4 }}>{userEmail}</Text> : null}
           {userUidPrefix ? <Text style={{ color: palette.muted }}>UID: {userUidPrefix}...</Text> : null}
@@ -343,10 +369,10 @@ const styles = StyleSheet.create({
   kicker: { fontSize: 10, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 3, fontFamily: 'monospace' },
   pageTitle: { fontSize: 22, fontWeight: '900', letterSpacing: -0.6 },
   pageSubtitle: { fontSize: 12, lineHeight: 16 },
-  sectionCard: { gap: 12, padding: 14, borderRadius: 12, borderLeftWidth: 3, backgroundColor: '#0E1A3A', borderWidth: 1, borderColor: 'rgba(255,216,77,0.15)' },
+  sectionCard: { gap: 12, padding: 14, borderRadius: 12, borderLeftWidth: 3, borderWidth: 1 },
   sectionHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
   sectionTitle: { fontSize: 13, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 1.2, fontFamily: 'monospace' },
-  sectionSubtitle: { color: '#A8C4FF', fontSize: 11, lineHeight: 15 },
+  sectionSubtitle: { fontSize: 11, lineHeight: 15 },
   chevron: { fontWeight: '800', fontSize: 14 },
   themeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   themeCard: { minWidth: 68, flexGrow: 1, minHeight: 70, borderRadius: 14, borderWidth: 1, paddingHorizontal: 10, paddingVertical: 10, justifyContent: 'center', alignItems: 'center', gap: 6, position: 'relative', overflow: 'hidden' },

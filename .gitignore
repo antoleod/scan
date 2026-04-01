@@ -45,3 +45,6 @@ yarn-error.*
 
 # stale deployment scaffold
 /mobile
+
+firebase-debug.log
+*.local.log
