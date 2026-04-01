@@ -64,6 +64,16 @@ import { loadNotes as loadWorkNotes, loadTemplates as loadNoteTemplates, saveNot
 type Tab = 'scan' | 'history' | 'notes' | 'settings';
 type ManualItemType = 'PI' | 'OFFICE' | 'OTHER';
 type DateFilter = 'ALL' | 'TODAY' | 'WEEK' | 'MONTH';
+type EntryDraftSnapshot = {
+  mode: 'add' | 'edit';
+  type: ManualItemType;
+  value: string;
+  label: string;
+  ticket: string;
+  notes: string;
+  office: string;
+  editId: string | null;
+};
 
 function visibleScanType(type: string) {
   return normalizeHistoryType(type);
@@ -158,6 +168,7 @@ function MainApp() {
   const autoSyncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const cameraRef = useRef<CameraView>(null);
   const laserAnim = useRef(new Animated.Value(0)).current;
+  const entryDraftRef = useRef<EntryDraftSnapshot | null>(null);
 
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const isCompactLayout = width < 390 || height < 780;
@@ -948,6 +959,50 @@ function MainApp() {
     setEntryNotes('');
     setEntryOffice('');
     setEntryEditId(null);
+    entryDraftRef.current = null;
+  }
+
+  function buildEntrySnapshot(nextMode: 'add' | 'edit', nextType: ManualItemType, nextValue: string, nextLabel: string, nextTicket: string, nextNotes: string, nextOffice: string, nextEditId: string | null): EntryDraftSnapshot {
+    return {
+      mode: nextMode,
+      type: nextType,
+      value: nextValue.trim(),
+      label: nextLabel.trim(),
+      ticket: nextTicket.trim(),
+      notes: nextNotes.trim(),
+      office: nextOffice.trim(),
+      editId: nextEditId,
+    };
+  }
+
+  function hasEntryDraftChanges() {
+    if (!entryModalVisible) return false;
+    const baseline = entryDraftRef.current;
+    if (!baseline) return false;
+    const current = buildEntrySnapshot(entryMode, entryType, entryValue, entryLabel, entryTicket, entryNotes, entryOffice, entryEditId);
+    return (
+      baseline.mode !== current.mode ||
+      baseline.type !== current.type ||
+      baseline.value !== current.value ||
+      baseline.label !== current.label ||
+      baseline.ticket !== current.ticket ||
+      baseline.notes !== current.notes ||
+      baseline.office !== current.office ||
+      baseline.editId !== current.editId
+    );
+  }
+
+  function requestCloseEntryModal() {
+    if (!hasEntryDraftChanges()) {
+      resetEntryModal();
+      return;
+    }
+
+    Alert.alert('Unsaved changes', 'Do you want to save before closing?', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Discard', style: 'destructive', onPress: () => resetEntryModal() },
+      { text: 'Save', onPress: () => { saveEntryRecord('none').catch(() => undefined); } },
+    ]);
   }
 
   function openManualEntryModal() {
@@ -959,6 +1014,7 @@ function MainApp() {
     setEntryNotes('');
     setEntryOffice('');
     setEntryEditId(null);
+    entryDraftRef.current = buildEntrySnapshot('add', 'PI', '', '', '', '', '', null);
     setEntryModalVisible(true);
   }
 
@@ -978,6 +1034,16 @@ function MainApp() {
     setEntryOffice(item.officeCode || '');
     setEntryNotes(item.notes || '');
     setEntryEditId(item.id);
+    entryDraftRef.current = buildEntrySnapshot(
+      'edit',
+      inferredType,
+      item.codeNormalized,
+      item.label || item.customLabel || '',
+      item.ticketNumber || '',
+      item.notes || '',
+      item.officeCode || '',
+      item.id
+    );
     setEntryModalVisible(true);
   }
 
@@ -1322,7 +1388,7 @@ function MainApp() {
         officeCode={entryOffice}
         notes={entryNotes}
         palette={{ bg: palette.bg, card: palette.card, fg: palette.fg, muted: palette.muted, border: palette.border, accent: palette.accent }}
-        onClose={resetEntryModal}
+        onClose={requestCloseEntryModal}
         onChangeValue={setEntryValue}
         onChangeType={setEntryType}
         onChangeLabel={setEntryLabel}

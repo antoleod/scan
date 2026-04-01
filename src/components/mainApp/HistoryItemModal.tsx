@@ -62,6 +62,9 @@ export function HistoryItemModal({
 }) {
   const isAdd = mode === 'add';
   const typeOptions: ItemType[] = ['PI', 'OFFICE', 'OTHER'];
+  const isPiType = type === 'PI';
+  const valueLabel = isPiType ? 'PI Code' : 'Value';
+  const valuePlaceholder = isPiType ? 'Paste PI code (example: 02PI20...)' : 'Enter value';
 
   return (
     <Modal animationType="slide" transparent visible={visible} onRequestClose={onClose}>
@@ -84,7 +87,7 @@ export function HistoryItemModal({
             </Pressable>
           </View>
 
-          <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ gap: 12, paddingBottom: 4 }}>
+          <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ gap: 12, paddingBottom: 8 }}>
             <View style={mainAppStyles.formSection}>
               <Text style={[mainAppStyles.formLabel, { color: palette.fg }]}>Type</Text>
               <View style={mainAppStyles.formRow}>
@@ -109,11 +112,11 @@ export function HistoryItemModal({
             </View>
 
             <View style={mainAppStyles.formSection}>
-              <Text style={[mainAppStyles.formLabel, { color: palette.fg }]}>Value</Text>
+              <Text style={[mainAppStyles.formLabel, { color: palette.fg }]}>{valueLabel}</Text>
               <TextInput
                 value={value}
                 onChangeText={onChangeValue}
-                placeholder="Enter value"
+                placeholder={valuePlaceholder}
                 placeholderTextColor={palette.muted}
                 autoCapitalize="characters"
                 autoCorrect={false}
@@ -123,6 +126,11 @@ export function HistoryItemModal({
                   { color: palette.fg, borderColor: palette.border, backgroundColor: palette.bg },
                 ]}
               />
+              {isPiType ? (
+                <Text style={{ marginTop: 6, fontSize: 11, lineHeight: 16, color: palette.muted }}>
+                  Paste the PI identifier in this field. It will be saved as a PI record.
+                </Text>
+              ) : null}
             </View>
 
             <View style={mainAppStyles.formSection}>
@@ -201,61 +209,19 @@ export function HistoryItemModal({
               />
             </View>
 
-            <View style={mainAppStyles.pickerFooter}>
-              {isAdd ? (
-                <>
-                  <Text style={{ color: palette.muted, fontSize: 11, lineHeight: 15, flex: 1, minWidth: '100%' }}>
-                    Office entries are saved as Code128 and can also preview a QR code.
-                  </Text>
-                  <Pressable
-                    style={[
-                      mainAppStyles.smallBtn,
-                      mainAppStyles.actionBtn,
-                      { borderColor: palette.border, opacity: busy ? 0.5 : 1 },
-                    ]}
-                    onPress={onSave}
-                    disabled={busy}
-                  >
-                    <View style={mainAppStyles.inlineAction}>
-                      <Ionicons name="save-outline" size={16} color={palette.fg} />
-                      <Text style={{ color: palette.fg }}>Save</Text>
-                    </View>
-                  </Pressable>
-                  <Pressable
-                    style={[
-                      mainAppStyles.smallBtn,
-                      mainAppStyles.actionBtn,
-                      { borderColor: palette.border, opacity: busy || !onSaveBarcode ? 0.5 : 1 },
-                    ]}
-                    onPress={onSaveBarcode}
-                    disabled={busy || !onSaveBarcode}
-                  >
-                    <View style={mainAppStyles.inlineAction}>
-                      <Ionicons name="barcode-outline" size={16} color={palette.fg} />
-                      <Text style={{ color: palette.fg }}>Save + Barcode</Text>
-                    </View>
-                  </Pressable>
-                  <Pressable
-                    style={[
-                      mainAppStyles.smallBtn,
-                      mainAppStyles.actionBtn,
-                      { borderColor: palette.border, opacity: busy || !onSaveQr ? 0.5 : 1 },
-                    ]}
-                    onPress={onSaveQr}
-                    disabled={busy || !onSaveQr}
-                  >
-                    <View style={mainAppStyles.inlineAction}>
-                      <Ionicons name="qr-code-outline" size={16} color={palette.fg} />
-                      <Text style={{ color: palette.fg }}>Save + QR</Text>
-                    </View>
-                  </Pressable>
-                </>
-              ) : (
+          </ScrollView>
+
+          <View style={[mainAppStyles.pickerFooterPinned, { borderTopColor: palette.border }]}>
+            {isAdd ? (
+              <>
+                <Text style={{ color: palette.muted, fontSize: 11, lineHeight: 15, flex: 1, minWidth: '100%' }}>
+                  Office entries are saved as Code128 and can also preview a QR code.
+                </Text>
                 <Pressable
                   style={[
                     mainAppStyles.smallBtn,
                     mainAppStyles.actionBtn,
-                    { borderColor: palette.border, opacity: busy ? 0.5 : 1, flex: 1 },
+                    { borderColor: palette.border, opacity: busy ? 0.5 : 1 },
                   ]}
                   onPress={onSave}
                   disabled={busy}
@@ -265,9 +231,52 @@ export function HistoryItemModal({
                     <Text style={{ color: palette.fg }}>Save</Text>
                   </View>
                 </Pressable>
-              )}
-            </View>
-          </ScrollView>
+                <Pressable
+                  style={[
+                    mainAppStyles.smallBtn,
+                    mainAppStyles.actionBtn,
+                    { borderColor: palette.border, opacity: busy || !onSaveBarcode ? 0.5 : 1 },
+                  ]}
+                  onPress={onSaveBarcode}
+                  disabled={busy || !onSaveBarcode}
+                >
+                  <View style={mainAppStyles.inlineAction}>
+                    <Ionicons name="barcode-outline" size={16} color={palette.fg} />
+                    <Text style={{ color: palette.fg }}>Save + Barcode</Text>
+                  </View>
+                </Pressable>
+                <Pressable
+                  style={[
+                    mainAppStyles.smallBtn,
+                    mainAppStyles.actionBtn,
+                    { borderColor: palette.border, opacity: busy || !onSaveQr ? 0.5 : 1 },
+                  ]}
+                  onPress={onSaveQr}
+                  disabled={busy || !onSaveQr}
+                >
+                  <View style={mainAppStyles.inlineAction}>
+                    <Ionicons name="qr-code-outline" size={16} color={palette.fg} />
+                    <Text style={{ color: palette.fg }}>Save + QR</Text>
+                  </View>
+                </Pressable>
+              </>
+            ) : (
+              <Pressable
+                style={[
+                  mainAppStyles.smallBtn,
+                  mainAppStyles.actionBtn,
+                  { borderColor: palette.border, opacity: busy ? 0.5 : 1, flex: 1 },
+                ]}
+                onPress={onSave}
+                disabled={busy}
+              >
+                <View style={mainAppStyles.inlineAction}>
+                  <Ionicons name="save-outline" size={16} color={palette.fg} />
+                  <Text style={{ color: palette.fg }}>Save</Text>
+                </View>
+              </Pressable>
+            )}
+          </View>
         </Pressable>
       </Pressable>
     </Modal>

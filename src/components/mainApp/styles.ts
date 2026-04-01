@@ -597,6 +597,14 @@ export const mainAppStyles = StyleSheet.create({
     marginTop: 14,
     paddingBottom: 2,
   },
+  pickerFooterPinned: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    flexWrap: 'wrap',
+  },
   toast: {
     position: 'absolute',
     left: 16,
