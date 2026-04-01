@@ -7,9 +7,9 @@ import {
   Platform,
   ScrollView,
   StyleSheet,
+  Pressable,
   Text,
   TextInput,
-  TouchableOpacity,
   View
 } from 'react-native';
 import Animated, {
@@ -209,7 +209,7 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
 
   const starsStyle = useAnimatedStyle(() => ({
     opacity: interpolate(scanProgress.value, [0, 0.5, 1], [0.4, 1, 0.4]),
-    transform: [{ rotate: `${interpolate(scanProgress.value, [0, 1], [0, 6])}deg` }],
+    transform: [{ rotate: `${interpolate(scanProgress.value, [0, 1], [0, 15])}deg` }],
   }));
 
 
@@ -277,7 +277,7 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
         if (!cancelled) setConnectionState('connected');
       } catch (error) {
         if (!cancelled) setConnectionState('limited');
-        if (isDeviceOnline()) console.error('Firebase connection check failed', error);
+        console.warn('[Firebase] Connection check failed:', error instanceof Error ? error.message : error);
       }
     };
 
@@ -458,7 +458,19 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
             <Animated.View style={pulseStyle}>
               <View style={styles.iconShell}>
                 {/* CÃ­rculo de Estrellas Europeas */}
-                <Animated.View style={[styles.starsContainer, starsStyle]}>{Array.from({ length: 12 }).map((_, i) => {const angle = (i * 30) * (Math.PI / 180); const radius = 56; const x = 65 + radius * Math.cos(angle) - 4; const y = 65 + radius * Math.sin(angle) - 4; return <View key={i} style={[styles.starDot, { left: x, top: y, backgroundColor: theme.secondary }]} />;})}</Animated.View>
+                <Animated.View style={[styles.starsContainer, starsStyle]}>
+                  {Array.from({ length: 12 }).map((_, i) => {
+                    const angle = (i * 30) * (Math.PI / 180);
+                    const radius = 56;
+                    const x = 65 + radius * Math.cos(angle) - 6;
+                    const y = 65 + radius * Math.sin(angle) - 6;
+                    return (
+                      <View key={i} style={{ position: 'absolute', left: x, top: y }}>
+                        <Ionicons name="star" size={12} color={theme.secondary} style={{ opacity: 0.8 }} />
+                      </View>
+                    );
+                  })}
+                </Animated.View>
 
                 {themeName === 'obsidianGold' ? (
                   <View style={styles.crosshairWrap}>
@@ -546,17 +558,22 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
               <Text style={[styles.note, { color: theme.textSecondary }]}>Use your workspace password.</Text>
             </View>
 
-            <TouchableOpacity
+            <Pressable
               style={[styles.primaryButton, { backgroundColor: theme.secondary }, isLoading && styles.primaryDisabled]}
-              activeOpacity={0.85}
               onPress={handleSignIn}
               disabled={isLoading || !firebase.enabled}
             >
-              <View style={styles.primaryButtonInner}>
-                {isLoading ? <ActivityIndicator color={theme.primary} /> : <Text style={[styles.primaryText, { color: theme.primary }]}>{palette.primaryText}</Text>}
-                <Animated.View style={[styles.buttonScan, scanLineStyle, { backgroundColor: `${theme.secondary}66` }]} />
-              </View>
-            </TouchableOpacity>
+              {({ pressed }) => (
+                <View style={[styles.primaryButtonInner, pressed && { opacity: 0.8 }]}>
+                  {isLoading ? (
+                    <ActivityIndicator color={theme.primary} />
+                  ) : (
+                    <Text style={[styles.primaryText, { color: theme.primary }]}>{palette.primaryText}</Text>
+                  )}
+                  <Animated.View style={[styles.buttonScan, scanLineStyle, { backgroundColor: `${theme.secondary}66` }]} />
+                </View>
+              )}
+            </Pressable>
 
             {authError ? (
               <Text style={[styles.authError, { color: theme.error, borderColor: `${theme.error}40`, backgroundColor: `${theme.error}12` }]}>
@@ -582,17 +599,17 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
             </View>
 
             <View style={styles.links}>
-              <TouchableOpacity onPress={onSwitchToRegister} style={styles.linkAction}>
+              <Pressable onPress={onSwitchToRegister} style={styles.linkAction}>
                 <Text style={[styles.link, { color: theme.secondary }]}>Create account</Text>
-              </TouchableOpacity>
+              </Pressable>
               <Text style={[styles.linkDivider, { color: theme.textSecondary }]}>|</Text>
-              <TouchableOpacity onPress={onSwitchToForgot} style={styles.linkAction}>
+              <Pressable onPress={onSwitchToForgot} style={styles.linkAction}>
                 <Text style={[styles.link, { color: theme.textSecondary }]}>Forgot password</Text>
-              </TouchableOpacity>
+              </Pressable>
               <Text style={[styles.linkDivider, { color: theme.textSecondary }]}>|</Text>
-              <TouchableOpacity onPress={handleGuestAccess} style={styles.linkAction}>
+              <Pressable onPress={handleGuestAccess} style={styles.linkAction}>
                 <Text style={[styles.link, { color: theme.textSecondary }]}>Guest access</Text>
-              </TouchableOpacity>
+              </Pressable>
             </View>
           </Animated.View>
 
@@ -682,6 +699,3 @@ const styles = StyleSheet.create({
   footerSignalDot: { position: 'absolute', width: 4, height: 4, borderRadius: 999, right: 12 },
   version: { fontSize: 9, fontWeight: '700', letterSpacing: 2, textTransform: 'uppercase', opacity: 0.4 },
 });
-
-
-

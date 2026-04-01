@@ -186,6 +186,21 @@ function MainApp() {
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const isCompactLayout = width < 390 || height < 780;
 
+  useEffect(() => {
+    if (Platform.OS === 'web' && 'serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker
+          .register('/scan/sw.js', { scope: '/scan/' })
+          .then((reg) => {
+            console.log('[PWA] ServiceWorker registered with scope:', reg.scope);
+          })
+          .catch((err) => {
+            console.error('[PWA] ServiceWorker registration failed:', err);
+          });
+      });
+    }
+  }, []);
+
   const palette = useMemo(() => {
     const themeName = (settings.theme || 'dark') as ThemeName;
     const base = themes[themeName] || themes.dark;
@@ -1166,21 +1181,21 @@ function MainApp() {
       const next: ScanRecord[] = history.map((item) =>
         item.id === entryEditId
           ? {
-              ...item,
-              codeOriginal: value,
-              codeNormalized: normalizeCodeValue(value),
-              codeValue: normalizeCodeValue(value),
-              codeFormat: 'code128' as const,
-              codeType: entryType === 'PI' ? 'pi' : entryType === 'OFFICE' ? 'office' : 'other',
-              label: entryLabel.trim() || undefined,
-              notes: entryNotes.trim() || undefined,
-              customLabel: entryLabel.trim() || undefined,
-              ticketNumber: entryTicket.trim() || undefined,
-              officeCode: (entryOffice.trim() || (entryType === 'OFFICE' ? value : '')) || undefined,
-              hasQr: entryType === 'OFFICE',
-              updatedAt: new Date().toISOString(),
-              date: new Date().toISOString(),
-            }
+            ...item,
+            codeOriginal: value,
+            codeNormalized: normalizeCodeValue(value),
+            codeValue: normalizeCodeValue(value),
+            codeFormat: 'code128' as const,
+            codeType: entryType === 'PI' ? 'pi' : entryType === 'OFFICE' ? 'office' : 'other',
+            label: entryLabel.trim() || undefined,
+            notes: entryNotes.trim() || undefined,
+            customLabel: entryLabel.trim() || undefined,
+            ticketNumber: entryTicket.trim() || undefined,
+            officeCode: (entryOffice.trim() || (entryType === 'OFFICE' ? value : '')) || undefined,
+            hasQr: entryType === 'OFFICE',
+            updatedAt: new Date().toISOString(),
+            date: new Date().toISOString(),
+          }
           : item
       );
       setHistory(next);
@@ -1295,86 +1310,86 @@ function MainApp() {
         keyboardVerticalOffset={isCompactLayout ? 6 : 0}
       >
         <View style={styles.tabViewport} {...webPanHandlers}>
-        {bootStatus !== 'ready' ? (
-          <View style={styles.center}><Text style={{ color: palette.fg }}>{bootStatus === 'booting' ? 'Loading...' : 'Boot error'}</Text></View>
-        ) : activeTab === 'scan' ? (
-          <ScanTab
-            palette={palette}
-            isCompactLayout={isCompactLayout}
-            cameraPermissionGranted={cameraPermission?.granted}
-            requestCameraPermission={() => requestCameraPermission()}
-            cameraRef={cameraRef}
-            cameraBarcodeTypes={cameraBarcodeTypes}
-            scanFeedback={scanFeedback}
-            onScanFromImage={scanFromImage}
-            imageScanPreviewUri={imageScanPreviewUri}
-            imageScanBusy={imageScanBusy}
-            onClearImagePreview={() => setImageScanPreviewUri(null)}
-            onTakePicture={takePictureAndScan}
-            onScanFromNfc={scanFromNfc}
-            nfcBusy={nfcBusy}
-            nfcReady={nfcReady}
-            scanState={scanState}
-            showManualCapture={scanState === 'timeout' || scanState === 'manual_capture_ready' || scanState === 'saving_photo'}
-            manualCaptureBusy={manualCaptureBusy}
-            cameraActive={activeTab === 'scan' && bootStatus === 'ready' && Boolean(cameraPermission?.granted)}
-            torchEnabled={torchEnabled}
-            onToggleTorch={() => setTorchEnabled((value) => !value)}
-            onCameraReady={() => setCameraReady(true)}
-            laserAnim={laserAnim}
-            laserDuration={laserDuration}
-            onBarcodeScanned={(data) => {
-              onBarCodeScanned(data).catch((e) => {
-                diag.error('scan.handler.unhandled', { message: String(e) });
-              });
-            }}
-          />
-        ) : activeTab === 'history' ? (
-          <HistoryTab
-            palette={palette}
-            filteredHistory={filteredHistory}
-            query={query}
-            filterType={filterType}
-            dateFilter={dateFilter}
-            sortBy={historySort}
-            selection={selection}
-            selectedDateLabel={selectedDateLabel}
-            onQueryChange={setQuery}
-            onFilterTypeChange={setFilterType}
-            onDateFilterChange={handleDateFilterChange}
-            onSortByChange={setHistorySort}
-            onOpenDatePicker={() => setDateModalVisible(true)}
-            onToggleSelection={toggleSelection}
-            onLongPressSelection={handleLongPress}
-            onToggleUsed={toggleUsed}
-            onEditItem={openEditItemModal}
-            onDeleteItem={deleteHistoryItem}
-            onOpenBarcode={openBarcodePreview}
-            visibleScanType={visibleScanType}
-          />
-        ) : activeTab === 'notes' ? (
-          <NotesTab palette={palette} />
-        ) : (
-          <SettingsTab
-            palette={palette}
-            settings={settings}
-            onPatchSettings={patchSettings}
-            onExportCsv={exportCsv}
-            onClearHistory={clearAllHistory}
-            onExportBackup={exportBackup}
-            onOpenBackupImport={() => setBackupImportVisible(true)}
-            onRecheckFirebase={recheckFirebase}
-            onSyncNow={syncNow}
-            onLogout={logout}
-            syncBusy={syncBusy}
-            userEmail={user?.email || null}
-            userUidPrefix={user ? user.uid.substring(0, 8) : null}
-            isGuest={isGuest}
-            persistenceMode={persistenceMode}
-            visibleBarcodeTypes={SCAN_BARCODE_TYPES}
-            barcodeOutputFormat={settings.barcodeOutputFormat}
-          />
-        )}
+          {bootStatus !== 'ready' ? (
+            <View style={styles.center}><Text style={{ color: palette.fg }}>{bootStatus === 'booting' ? 'Loading...' : 'Boot error'}</Text></View>
+          ) : activeTab === 'scan' ? (
+            <ScanTab
+              palette={palette}
+              isCompactLayout={isCompactLayout}
+              cameraPermissionGranted={cameraPermission?.granted}
+              requestCameraPermission={() => requestCameraPermission()}
+              cameraRef={cameraRef}
+              cameraBarcodeTypes={cameraBarcodeTypes}
+              scanFeedback={scanFeedback}
+              onScanFromImage={scanFromImage}
+              imageScanPreviewUri={imageScanPreviewUri}
+              imageScanBusy={imageScanBusy}
+              onClearImagePreview={() => setImageScanPreviewUri(null)}
+              onTakePicture={takePictureAndScan}
+              onScanFromNfc={scanFromNfc}
+              nfcBusy={nfcBusy}
+              nfcReady={nfcReady}
+              scanState={scanState}
+              showManualCapture={scanState === 'timeout' || scanState === 'manual_capture_ready' || scanState === 'saving_photo'}
+              manualCaptureBusy={manualCaptureBusy}
+              cameraActive={activeTab === 'scan' && bootStatus === 'ready' && Boolean(cameraPermission?.granted)}
+              torchEnabled={torchEnabled}
+              onToggleTorch={() => setTorchEnabled((value) => !value)}
+              onCameraReady={() => setCameraReady(true)}
+              laserAnim={laserAnim}
+              laserDuration={laserDuration}
+              onBarcodeScanned={(data) => {
+                onBarCodeScanned(data).catch((e) => {
+                  diag.error('scan.handler.unhandled', { message: String(e) });
+                });
+              }}
+            />
+          ) : activeTab === 'history' ? (
+            <HistoryTab
+              palette={palette}
+              filteredHistory={filteredHistory}
+              query={query}
+              filterType={filterType}
+              dateFilter={dateFilter}
+              sortBy={historySort}
+              selection={selection}
+              selectedDateLabel={selectedDateLabel}
+              onQueryChange={setQuery}
+              onFilterTypeChange={setFilterType}
+              onDateFilterChange={handleDateFilterChange}
+              onSortByChange={setHistorySort}
+              onOpenDatePicker={() => setDateModalVisible(true)}
+              onToggleSelection={toggleSelection}
+              onLongPressSelection={handleLongPress}
+              onToggleUsed={toggleUsed}
+              onEditItem={openEditItemModal}
+              onDeleteItem={deleteHistoryItem}
+              onOpenBarcode={openBarcodePreview}
+              visibleScanType={visibleScanType}
+            />
+          ) : activeTab === 'notes' ? (
+            <NotesTab palette={palette} />
+          ) : (
+            <SettingsTab
+              palette={palette}
+              settings={settings}
+              onPatchSettings={patchSettings}
+              onExportCsv={exportCsv}
+              onClearHistory={clearAllHistory}
+              onExportBackup={exportBackup}
+              onOpenBackupImport={() => setBackupImportVisible(true)}
+              onRecheckFirebase={recheckFirebase}
+              onSyncNow={syncNow}
+              onLogout={logout}
+              syncBusy={syncBusy}
+              userEmail={user?.email || null}
+              userUidPrefix={user ? user.uid.substring(0, 8) : null}
+              isGuest={isGuest}
+              persistenceMode={persistenceMode}
+              visibleBarcodeTypes={SCAN_BARCODE_TYPES}
+              barcodeOutputFormat={settings.barcodeOutputFormat}
+            />
+          )}
         </View>
       </KeyboardAvoidingView>
 
@@ -1644,22 +1659,4 @@ const styles = StyleSheet.create({
   },
   viewfinderCenter: {
     width: '80%',
-    borderColor: 'rgba(255,255,255,0.7)',
-    borderWidth: 2,
-    borderRadius: 16,
-  },
-  viewfinderBottom: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    justifyContent: 'flex-start',
-    alignItems: 'center',
-    paddingTop: 24,
-  },
-  viewfinderText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '600',
-    textAlign: 'center',
-  },
-});
-
+    borderColor: 'rgba(25
