@@ -1,13 +1,14 @@
 import { Ionicons } from '@expo/vector-icons';
+import { BlurMask, Canvas, Group, Path, vec } from '@shopify/react-native-skia';
 import * as Haptics from 'expo-haptics';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
   StyleSheet,
-    Text,
+  Text,
   TextInput,
   TouchableOpacity,
   View
@@ -17,8 +18,10 @@ import Animated, {
   FadeIn,
   FadeInDown,
   interpolate,
+  interpolateColor,
   useAnimatedStyle,
   useSharedValue,
+  useDerivedValue,
   withDelay,
   withRepeat,
   withSequence,
@@ -40,6 +43,9 @@ import { isValidIdentifier } from '../core/validation';
 import { useAuth } from './useAuth';
 
 const fullBrandingText = 'ORYXEN TECH · ORYXEN SCANNER · SECURE TRAIL';
+
+// Path para una estrella de 5 puntas (~10px) para renderizado Skia
+const STAR_PATH = "M 5 0 L 6.12 3.45 L 9.75 3.45 L 6.81 5.59 L 7.93 9.04 L 5 6.91 L 2.07 9.04 L 3.19 5.59 L 0.25 3.45 L 3.88 3.45 Z";
 
 function AnimatedStripe({ index, theme, baseHeight, width, opacity }: { index: number; theme: any; baseHeight: number; width: number; opacity: number }) {
   const eqValue = useSharedValue(0);
@@ -71,8 +77,7 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
   const [errors, setErrors] = useState<{ username?: string; pin?: string }>({});
   const [focusedField, setFocusedField] = useState<'username' | 'pin' | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
-    const [rememberPassword, setRememberPassword] = useState(false);
-  const passwordInputRef = useRef<TextInput | null>(null);
+  const [rememberPassword, setRememberPassword] = useState(false);
 
   const [displayedBrandingText, setDisplayedBrandingText] = useState('');
 
@@ -141,6 +146,7 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
 
   const glitchValue = useSharedValue(0);
   const footerPulse = useSharedValue(0);
+  const starsRotation = useSharedValue(0);
 
   const chromaticRedStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: interpolate(glitchValue.value, [0, 1], [0, -4]) }],
@@ -207,6 +213,19 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
     transform: [{ scale: interpolate(footerPulse.value, [0, 1], [0.8, 1.25]) }],
   }));
 
+  const starsGlowRadius = useDerivedValue(() => {
+    // El resplandor se intensifica rítmicamente
+    return interpolate(scanProgress.value, [0, 0.5, 1], [2, 8, 2]);
+  });
+
+  const starsColor = useDerivedValue(() => {
+    return interpolateColor(
+      scanProgress.value,
+      [0, 0.5, 1],
+      [theme.secondary, '#FFFFFF', theme.secondary]
+    );
+  });
+
   // Sincronización del pulso háptico — evita useAnimatedReaction/runOnJS en web
   useEffect(() => {
     if (Platform.OS === 'web') return;
@@ -235,7 +254,7 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
 
     loadSettings()
       .then((settings) => {
-        if (cancelled) return;        setRememberPassword(settings.savePasswordEncrypted ?? false);
+        if (cancelled) return; setRememberPassword(settings.savePasswordEncrypted ?? false);
       })
       .catch(() => undefined);
 
@@ -290,10 +309,13 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
     }
 
     if (!pin) {
-      newErrors.pin = 'Password is required';
+      newErrors.pin = 'PIN is required';
+      valid = false;
+    } else if (!/^\d+$/.test(pin)) {
+      newErrors.pin = 'PIN must contain only numbers';
       valid = false;
     } else if (pin.length < 6) {
-      newErrors.pin = 'Password must be at least 6 characters';
+      newErrors.pin = 'PIN must be at least 6 digits';
       valid = false;
     }
 
@@ -302,11 +324,6 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
   };
 
   const handleSignIn = async () => {
-    if (!firebase.enabled) {
-      setAuthError('Firebase is not configured in this live environment yet.');
-      return;
-    }
-
     if (!validate()) return;
 
     setIsLoading(true);
@@ -452,6 +469,30 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
           <Animated.View entering={FadeInDown.delay(160).duration(450)} style={styles.iconRow}>
             <Animated.View style={pulseStyle}>
               <View style={styles.iconShell}>
+                {/* Círculo de Estrellas Europeas */}
+                <Animated.View style={[styles.starsContainer, starsStyle]}>
+                  <Canvas style={styles.starsCanvas}>
+                    <Group origin={vec(65, 65)}>
+                      {[...Array(12)].map((_, i) => {
+                        const angle = (i * 30) * (Math.PI / 180);
+                        const radius = 56;
+                        const x = 65 + radius * Math.cos(angle) - 5;
+                        const y = 65 + radius * Math.sin(angle) - 5;
+                        return (
+                          <Group key={i} transform={[{ translateX: x }, { translateY: y }]}>
+                            {/* Resplandor (Glow) con Skia */}
+                            <Path path={STAR_PATH} color={starsColor}>
+                              <BlurMask blur={starsGlowRadius} style="outer" />
+                            </Path>
+                            {/* Cuerpo de la estrella */}
+                            <Path path={STAR_PATH} color={starsColor} />
+                          </Group>
+                        );
+                      })}
+                    </Group>
+                  </Canvas>
+                </Animated.View>
+
                 {themeName === 'obsidianGold' ? (
                   <View style={styles.crosshairWrap}>
                     <Animated.View style={[styles.iconLaser, { backgroundColor: theme.secondary }, iconScanLineStyle]} />
@@ -498,18 +539,14 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
                 autoCorrect={false}
                 keyboardAppearance="dark"
                 autoFocus // change 2: open keyboard immediately on mount
-                returnKeyType="next"
-                blurOnSubmit={false}
-                onSubmitEditing={() => passwordInputRef.current?.focus()}
               />
               {errors.username ? <Text style={[styles.error, { color: theme.error }]}>{errors.username}</Text> : null}
-              {username ? <Text style={[styles.helper, { color: theme.textSecondary }]}>Login id: <Text style={styles.helperStrong}>{normalizedUsername}</Text></Text> : null}
+              {username ? <Text style={[styles.helper, { color: theme.textSecondary }]}>Normalized: <Text style={styles.helperStrong}>{normalizedUsername}</Text></Text> : null}
             </View>
 
             <View style={styles.field}>
               <Text style={[styles.label, { color: theme.secondary }]}>PASSWORD</Text>
               <TextInput
-                ref={passwordInputRef}
                 style={[
                   styles.input,
                   {
@@ -530,11 +567,8 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
                 onFocus={() => setFocusedField('pin')}
                 onBlur={() => setFocusedField(null)}
                 secureTextEntry
+                keyboardType="numeric"
                 keyboardAppearance="dark"
-                returnKeyType="go"
-                onSubmitEditing={() => {
-                  void handleSignIn();
-                }}
               />
               {errors.pin ? <Text style={[styles.error, { color: theme.error }]}>{errors.pin}</Text> : null}
               <Text style={[styles.note, { color: theme.textSecondary }]}>Use your workspace password.</Text>
@@ -544,7 +578,7 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
               style={[styles.primaryButton, { backgroundColor: theme.secondary }, isLoading && styles.primaryDisabled]}
               activeOpacity={0.85}
               onPress={handleSignIn}
-              disabled={isLoading || !firebase.enabled}
+              disabled={isLoading}
             >
               <View style={styles.primaryButtonInner}>
                 {isLoading ? <ActivityIndicator color={theme.primary} /> : <Text style={[styles.primaryText, { color: theme.primary }]}>{palette.primaryText}</Text>}
@@ -562,13 +596,13 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
               <Animated.View
                 style={[
                   styles.statusDot,
-                  { backgroundColor: !firebase.enabled ? '#B38A1A' : connectionState === 'connected' ? `${theme.secondary}CC` : '#B38A1A' },
+                  { backgroundColor: connectionState === 'connected' && firebase.enabled ? theme.success : theme.warning },
                   pulseStyle,
                 ]}
               />
               <Text style={[styles.statusText, { color: theme.textSecondary }]}>
                 {!firebase.enabled
-                  ? 'Firebase disabled in live environment (missing secrets).'
+                  ? 'Service temporarily unavailable. Configuration in progress.'
                   : connectionState === 'connected'
                     ? 'Firebase ready'
                     : 'Connectivity check limited (login may still work)'}
@@ -634,6 +668,8 @@ const styles = StyleSheet.create({
   logoDivider: { height: 1, opacity: 0.2 },
   iconRow: { alignItems: 'center', paddingVertical: 12 },
   iconShell: { width: 130, height: 130, alignItems: 'center', justifyContent: 'center' },
+  starsContainer: { position: 'absolute', width: 130, height: 130 },
+  starsCanvas: { width: 130, height: 130 },
   crosshairWrap: { width: 80, height: 80, alignItems: 'center', justifyContent: 'center' },
   iconLaser: { position: 'absolute', height: 1, zIndex: 2 },
   crosshairCircle: { position: 'absolute', width: 80, height: 80, borderRadius: 40, borderWidth: 1 },
@@ -674,6 +710,3 @@ const styles = StyleSheet.create({
   footerSignalDot: { position: 'absolute', width: 4, height: 4, borderRadius: 999, right: 12 },
   version: { fontSize: 9, fontWeight: '700', letterSpacing: 2, textTransform: 'uppercase', opacity: 0.4 },
 });
-
-
-
