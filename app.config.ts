@@ -1,6 +1,10 @@
 import type { ExpoConfig } from "@expo/config";
 
 const updatesEnabled = process.env.EXPO_PUBLIC_ENABLE_UPDATES === "true";
+const repoName = process.env.GITHUB_REPOSITORY?.split("/")[1];
+const baseUrl =
+  process.env.EXPO_PUBLIC_BASE_URL ||
+  (process.env.GITHUB_ACTIONS === "true" && repoName ? `/${repoName}` : "/barra");
 
 const config: ExpoConfig = {
   name: "Barra Scanner Mobile",
@@ -33,9 +37,15 @@ const config: ExpoConfig = {
   web: {
     favicon: "./assets/images/favicon.png",
     bundler: "metro",
+    output: "static",
+    name: "Barra Scanner",
+    shortName: "Barra",
+    description: "Secure scanner workspace with offline-ready web support.",
+    themeColor: "#111E33",
+    backgroundColor: "#050B14",
   },
   experiments: {
-    baseUrl: "/barra",
+    baseUrl,
   },
   plugins: ["expo-sharing", "expo-font", "@react-native-community/datetimepicker"],
   updates: {

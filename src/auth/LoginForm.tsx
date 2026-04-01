@@ -187,6 +187,7 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
   }));
 
   const glitchValue = useSharedValue(0);
+  const footerPulse = useSharedValue(0);
 
   const chromaticRedStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: interpolate(glitchValue.value, [0, 1], [0, -4]) }],
@@ -210,6 +211,14 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
     };
     triggerGlitch();
   }, [glitchValue]);
+
+  useEffect(() => {
+    footerPulse.value = withRepeat(
+      withSequence(withTiming(1, { duration: 1200 }), withTiming(0, { duration: 1200 })),
+      -1,
+      false
+    );
+  }, [footerPulse]);
 
   const glitchStyle = useAnimatedStyle(() => ({
     transform: [
@@ -239,6 +248,16 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
       opacity: interpolate(scanProgress.value, [0, 0.5, 1], [0.8, 1, 0.8]),
     };
   });
+
+  const footerLinePulse = useAnimatedStyle(() => ({
+    opacity: interpolate(footerPulse.value, [0, 1], [0.35, 0.95]),
+    transform: [{ scaleX: interpolate(footerPulse.value, [0, 1], [0.7, 1.12]) }],
+  }));
+
+  const footerDotPulse = useAnimatedStyle(() => ({
+    opacity: interpolate(footerPulse.value, [0, 1], [0.3, 1]),
+    transform: [{ scale: interpolate(footerPulse.value, [0, 1], [0.8, 1.25]) }],
+  }));
 
   // Sincronización del pulso háptico — evita useAnimatedReaction/runOnJS en web
   useEffect(() => {
@@ -608,7 +627,11 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
           </Animated.View>
 
           <Animated.View entering={FadeInDown.delay(480).duration(450)} style={styles.footer}>
-            <View style={[styles.footerLine, { backgroundColor: theme.border }]} />
+            <View style={styles.footerTrack}>
+              <Animated.View style={[styles.footerLine, { backgroundColor: theme.border }, footerLinePulse]} />
+              <Animated.View style={[styles.footerSignalDot, { backgroundColor: theme.secondary }, footerDotPulse]} />
+            </View>
+            <Text style={[styles.version, { color: theme.textSecondary }]}>secure login channel</Text>
           </Animated.View>
         </Animated.View>
       </ScrollView>
@@ -682,8 +705,10 @@ const styles = StyleSheet.create({
   linkAction: { paddingVertical: 4 },
   link: { fontSize: 12, fontWeight: '700' },
   linkDivider: { fontSize: 12 },
-  footer: { alignItems: 'center', gap: 10, paddingTop: 8 },
-  footerLine: { width: 32, height: 1 },
+  footer: { alignItems: 'center', gap: 8, paddingTop: 8 },
+  footerTrack: { width: 72, height: 12, alignItems: 'center', justifyContent: 'center' },
+  footerLine: { width: 44, height: 1, borderRadius: 999 },
+  footerSignalDot: { position: 'absolute', width: 4, height: 4, borderRadius: 999, right: 12 },
   version: { fontSize: 9, fontWeight: '700', letterSpacing: 2, textTransform: 'uppercase', opacity: 0.4 },
   stars: { position: 'absolute', width: 80, height: 80, alignItems: 'center', justifyContent: 'center' },
   star: { position: 'absolute', fontSize: 10, fontWeight: '900' },
