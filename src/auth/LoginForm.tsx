@@ -1,5 +1,4 @@
-import { Ionicons } from '@expo/vector-icons';
-import { BlurMask, Canvas, Group, Path, vec } from '@shopify/react-native-skia';
+﻿import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useEffect, useMemo, useState } from 'react';
 import {
@@ -18,10 +17,8 @@ import Animated, {
   FadeIn,
   FadeInDown,
   interpolate,
-  interpolateColor,
   useAnimatedStyle,
   useSharedValue,
-  useDerivedValue,
   withDelay,
   withRepeat,
   withSequence,
@@ -42,15 +39,13 @@ import { loadSettings } from '../core/settings';
 import { isValidIdentifier } from '../core/validation';
 import { useAuth } from './useAuth';
 
-const fullBrandingText = 'ORYXEN TECH · ORYXEN SCANNER · SECURE TRAIL';
+const fullBrandingText = 'ORYXEN TECH Â· ORYXEN SCANNER Â· SECURE TRAIL';
 
-// Path para una estrella de 5 puntas (~10px) para renderizado Skia
-const STAR_PATH = "M 5 0 L 6.12 3.45 L 9.75 3.45 L 6.81 5.59 L 7.93 9.04 L 5 6.91 L 2.07 9.04 L 3.19 5.59 L 0.25 3.45 L 3.88 3.45 Z";
 
 function AnimatedStripe({ index, theme, baseHeight, width, opacity }: { index: number; theme: any; baseHeight: number; width: number; opacity: number }) {
   const eqValue = useSharedValue(0);
   useEffect(() => {
-    // Desfase de animación para crear el efecto de ecualizador
+    // Desfase de animaciÃ³n para crear el efecto de ecualizador
     eqValue.value = withDelay(index * 15, withRepeat(withTiming(1, { duration: 500 + (index % 7) * 120 }), -1, true));
   }, [eqValue, index]);
 
@@ -146,7 +141,6 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
 
   const glitchValue = useSharedValue(0);
   const footerPulse = useSharedValue(0);
-  const starsRotation = useSharedValue(0);
 
   const chromaticRedStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: interpolate(glitchValue.value, [0, 1], [0, -4]) }],
@@ -183,12 +177,12 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
     transform: [
       { translateX: interpolate(glitchValue.value, [0, 1], [0, 8]) },
       { skewX: `${glitchValue.value * 0.1}rad` },
-      { translateY: interpolate(scanProgress.value, [0, 0.5, 1], [0, -6, 0]) }, // Efecto de flotación técnica
+      { translateY: interpolate(scanProgress.value, [0, 0.5, 1], [0, -6, 0]) }, // Efecto de flotaciÃ³n tÃ©cnica
     ],
     opacity: interpolate(glitchValue.value, [0, 1], [1, 0.7]),
   }));
   const pulseStyle = useAnimatedStyle(() => {
-    // Efecto de distorsión sutil: jitter horizontal y skew diagonal
+    // Efecto de distorsiÃ³n sutil: jitter horizontal y skew diagonal
     // Se intensifica cerca del centro (0.5) del progreso de escaneo
     const jitter = interpolate(scanProgress.value, [0, 0.45, 0.5, 0.55, 1], [0, 0, 2.5, -2.5, 0]);
     const skew = interpolate(scanProgress.value, [0, 0.45, 0.5, 0.55, 1], [0, 0, 0.04, -0.04, 0]);
@@ -213,20 +207,14 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
     transform: [{ scale: interpolate(footerPulse.value, [0, 1], [0.8, 1.25]) }],
   }));
 
-  const starsGlowRadius = useDerivedValue(() => {
-    // El resplandor se intensifica rítmicamente
-    return interpolate(scanProgress.value, [0, 0.5, 1], [2, 8, 2]);
-  });
+  const starsStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(scanProgress.value, [0, 0.5, 1], [0.4, 1, 0.4]),
+    transform: [{ rotate: `${interpolate(scanProgress.value, [0, 1], [0, 6])}deg` }],
+  }));
 
-  const starsColor = useDerivedValue(() => {
-    return interpolateColor(
-      scanProgress.value,
-      [0, 0.5, 1],
-      [theme.secondary, '#FFFFFF', theme.secondary]
-    );
-  });
 
-  // Sincronización del pulso háptico — evita useAnimatedReaction/runOnJS en web
+
+  // SincronizaciÃ³n del pulso hÃ¡ptico â€” evita useAnimatedReaction/runOnJS en web
   useEffect(() => {
     if (Platform.OS === 'web') return;
     let prev: number | null = null;
@@ -353,7 +341,7 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
       <View style={[styles.background, palette.watermark ? styles.watermarkShell : null]}>
         {palette.watermark && (
           <View style={[styles.watermarkContainer, styles.watermarkVisible]} pointerEvents="none">
-            {/* Capa de Aberración: Rojo (Shift Left) */}
+            {/* Capa de AberraciÃ³n: Rojo (Shift Left) */}
             <Animated.View style={[StyleSheet.absoluteFill, chromaticRedStyle]} pointerEvents="none">
               <View style={[styles.gridLineV, { left: '20%', backgroundColor: theme.error }]} />
               <View style={[styles.gridLineV, { left: '40%', backgroundColor: theme.error }]} />
@@ -366,7 +354,7 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
               <View style={[styles.techCircle, { bottom: -100, left: -60, width: 300, height: 300, borderColor: theme.error, opacity: 0.03 }]} />
             </Animated.View>
 
-            {/* Capa de Aberración: Azul (Shift Right) */}
+            {/* Capa de AberraciÃ³n: Azul (Shift Right) */}
             <Animated.View style={[StyleSheet.absoluteFill, chromaticBlueStyle]} pointerEvents="none">
               <View style={[styles.gridLineV, { left: '20%', backgroundColor: theme.primary }]} />
               <View style={[styles.gridLineV, { left: '40%', backgroundColor: theme.primary }]} />
@@ -380,7 +368,7 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
             </Animated.View>
 
 
-            {/* Rejilla Técnica */}
+            {/* Rejilla TÃ©cnica */}
             <View style={[styles.gridLineV, { left: '20%', backgroundColor: theme.secondary }]} />
             <View style={[styles.gridLineV, { left: '40%', backgroundColor: theme.secondary }]} />
             <View style={[styles.gridLineV, { left: '60%', backgroundColor: theme.secondary }]} />
@@ -389,7 +377,7 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
             <View style={[styles.gridLineH, { top: '50%', backgroundColor: theme.secondary }]} />
             <View style={[styles.gridLineH, { top: '75%', backgroundColor: theme.secondary }]} />
 
-            {/* Círculos de Radar */}
+            {/* CÃ­rculos de Radar */}
             <View style={[styles.techCircle, { top: -50, right: -50, width: 200, height: 200, borderColor: theme.secondary }]} />
             <View style={[styles.techCircle, { bottom: -100, left: -60, width: 300, height: 300, borderColor: theme.secondary, opacity: 0.03 }]} />
 
@@ -469,29 +457,8 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
           <Animated.View entering={FadeInDown.delay(160).duration(450)} style={styles.iconRow}>
             <Animated.View style={pulseStyle}>
               <View style={styles.iconShell}>
-                {/* Círculo de Estrellas Europeas */}
-                <Animated.View style={[styles.starsContainer, starsStyle]}>
-                  <Canvas style={styles.starsCanvas}>
-                    <Group origin={vec(65, 65)}>
-                      {[...Array(12)].map((_, i) => {
-                        const angle = (i * 30) * (Math.PI / 180);
-                        const radius = 56;
-                        const x = 65 + radius * Math.cos(angle) - 5;
-                        const y = 65 + radius * Math.sin(angle) - 5;
-                        return (
-                          <Group key={i} transform={[{ translateX: x }, { translateY: y }]}>
-                            {/* Resplandor (Glow) con Skia */}
-                            <Path path={STAR_PATH} color={starsColor}>
-                              <BlurMask blur={starsGlowRadius} style="outer" />
-                            </Path>
-                            {/* Cuerpo de la estrella */}
-                            <Path path={STAR_PATH} color={starsColor} />
-                          </Group>
-                        );
-                      })}
-                    </Group>
-                  </Canvas>
-                </Animated.View>
+                {/* CÃ­rculo de Estrellas Europeas */}
+                <Animated.View style={[styles.starsContainer, starsStyle]}>{Array.from({ length: 12 }).map((_, i) => {const angle = (i * 30) * (Math.PI / 180); const radius = 56; const x = 65 + radius * Math.cos(angle) - 4; const y = 65 + radius * Math.sin(angle) - 4; return <View key={i} style={[styles.starDot, { left: x, top: y, backgroundColor: theme.secondary }]} />;})}</Animated.View>
 
                 {themeName === 'obsidianGold' ? (
                   <View style={styles.crosshairWrap}>
@@ -541,7 +508,7 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
                 autoFocus // change 2: open keyboard immediately on mount
               />
               {errors.username ? <Text style={[styles.error, { color: theme.error }]}>{errors.username}</Text> : null}
-              {username ? <Text style={[styles.helper, { color: theme.textSecondary }]}>Normalized: <Text style={styles.helperStrong}>{normalizedUsername}</Text></Text> : null}
+              {username ? <Text style={[styles.helper, { color: theme.textSecondary }]}>Login id: <Text style={styles.helperStrong}>{normalizedUsername}</Text></Text> : null}
             </View>
 
             <View style={styles.field}>
@@ -578,7 +545,7 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
               style={[styles.primaryButton, { backgroundColor: theme.secondary }, isLoading && styles.primaryDisabled]}
               activeOpacity={0.85}
               onPress={handleSignIn}
-              disabled={isLoading}
+              disabled={isLoading || !firebase.enabled}
             >
               <View style={styles.primaryButtonInner}>
                 {isLoading ? <ActivityIndicator color={theme.primary} /> : <Text style={[styles.primaryText, { color: theme.primary }]}>{palette.primaryText}</Text>}
@@ -596,13 +563,13 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
               <Animated.View
                 style={[
                   styles.statusDot,
-                  { backgroundColor: connectionState === 'connected' && firebase.enabled ? theme.success : theme.warning },
+                  { backgroundColor: !firebase.enabled ? '#B38A1A' : connectionState === 'connected' ? `${theme.secondary}CC` : '#B38A1A' },
                   pulseStyle,
                 ]}
               />
               <Text style={[styles.statusText, { color: theme.textSecondary }]}>
                 {!firebase.enabled
-                  ? 'Service temporarily unavailable. Configuration in progress.'
+                  ? 'Firebase disabled in live environment (missing secrets).'
                   : connectionState === 'connected'
                     ? 'Firebase ready'
                     : 'Connectivity check limited (login may still work)'}
@@ -669,7 +636,7 @@ const styles = StyleSheet.create({
   iconRow: { alignItems: 'center', paddingVertical: 12 },
   iconShell: { width: 130, height: 130, alignItems: 'center', justifyContent: 'center' },
   starsContainer: { position: 'absolute', width: 130, height: 130 },
-  starsCanvas: { width: 130, height: 130 },
+  starDot: { position: 'absolute', width: 8, height: 8, borderRadius: 99 },
   crosshairWrap: { width: 80, height: 80, alignItems: 'center', justifyContent: 'center' },
   iconLaser: { position: 'absolute', height: 1, zIndex: 2 },
   crosshairCircle: { position: 'absolute', width: 80, height: 80, borderRadius: 40, borderWidth: 1 },
@@ -710,3 +677,6 @@ const styles = StyleSheet.create({
   footerSignalDot: { position: 'absolute', width: 4, height: 4, borderRadius: 999, right: 12 },
   version: { fontSize: 9, fontWeight: '700', letterSpacing: 2, textTransform: 'uppercase', opacity: 0.4 },
 });
+
+
+
