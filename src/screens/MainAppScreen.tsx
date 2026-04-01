@@ -1263,8 +1263,9 @@ function MainApp() {
   const swipeResponder = useMemo(
     () =>
       PanResponder.create({
-        onStartShouldSetPanResponder: () => false,
+        onStartShouldSetPanResponder: () => Platform.OS !== 'web' && false,
         onMoveShouldSetPanResponder: (_, gestureState) => {
+          if (Platform.OS === 'web') return false;
           const isHorizontal = Math.abs(gestureState.dx) > 28 && Math.abs(gestureState.dx) > Math.abs(gestureState.dy) * 1.2;
           return isHorizontal;
         },

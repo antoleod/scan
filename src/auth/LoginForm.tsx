@@ -289,13 +289,10 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
     }
 
     if (!pin) {
-      newErrors.pin = 'PIN is required';
-      valid = false;
-    } else if (!/^\d+$/.test(pin)) {
-      newErrors.pin = 'PIN must contain only numbers';
+      newErrors.pin = 'Password is required';
       valid = false;
     } else if (pin.length < 6) {
-      newErrors.pin = 'PIN must be at least 6 digits';
+      newErrors.pin = 'Password must be at least 6 characters';
       valid = false;
     }
 
@@ -304,6 +301,11 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
   };
 
   const handleSignIn = async () => {
+    if (!firebase.enabled) {
+      setAuthError('Firebase is not configured in this live environment yet.');
+      return;
+    }
+
     if (!validate()) return;
 
     setIsLoading(true);
@@ -497,7 +499,7 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
                 autoFocus // change 2: open keyboard immediately on mount
               />
               {errors.username ? <Text style={[styles.error, { color: theme.error }]}>{errors.username}</Text> : null}
-              {username ? <Text style={[styles.helper, { color: theme.textSecondary }]}>Normalized: <Text style={styles.helperStrong}>{normalizedUsername}</Text></Text> : null}
+              {username ? <Text style={[styles.helper, { color: theme.textSecondary }]}>Login id: <Text style={styles.helperStrong}>{normalizedUsername}</Text></Text> : null}
             </View>
 
             <View style={styles.field}>
@@ -523,7 +525,6 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
                 onFocus={() => setFocusedField('pin')}
                 onBlur={() => setFocusedField(null)}
                 secureTextEntry
-                keyboardType="numeric"
                 keyboardAppearance="dark"
               />
               {errors.pin ? <Text style={[styles.error, { color: theme.error }]}>{errors.pin}</Text> : null}
@@ -534,7 +535,7 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
               style={[styles.primaryButton, { backgroundColor: theme.secondary }, isLoading && styles.primaryDisabled]}
               activeOpacity={0.85}
               onPress={handleSignIn}
-              disabled={isLoading}
+              disabled={isLoading || !firebase.enabled}
             >
               <View style={styles.primaryButtonInner}>
                 {isLoading ? <ActivityIndicator color={theme.primary} /> : <Text style={[styles.primaryText, { color: theme.primary }]}>{palette.primaryText}</Text>}
@@ -558,7 +559,7 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
               />
               <Text style={[styles.statusText, { color: theme.textSecondary }]}>
                 {!firebase.enabled
-                  ? 'Service temporarily unavailable. Configuration in progress.'
+                  ? 'Firebase disabled in live environment (missing secrets).'
                   : connectionState === 'connected'
                     ? 'Firebase ready'
                     : 'Connectivity check limited (login may still work)'}
