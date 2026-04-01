@@ -208,7 +208,7 @@ export function SettingsTab({
           <Text style={[styles.pageSubtitle, { color: palette.muted }]}>Pick a complete visual theme and tune integrations.</Text>
         </View>
 
-        <SectionCard title="Theme options" subtitle="Same catalog as BarraV2." accent={palette.accent} subtitleColor={palette.muted} cardBackground={palette.card} cardBorder={palette.border} defaultOpen>
+        <SectionCard title="Theme options" subtitle="Same catalog as legacy app." accent={palette.accent} subtitleColor={palette.muted} cardBackground={palette.card} cardBorder={palette.border} defaultOpen>
           <View style={styles.themeGrid}>
             {themeOptions.map((item) => (
               <ThemeCard

@@ -402,7 +402,7 @@ function MainApp() {
         return;
       }
 
-      const path = `${FileSystem.cacheDirectory}barra_share_${Date.now()}.txt`;
+      const path = `${FileSystem.cacheDirectory}oryxen_share_${Date.now()}.txt`;
       await FileSystem.writeAsStringAsync(path, text);
       await Sharing.shareAsync(path, { mimeType: 'text/plain' });
       setSelection(new Set());
@@ -787,12 +787,12 @@ function MainApp() {
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `barra_export_${Date.now()}.csv`;
+      link.download = `oryxen_export_${Date.now()}.csv`;
       link.click();
       return;
     }
 
-    const path = `${FileSystem.cacheDirectory}barra_export_${Date.now()}.csv`;
+    const path = `${FileSystem.cacheDirectory}oryxen_export_${Date.now()}.csv`;
     await FileSystem.writeAsStringAsync(path, csv);
     await Sharing.shareAsync(path, { mimeType: 'text/csv' });
   }
@@ -811,14 +811,14 @@ function MainApp() {
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `barra_backup_${Date.now()}.json`;
+      link.download = `oryxen_backup_${Date.now()}.json`;
       link.click();
       URL.revokeObjectURL(url);
       await copyTextToClipboard(json, 'Backup JSON copied to clipboard');
       return;
     }
 
-    const path = `${FileSystem.cacheDirectory}barra_backup_${Date.now()}.json`;
+    const path = `${FileSystem.cacheDirectory}oryxen_backup_${Date.now()}.json`;
     await FileSystem.writeAsStringAsync(path, json);
 
     if (await Sharing.isAvailableAsync()) {
@@ -870,12 +870,12 @@ function MainApp() {
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `barra_logs_${Date.now()}.json`;
+      link.download = `oryxen_logs_${Date.now()}.json`;
       link.click();
       return;
     }
 
-    const path = `${FileSystem.cacheDirectory}barra_logs_${Date.now()}.json`;
+    const path = `${FileSystem.cacheDirectory}oryxen_logs_${Date.now()}.json`;
     await FileSystem.writeAsStringAsync(path, await diag.getJson());
     await Sharing.shareAsync(path, { mimeType: 'application/json' });
   }

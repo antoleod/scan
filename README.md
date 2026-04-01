@@ -1,4 +1,4 @@
-# Barra Scanner
+# Oryxen Scanner
 
 Expo + React Native app in the repository root.
 

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'barra-cache-v1';
+const CACHE_NAME = 'oryxen-cache-v1';
 const APP_SHELL = ['./', './index.html', './manifest.webmanifest'];
 
 self.addEventListener('install', (event) => {

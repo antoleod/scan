@@ -432,7 +432,7 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
               </Text>
             </Animated.View>
 
-            {/* Barras de datos (Barcode original mejorado) */}
+            {/* Data bars (enhanced original barcode effect) */}
             <View style={styles.barcodeField}>
               {Array.from({ length: 12 }).map((_, i) => (
                 <AnimatedStripe key={i} index={i} theme={theme} baseHeight={i % 3 === 0 ? 180 : 120} width={2} opacity={0.03} />
@@ -462,7 +462,7 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
                   },
                 ]}
               >
-                Barra Scanner
+                Oryxen Scanner
               </Text>
               <View style={[styles.logoBar, { backgroundColor: theme.secondary, width: palette.logoMarkWidth, height: palette.logoMarkHeight }]} />
             </View>

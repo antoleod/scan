@@ -68,7 +68,7 @@ export function AppHeader({
         <LogoMark accent={palette.accent} foreground={isLightTheme ? '#162235' : '#0b1220'} compact={compact} />
         <View>
           <Text style={[mainAppStyles.kicker, { color: palette.accent }]}>BARRA CORE</Text>
-          <Text style={[mainAppStyles.title, { color: palette.fg }]}>Barra Scanner RN</Text>
+          <Text style={[mainAppStyles.title, { color: palette.fg }]}>Oryxen Scanner</Text>
           <Text style={[mainAppStyles.subtitle, { color: palette.muted }]}>{statusChip}</Text>
         </View>
       </View>

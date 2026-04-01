@@ -4,11 +4,11 @@ const updatesEnabled = process.env.EXPO_PUBLIC_ENABLE_UPDATES === "true";
 const repoName = process.env.GITHUB_REPOSITORY?.split("/")[1];
 const baseUrl =
   process.env.EXPO_PUBLIC_BASE_URL ||
-  (process.env.GITHUB_ACTIONS === "true" && repoName ? `/${repoName}` : "/barra");
+  (process.env.GITHUB_ACTIONS === "true" && repoName ? `/${repoName}` : "/oryxen");
 
 const config: ExpoConfig = {
-  name: "Barra Scanner Mobile",
-  slug: "barra-scanner-mobile",
+  name: "Oryxen Scanner Mobile",
+  slug: "oryxen-scanner-mobile",
   version: "1.0.0",
   jsEngine: "jsc",
   orientation: "portrait",
@@ -21,10 +21,10 @@ const config: ExpoConfig = {
   },
   ios: {
     supportsTablet: true,
-    bundleIdentifier: "com.jdioses.barrascannermobile",
+    bundleIdentifier: "com.jdioses.oryxenscannermobile",
   },
   android: {
-    package: "com.jdioses.barrascannermobile",
+    package: "com.jdioses.oryxenscannermobile",
     permissions: ["NFC"],
     adaptiveIcon: {
       backgroundColor: "#E6F4FE",
@@ -38,8 +38,8 @@ const config: ExpoConfig = {
     favicon: "./assets/images/favicon.png",
     bundler: "metro",
     output: "single",
-    name: "Barra Scanner",
-    shortName: "Barra",
+    name: "Oryxen Scanner",
+    shortName: "Oryxen",
     description: "Secure scanner workspace with offline-ready web support.",
     themeColor: "#111E33",
     backgroundColor: "#050B14",

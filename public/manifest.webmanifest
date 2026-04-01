@@ -1,6 +1,6 @@
 {
-  "name": "Barra Scanner",
-  "short_name": "Barra",
+  "name": "Oryxen Scanner",
+  "short_name": "Oryxen",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
