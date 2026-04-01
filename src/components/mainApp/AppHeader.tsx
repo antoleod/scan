@@ -1,6 +1,5 @@
 import React from 'react';
-import { Alert, Linking, Pressable, View, Text } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { View, Text } from 'react-native';
 
 import { lightThemes, ThemeName } from '../../theme/theme';
 import { mainAppStyles } from './styles';
@@ -47,21 +46,6 @@ export function AppHeader({
 }) {
   const isLightTheme = lightThemes.includes(themeName);
 
-  async function openClipboardShortcut() {
-    const url = 'https://oryxen.tech/clipboard/';
-
-    try {
-      const supported = await Linking.canOpenURL(url);
-      if (!supported) {
-        Alert.alert('Clipboard', `No se puede abrir este enlace:\n${url}`);
-        return;
-      }
-      await Linking.openURL(url);
-    } catch (error) {
-      Alert.alert('Clipboard', `No se pudo abrir el enlace:\n${String(error)}`);
-    }
-  }
-
   return (
     <View style={[mainAppStyles.header, { backgroundColor: palette.card, borderColor: palette.border }]}>
       <View style={mainAppStyles.brandBlock}>
@@ -73,18 +57,6 @@ export function AppHeader({
         </View>
       </View>
       <View style={mainAppStyles.headerActions}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Open Clipboard link"
-          onPress={openClipboardShortcut}
-          style={[
-            mainAppStyles.qrAction,
-            { backgroundColor: palette.accent + '22', borderColor: palette.accent },
-          ]}
-        >
-          <Ionicons name="clipboard-outline" size={16} color={palette.fg} />
-          <Text style={[mainAppStyles.qrActionText, { color: palette.fg }]}>Clipboard</Text>
-        </Pressable>
         <View style={[mainAppStyles.badge, { backgroundColor: palette.accent + '33', borderColor: palette.accent }]}>
           <Text style={[mainAppStyles.badgeText, { color: palette.fg }]}>{autoDetectLabel}</Text>
         </View>

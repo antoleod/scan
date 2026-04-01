@@ -7,6 +7,18 @@ type BeforeInstallPromptEvent = Event & {
 
 let deferredPrompt: BeforeInstallPromptEvent | null = null;
 let initialized = false;
+const listeners = new Set<(available: boolean) => void>();
+
+function emitAvailability() {
+  const available = Boolean(deferredPrompt);
+  listeners.forEach((listener) => {
+    try {
+      listener(available);
+    } catch {
+      // Ignore listener errors.
+    }
+  });
+}
 
 function getWindowSafe() {
   if (Platform.OS !== 'web' || typeof window === 'undefined') return null;
@@ -21,6 +33,7 @@ export function initPwaInstallBridge() {
   win.addEventListener('beforeinstallprompt', (event: Event) => {
     event.preventDefault?.();
     deferredPrompt = event as BeforeInstallPromptEvent;
+    emitAvailability();
   });
 }
 
@@ -34,6 +47,14 @@ export async function triggerPwaInstall() {
   const choice = await deferredPrompt.userChoice;
   const accepted = choice?.outcome === 'accepted';
   deferredPrompt = null;
+  emitAvailability();
   return { supported: true, accepted };
 }
 
+export function subscribePwaInstallAvailability(listener: (available: boolean) => void) {
+  listeners.add(listener);
+  listener(Boolean(deferredPrompt));
+  return () => {
+    listeners.delete(listener);
+  };
+}

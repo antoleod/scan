@@ -1,9 +1,9 @@
-﻿import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Platform, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 
 import { AppSettings, type PersistenceMode } from '../../../types';
 import { BARCODE_FORMAT_OPTIONS, type BarcodeFormat } from '../../../core/barcode';
-import { canInstallPwa, triggerPwaInstall } from '../../../core/pwa';
+import { canInstallPwa, subscribePwaInstallAvailability, triggerPwaInstall } from '../../../core/pwa';
 import { useAppTheme } from '../../../constants/theme';
 
 type Palette = {
@@ -139,6 +139,9 @@ export function SettingsTab({
   const [passWords, setPassWords] = useState(3);
   const [passPhrase, setPassPhrase] = useState('');
   const [installBusy, setInstallBusy] = useState(false);
+  const [pwaInstallAvailable, setPwaInstallAvailable] = useState(canInstallPwa());
+
+  useEffect(() => subscribePwaInstallAvailability(setPwaInstallAvailable), []);
 
   const themeOptions = useMemo<ThemeOption[]>(
     () => [
@@ -270,14 +273,14 @@ export function SettingsTab({
         <SectionCard title="Web App (PWA)" subtitle="Install this app in your browser." accent={palette.accent} subtitleColor={palette.muted} cardBackground={palette.card} cardBorder={palette.border}>
           <Text style={{ color: palette.muted }}>
             {Platform.OS === 'web'
-              ? canInstallPwa()
+              ? pwaInstallAvailable
                 ? 'Install prompt available.'
                 : 'Install prompt not available yet. Use HTTPS and open the app once first.'
               : 'Open the web version to install as a PWA.'}
           </Text>
           <View style={styles.bulkActions}>
             <Pressable
-              disabled={Platform.OS !== 'web' || installBusy || !canInstallPwa()}
+              disabled={Platform.OS !== 'web' || installBusy || !pwaInstallAvailable}
               onPress={async () => {
                 setInstallBusy(true);
                 try {
@@ -286,7 +289,7 @@ export function SettingsTab({
                   setInstallBusy(false);
                 }
               }}
-              style={[styles.bulkButton, { backgroundColor: activeAccent, opacity: Platform.OS !== 'web' || installBusy || !canInstallPwa() ? 0.5 : 1 }]}
+              style={[styles.bulkButton, { backgroundColor: activeAccent, opacity: Platform.OS !== 'web' || installBusy || !pwaInstallAvailable ? 0.5 : 1 }]}
             >
               <Text style={[styles.bulkButtonText, { color: '#111' }]}>{installBusy ? 'Opening...' : 'Install Web App'}</Text>
             </Pressable>
@@ -308,7 +311,7 @@ export function SettingsTab({
           {bulkPreview.length ? (
             <View style={[styles.bulkPreview, { borderColor: palette.border, backgroundColor: palette.card }]}>
               <Text style={[styles.bulkPreviewLabel, { color: palette.muted }]}>Preview ({bulkPreview.length})</Text>
-              <Text style={[styles.bulkPreviewText, { color: palette.fg }]} numberOfLines={3}>{bulkPreview.slice(0, 8).join(' · ')}{bulkPreview.length > 8 ? ' ...' : ''}</Text>
+              <Text style={[styles.bulkPreviewText, { color: palette.fg }]} numberOfLines={3}>{bulkPreview.slice(0, 8).join(' � ')}{bulkPreview.length > 8 ? ' ...' : ''}</Text>
             </View>
           ) : null}
         </SectionCard>
@@ -445,5 +448,7 @@ const styles = StyleSheet.create({
   fieldLabel: { fontSize: 10, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 2, fontFamily: 'monospace' },
   input: { minHeight: 42, borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 13 },
 });
+
+
 
 

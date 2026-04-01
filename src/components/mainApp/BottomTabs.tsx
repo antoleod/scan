@@ -41,20 +41,20 @@ export function BottomTabs({
   }, [activeTab, addPulse, historyFocus, notesFocus, scanFocus, settingsFocus]);
 
   const scanAnim = useAnimatedStyle(() => ({
-    transform: [{ translateY: interpolate(scanFocus.value, [0, 1], [0, -2]) }, { scale: interpolate(scanFocus.value, [0, 1], [1, 1.04]) }],
-    opacity: interpolate(scanFocus.value, [0, 1], [0.86, 1]),
+    transform: [{ translateY: interpolate(scanFocus.value, [0, 1], [0, -4]) }, { scale: interpolate(scanFocus.value, [0, 1], [1, 1.08]) }],
+    opacity: interpolate(scanFocus.value, [0, 1], [0.76, 1]),
   }));
   const historyAnim = useAnimatedStyle(() => ({
-    transform: [{ translateY: interpolate(historyFocus.value, [0, 1], [0, -2]) }, { scale: interpolate(historyFocus.value, [0, 1], [1, 1.04]) }],
-    opacity: interpolate(historyFocus.value, [0, 1], [0.86, 1]),
+    transform: [{ translateY: interpolate(historyFocus.value, [0, 1], [0, -4]) }, { scale: interpolate(historyFocus.value, [0, 1], [1, 1.08]) }],
+    opacity: interpolate(historyFocus.value, [0, 1], [0.76, 1]),
   }));
   const notesAnim = useAnimatedStyle(() => ({
-    transform: [{ translateY: interpolate(notesFocus.value, [0, 1], [0, -2]) }, { scale: interpolate(notesFocus.value, [0, 1], [1, 1.04]) }],
-    opacity: interpolate(notesFocus.value, [0, 1], [0.86, 1]),
+    transform: [{ translateY: interpolate(notesFocus.value, [0, 1], [0, -4]) }, { scale: interpolate(notesFocus.value, [0, 1], [1, 1.08]) }],
+    opacity: interpolate(notesFocus.value, [0, 1], [0.76, 1]),
   }));
   const settingsAnim = useAnimatedStyle(() => ({
-    transform: [{ translateY: interpolate(settingsFocus.value, [0, 1], [0, -2]) }, { scale: interpolate(settingsFocus.value, [0, 1], [1, 1.04]) }],
-    opacity: interpolate(settingsFocus.value, [0, 1], [0.86, 1]),
+    transform: [{ translateY: interpolate(settingsFocus.value, [0, 1], [0, -4]) }, { scale: interpolate(settingsFocus.value, [0, 1], [1, 1.08]) }],
+    opacity: interpolate(settingsFocus.value, [0, 1], [0.76, 1]),
   }));
   const addAnim = useAnimatedStyle(() => ({
     transform: [{ scale: interpolate(addPulse.value, [0, 1], [1, 1.06]) }],
@@ -77,7 +77,7 @@ export function BottomTabs({
       style={[
         mainAppStyles.footer,
         { backgroundColor: palette.card, borderColor: palette.border },
-        Platform.OS === 'web' ? { marginHorizontal: '15%', borderRadius: 16, marginBottom: 10, paddingHorizontal: 12 } : null,
+        Platform.OS === 'web' ? { width: '100%', borderRadius: 0, marginBottom: 0, paddingHorizontal: 10 } : null,
       ]}
     >
       <Animated.View style={[scanAnim, { flex: 1 }]}>
