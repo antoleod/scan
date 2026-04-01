@@ -13,6 +13,7 @@ type AnyTag = {
 };
 
 let startPromise: Promise<boolean> | null = null;
+let webNfcSupportedCache: boolean | null = null;
 
 function toBytes(value: unknown): Uint8Array | null {
   if (!value) return null;
@@ -117,21 +118,62 @@ function extractTagText(tag: AnyTag | null | undefined): string {
 }
 
 export async function ensureNfcReady(): Promise<boolean> {
-  if (Platform.OS !== 'android') return false;
+  if (Platform.OS === 'android') {
+    if (!startPromise) {
+      startPromise = (async () => {
+        const supported = await NfcManager.isSupported();
+        if (!supported) return false;
+        await NfcManager.start();
+        return true;
+      })().catch(() => false);
+    }
 
-  if (!startPromise) {
-    startPromise = (async () => {
-      const supported = await NfcManager.isSupported();
-      if (!supported) return false;
-      await NfcManager.start();
-      return true;
-    })().catch(() => false);
+    return startPromise;
   }
 
-  return startPromise;
+  if (Platform.OS === 'web') {
+    if (webNfcSupportedCache != null) return webNfcSupportedCache;
+    const supported = typeof window !== 'undefined' && 'NDEFReader' in window;
+    webNfcSupportedCache = supported;
+    return supported;
+  }
+
+  return false;
 }
 
 export async function readNfcPayload(): Promise<string | null> {
+  if (Platform.OS === 'web') {
+    const ready = await ensureNfcReady();
+    if (!ready || typeof window === 'undefined' || !('NDEFReader' in window)) return null;
+
+    return new Promise<string | null>(async (resolve, reject) => {
+      try {
+        const ReaderCtor = (window as unknown as { NDEFReader: new () => { scan: () => Promise<void>; addEventListener: (type: string, cb: (event: unknown) => void) => void } }).NDEFReader;
+        const reader = new ReaderCtor();
+        let finished = false;
+
+        const timeout = setTimeout(() => {
+          if (finished) return;
+          finished = true;
+          resolve(null);
+        }, 12000);
+
+        reader.addEventListener('reading', (event: unknown) => {
+          if (finished) return;
+          const ndefEvent = event as { message?: { records?: AnyRecord[] }; serialNumber?: string };
+          const payload = extractTagText({ id: ndefEvent.serialNumber, ndefMessage: ndefEvent.message?.records });
+          finished = true;
+          clearTimeout(timeout);
+          resolve(payload || null);
+        });
+
+        await reader.scan();
+      } catch (error) {
+        reject(error);
+      }
+    });
+  }
+
   const ready = await ensureNfcReady();
   if (!ready) return null;
 

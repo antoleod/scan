@@ -231,7 +231,18 @@ export function HistoryTab({
   }, [filteredHistory, calendarDay]);
 
   async function copyValue(item: ScanRecord) {
-    await Clipboard.setStringAsync(item.codeValue || item.codeNormalized);
+    const value = item.codeValue || item.codeNormalized;
+    await Clipboard.setStringAsync(value);
+    const readBack = await Clipboard.getStringAsync();
+    if ((readBack || '').trim() !== (value || '').trim() && Platform.OS === 'web' && typeof window !== 'undefined') {
+      const blob = new Blob([value], { type: 'text/plain;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `history-hardcopy-${item.id}.txt`;
+      link.click();
+      URL.revokeObjectURL(url);
+    }
     setCopiedId(item.id);
   }
 
@@ -275,7 +286,7 @@ export function HistoryTab({
       <TextInput
         value={query}
         onChangeText={onQueryChange}
-        placeholder="Search..."
+        placeholder="Search code, type or notes..."
         placeholderTextColor={palette.muted}
         style={[mainAppStyles.input, { color: palette.fg, borderColor: palette.border, backgroundColor: palette.card }]}
       />
@@ -454,7 +465,10 @@ export function HistoryTab({
                   </View>
 
                   <View style={{ borderWidth: 1, borderColor: palette.border, borderRadius: 12, padding: 10, gap: 6 }}>
-                    <Text style={{ color: palette.muted, fontSize: 11, fontWeight: '700', textTransform: 'uppercase' }}>Notes</Text>
+                    <Text style={{ color: palette.muted, fontSize: 11, fontWeight: '700', textTransform: 'uppercase' }}>Date / Cal / Notes</Text>
+                    <Text style={{ color: palette.fg, fontSize: 12, fontWeight: '700' }} numberOfLines={1}>
+                      {new Date(item.date).toLocaleDateString()} - {new Date(item.date).toLocaleTimeString()}
+                    </Text>
                     <Text style={{ color: palette.fg, fontSize: 13, lineHeight: 18 }} numberOfLines={3}>{notesValue}</Text>
                   </View>
                 </View>

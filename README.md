@@ -76,6 +76,18 @@ Optional environment variables:
 
 Copy `.env.example` to `.env` and fill in the values if you want Firebase auth and sync.
 
+### Live/CI setup (GitHub)
+
+Set these in `Settings > Secrets and variables > Actions` as repository secrets:
+
+- `EXPO_PUBLIC_FIREBASE_API_KEY`
+- `EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN`
+- `EXPO_PUBLIC_FIREBASE_PROJECT_ID`
+- `EXPO_PUBLIC_FIREBASE_APP_ID`
+- `EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET`
+- `EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID`
+- `EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID`
+
 For production (GitHub Pages), set the Firebase variables as repository Secrets.
 The deploy workflow reads only `secrets.*` and does not require committing `.env`.
 

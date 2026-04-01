@@ -1,5 +1,5 @@
 import React from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { CameraView } from 'expo-camera';
 import type { BarcodeType } from 'expo-camera';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
@@ -116,7 +116,7 @@ export function ScanTab({
   }));
 
   return (
-    <View style={styles.root}>
+    <ScrollView style={styles.root} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false} bounces>
       <ScanFeedbackBanner feedback={scanFeedback} palette={{ accent: C.accent }} />
       {!cameraPermissionGranted ? (
         <View style={styles.permissionBox}>
@@ -170,7 +170,7 @@ export function ScanTab({
           </Pressable>
         </Animated.View>
       </View>
-    </View>
+    </ScrollView>
   );
 }
 
@@ -178,6 +178,9 @@ const styles = StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: C.bg,
+  },
+  scrollContent: {
+    flexGrow: 1,
   },
   permissionBox: {
     flex: 1,

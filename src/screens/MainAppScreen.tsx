@@ -738,18 +738,11 @@ function MainApp() {
     setPendingCaptures(next);
   }
   async function scanFromNfc() {
-    if (Platform.OS !== 'android') {
-      Alert.alert('NFC', 'NFC scanning is only available on Android development builds.');
+    const ready = nfcReady || (await ensureNfcReady());
+    setNfcReady(ready);
+    if (!ready) {
+      Alert.alert('NFC', 'NFC needs a supported device/browser. On Android app builds it works with native NFC; on web it depends on Web NFC support.');
       return;
-    }
-
-    if (!nfcReady) {
-      const ready = await ensureNfcReady();
-      setNfcReady(ready);
-      if (!ready) {
-        Alert.alert('NFC', 'NFC requires a supported Android device and a development build. It does not work in Expo Go.');
-        return;
-      }
     }
 
     if (nfcBusy) return;
@@ -808,6 +801,16 @@ function MainApp() {
 
   async function copyTextToClipboard(text: string, okMessage: string) {
     await Clipboard.setStringAsync(text);
+    const readBack = await Clipboard.getStringAsync();
+    if ((readBack || '').trim() !== (text || '').trim() && Platform.OS === 'web' && typeof window !== 'undefined') {
+      const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `clipboard-hardcopy-${Date.now()}.txt`;
+      link.click();
+      URL.revokeObjectURL(url);
+    }
     Alert.alert('Clipboard', okMessage);
   }
 
@@ -1213,7 +1216,11 @@ function MainApp() {
       const itemType = visibleScanType(x.type);
       const matchesQuery =
         x.codeNormalized.toLowerCase().includes(query.toLowerCase()) ||
-        itemType.toLowerCase().includes(query.toLowerCase());
+        itemType.toLowerCase().includes(query.toLowerCase()) ||
+        (x.notes || '').toLowerCase().includes(query.toLowerCase()) ||
+        (x.customLabel || '').toLowerCase().includes(query.toLowerCase()) ||
+        (x.ticketNumber || '').toLowerCase().includes(query.toLowerCase()) ||
+        (x.officeCode || '').toLowerCase().includes(query.toLowerCase());
       const matchesType = filterType === 'ALL' || itemType === filterType;
 
       let matchesDate = true;
