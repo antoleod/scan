@@ -17,7 +17,7 @@ interface ForgotPasswordFormProps {
 }
 
 export default function ForgotPasswordForm({ onSwitchToLogin }: ForgotPasswordFormProps) {
-  const { firebase, sendPasswordReset } = useAuth();
+  const { sendPasswordReset } = useAuth();
   const { theme } = useAppTheme();
   const [email, setEmail] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -31,11 +31,6 @@ export default function ForgotPasswordForm({ onSwitchToLogin }: ForgotPasswordFo
     setSuccess(null);
 
     const normalizedEmail = email.trim().toLowerCase();
-
-    if (!firebase.enabled) {
-      setError('Service temporarily unavailable. Configuration in progress.');
-      return;
-    }
 
     if (!normalizedEmail) {
       setError('Email is required.');

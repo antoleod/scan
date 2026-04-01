@@ -56,7 +56,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             const appSettings = await loadSettings();
             const staySignedIn = appSettings.staySignedIn ?? true;
             const lastAuthTs = await loadLastAuthTimestamp();
-            const sessionExpired = !lastAuthTs || Date.now() - lastAuthTs > SESSION_MAX_AGE_MS;
+            const sessionExpired = lastAuthTs > 0 && Date.now() - lastAuthTs > SESSION_MAX_AGE_MS;
 
             if (!staySignedIn || sessionExpired) {
               await logout().catch(() => undefined);
@@ -70,6 +70,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 reason: !staySignedIn ? 'stay_signed_in_disabled' : 'expired_15_days',
               });
               return;
+            }
+
+            if (!lastAuthTs) {
+              await saveLastAuthTimestamp(Date.now());
             }
 
             setUser(nextUser);

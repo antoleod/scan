@@ -17,7 +17,7 @@ interface RegisterFormProps {
 }
 
 export default function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
-  const { firebase, register } = useAuth();
+  const { register } = useAuth();
   const { theme } = useAppTheme();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -33,11 +33,6 @@ export default function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
 
   const handleSubmit = async () => {
     setError(null);
-
-    if (!firebase.enabled) {
-      setError('Service temporarily unavailable. Configuration in progress.');
-      return;
-    }
 
     if (!normalizedEmail) {
       setError('Email is required.');
