@@ -113,8 +113,11 @@ export function detectCodeType(value: string, hint?: CodeType): CodeType {
 }
 
 export function getBarcodeOutputFormatForCodeType(codeType: CodeType, preferredFormat: BarcodeFormat = DEFAULT_BARCODE_FORMAT): BarcodeFormat {
-  if (codeType === 'pi' || codeType === 'office') {
+  if (codeType === 'pi') {
     return 'CODE128';
+  }
+  if (codeType === 'office') {
+    return 'EAN8';
   }
   return preferredFormat;
 }
@@ -216,13 +219,14 @@ export function buildCodePreviewPlan(
   }
 
   if (codeType === 'office') {
+    const digits = payload.replace(/\D+/g, '');
+    const officeEan8 = digits.length >= 8 ? digits.slice(0, 8) : payload;
     return {
-      value: payload,
+      value: officeEan8,
       codeType,
       codeFormat: 'code128',
       variants: [
-        { kind: 'barcode', label: 'Code128', value: payload, barcodeFormat: 'CODE128' },
-        { kind: 'qr', label: 'QR Code', value: payload },
+        { kind: 'barcode', label: 'EAN-8', value: officeEan8, barcodeFormat: 'EAN8' },
       ],
     };
   }

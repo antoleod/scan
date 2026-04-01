@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, FlatList, Linking, Modal, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
@@ -46,7 +46,6 @@ export function HistoryTab({
   onEditItem,
   onDeleteItem,
   onOpenBarcode,
-  onOpenQr,
   visibleScanType,
 }: {
   palette: Palette;
@@ -66,11 +65,11 @@ export function HistoryTab({
   onEditItem: (item: ScanRecord) => void;
   onDeleteItem: (item: ScanRecord) => void;
   onOpenBarcode: (value: string, codeType?: 'pi' | 'office' | 'other') => void;
-  onOpenQr: (value: string) => void;
   visibleScanType: (type: string) => string;
 }) {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [moreVisible, setMoreVisible] = useState(false);
+  const editLockRef = useRef(false);
 
   useEffect(() => {
     if (!copiedId) return;
@@ -192,12 +191,12 @@ export function HistoryTab({
           const isUrl = item.codeNormalized.startsWith('http://') || item.codeNormalized.startsWith('https://');
           const typeLabel = formatType(visibleScanType(item.type));
           const used = Boolean(item.used);
-
-          const displayLabel = item.label || item.customLabel || (item.officeCode ? 'Office code' : '');
-          const metaBits = [item.ticketNumber, item.officeCode ? `Office: ${item.officeCode}` : '', item.notes].filter(Boolean);
-          const metaLine = metaBits.join(' • ');
           const barcodeValue = item.codeValue || item.codeNormalized;
-          const codeType = item.codeType || (typeLabel === 'OFFICE' ? 'office' : typeLabel === 'PI' ? 'pi' : 'other');
+          const userValue = item.label || item.customLabel || '—';
+          const ticketValue = item.ticketNumber || '—';
+          const piValue = item.codeType === 'pi' || typeLabel === 'PI' ? barcodeValue : '';
+          const officeValue = item.officeCode || (item.codeType === 'office' || typeLabel === 'OFFICE' ? barcodeValue : '');
+          const notesValue = item.notes || '—';
 
           const handlePress = () => {
             if (isUrl && selection.size === 0) {
@@ -238,21 +237,49 @@ export function HistoryTab({
                 onLongPress={() => onLongPressSelection(item.id)}
                 style={({ pressed }) => ({ opacity: pressed ? 0.8 : 1 })}
               >
-                <Text style={[mainAppStyles.code, { color: isUrl ? palette.accent : palette.fg }]} numberOfLines={2} ellipsizeMode="tail">
-                  {displayLabel ? `${displayLabel}  ${barcodeValue}` : barcodeValue}
-                </Text>
+                <View style={{ gap: 8 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                    <Text style={{ color: palette.muted, fontSize: 11, fontWeight: '700', textTransform: 'uppercase' }}>User</Text>
+                    <Text style={{ color: palette.fg, fontSize: 13, fontWeight: '700', flex: 1, textAlign: 'right' }} numberOfLines={1}>{userValue}</Text>
+                  </View>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                    <Text style={{ color: palette.muted, fontSize: 11, fontWeight: '700', textTransform: 'uppercase' }}>Ticket number</Text>
+                    <Text style={{ color: palette.fg, fontSize: 13, fontWeight: '700', flex: 1, textAlign: 'right' }} numberOfLines={1}>{ticketValue}</Text>
+                  </View>
 
-                {item.label || item.customLabel ? (
-                  <Text style={[mainAppStyles.historyLabel, { color: palette.fg }]} numberOfLines={1}>
-                    {item.label || item.customLabel}
-                  </Text>
-                ) : null}
+                  <View style={{ borderWidth: 1, borderColor: `${palette.accent}55`, borderRadius: 12, padding: 10, backgroundColor: `${palette.accent}12`, gap: 8 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                      <Text style={{ color: palette.accent, fontSize: 11, fontWeight: '800', textTransform: 'uppercase' }}>PI</Text>
+                      <Pressable
+                        disabled={!piValue}
+                        onPress={() => onOpenBarcode(piValue, 'pi')}
+                        style={[mainAppStyles.tinyBtn, { borderColor: palette.border, opacity: piValue ? 1 : 0.35, paddingVertical: 6 }]}
+                      >
+                        <Ionicons name="barcode-outline" size={14} color={palette.fg} />
+                      </Pressable>
+                    </View>
+                    <Text style={[mainAppStyles.code, { color: piValue ? palette.fg : palette.muted, fontSize: 15 }]} numberOfLines={2}>{piValue || '—'}</Text>
+                  </View>
 
-                {metaLine ? (
-                  <Text style={[mainAppStyles.historyMetaLine, { color: palette.muted }]} numberOfLines={1}>
-                    {metaLine}
-                  </Text>
-                ) : null}
+                  <View style={{ borderWidth: 1, borderColor: `${palette.accent}40`, borderRadius: 12, padding: 10, backgroundColor: `${palette.accent}0D`, gap: 8 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                      <Text style={{ color: palette.accent, fontSize: 11, fontWeight: '800', textTransform: 'uppercase' }}>Office</Text>
+                      <Pressable
+                        disabled={!officeValue}
+                        onPress={() => onOpenBarcode(officeValue, 'office')}
+                        style={[mainAppStyles.tinyBtn, { borderColor: palette.border, opacity: officeValue ? 1 : 0.35, paddingVertical: 6 }]}
+                      >
+                        <Ionicons name="barcode-outline" size={14} color={palette.fg} />
+                      </Pressable>
+                    </View>
+                    <Text style={[mainAppStyles.code, { color: officeValue ? palette.fg : palette.muted, fontSize: 15 }]} numberOfLines={2}>{officeValue || '—'}</Text>
+                  </View>
+
+                  <View style={{ borderWidth: 1, borderColor: palette.border, borderRadius: 12, padding: 10, gap: 6 }}>
+                    <Text style={{ color: palette.muted, fontSize: 11, fontWeight: '700', textTransform: 'uppercase' }}>Notes</Text>
+                    <Text style={{ color: palette.fg, fontSize: 13, lineHeight: 18 }} numberOfLines={3}>{notesValue}</Text>
+                  </View>
+                </View>
 
                 <View style={mainAppStyles.itemMetaRow}>
                   <View style={[mainAppStyles.typeBadge, { backgroundColor: palette.accent + '22' }]}>
@@ -261,9 +288,7 @@ export function HistoryTab({
                   <View
                     style={[
                       mainAppStyles.statusChip,
-                      {
-                        backgroundColor: used ? 'rgba(120, 130, 145, 0.18)' : 'rgba(34, 197, 94, 0.18)',
-                      },
+                      { backgroundColor: used ? 'rgba(120, 130, 145, 0.18)' : 'rgba(34, 197, 94, 0.18)' },
                     ]}
                   >
                     <View style={[mainAppStyles.statusDot, { backgroundColor: used ? '#93a1b5' : '#22c55e' }]} />
@@ -272,17 +297,12 @@ export function HistoryTab({
                     </Text>
                   </View>
                   <Text style={{ color: palette.muted, fontSize: 12 }}>{new Date(item.date).toLocaleString()}</Text>
-                  {copiedId === item.id ? (
-                    <Text style={{ color: palette.accent, fontSize: 12, fontWeight: '700' }}>Copied</Text>
-                  ) : null}
+                  {copiedId === item.id ? <Text style={{ color: palette.accent, fontSize: 12, fontWeight: '700' }}>Copied</Text> : null}
                 </View>
               </Pressable>
 
               <View style={mainAppStyles.itemActions}>
-                <Pressable
-                  style={[mainAppStyles.tinyBtn, { borderColor: palette.border }]}
-                  onPress={() => copyValue(item)}
-                >
+                <Pressable style={[mainAppStyles.tinyBtn, { borderColor: palette.border }]} onPress={() => copyValue(item)}>
                   <View style={mainAppStyles.compactAction}>
                     <Ionicons name="copy-outline" size={14} color={palette.fg} />
                     <Text style={{ color: palette.fg, fontSize: 12, fontWeight: '700' }}>Copy</Text>
@@ -290,44 +310,27 @@ export function HistoryTab({
                 </Pressable>
                 <Pressable
                   style={[mainAppStyles.tinyBtn, { borderColor: palette.border }]}
-                  onPress={() => onEditItem(item)}
+                  onPress={() => {
+                    if (editLockRef.current) return;
+                    editLockRef.current = true;
+                    onEditItem(item);
+                    setTimeout(() => {
+                      editLockRef.current = false;
+                    }, 260);
+                  }}
                 >
                   <View style={mainAppStyles.compactAction}>
                     <Ionicons name="create-outline" size={14} color={palette.fg} />
                     <Text style={{ color: palette.fg, fontSize: 12, fontWeight: '700' }}>Edit</Text>
                   </View>
                 </Pressable>
-                <Pressable
-                  style={[mainAppStyles.tinyBtn, { borderColor: palette.border }]}
-                  onPress={() => onToggleUsed(item.id)}
-                >
+                <Pressable style={[mainAppStyles.tinyBtn, { borderColor: palette.border }]} onPress={() => onToggleUsed(item.id)}>
                   <View style={mainAppStyles.compactAction}>
                     <Ionicons name={used ? 'checkmark-circle-outline' : 'ellipse-outline'} size={14} color={palette.fg} />
                     <Text style={{ color: palette.fg, fontSize: 12, fontWeight: '700' }}>{used ? 'Available' : 'Used'}</Text>
                   </View>
                 </Pressable>
-                <Pressable
-                  style={[mainAppStyles.tinyBtn, { borderColor: palette.border }]}
-                  onPress={() => onOpenBarcode(barcodeValue, codeType)}
-                >
-                  <View style={mainAppStyles.compactAction}>
-                    <Ionicons name="barcode-outline" size={14} color={palette.fg} />
-                    <Text style={{ color: palette.fg, fontSize: 12, fontWeight: '700' }}>Barcode</Text>
-                  </View>
-                </Pressable>
-                <Pressable
-                  style={[mainAppStyles.tinyBtn, { borderColor: palette.border }]}
-                  onPress={() => onOpenQr(barcodeValue)}
-                >
-                  <View style={mainAppStyles.compactAction}>
-                    <Ionicons name="qr-code-outline" size={14} color={palette.fg} />
-                    <Text style={{ color: palette.fg, fontSize: 12, fontWeight: '700' }}>QR</Text>
-                  </View>
-                </Pressable>
-                <Pressable
-                  style={[mainAppStyles.tinyBtn, { borderColor: palette.border }]}
-                  onPress={() => confirmDelete(item)}
-                >
+                <Pressable style={[mainAppStyles.tinyBtn, { borderColor: palette.border }]} onPress={() => confirmDelete(item)}>
                   <View style={mainAppStyles.compactAction}>
                     <Ionicons name="trash-outline" size={14} color={palette.fg} />
                     <Text style={{ color: palette.fg, fontSize: 12, fontWeight: '700' }}>Delete</Text>
@@ -365,3 +368,4 @@ export function HistoryTab({
     </View>
   );
 }
+

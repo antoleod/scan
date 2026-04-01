@@ -115,8 +115,6 @@ export default function AuthScreen() {
           <Text style={styles.subtitle}>{view === 'register' ? 'Create account' : 'Recover password'}</Text>
         </View>
 
-        <FirebaseGuardCard />
-
         <View style={styles.card}>
           {view === 'register' ? <RegisterForm onSwitchToLogin={() => setView('login')} /> : null}
           {view === 'forgot' ? <ForgotPasswordForm onSwitchToLogin={() => setView('login')} /> : null}

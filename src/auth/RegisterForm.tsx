@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 
 import { useAuth } from './useAuth';
+import { useAppTheme } from '../constants/theme';
 import { isValidEmail } from './validation';
 
 interface RegisterFormProps {
@@ -17,6 +18,7 @@ interface RegisterFormProps {
 
 export default function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
   const { firebase, register } = useAuth();
+  const { theme } = useAppTheme();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -69,14 +71,14 @@ export default function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
 
   return (
     <View>
-      {error ? <Text style={styles.errorText}>{error}</Text> : null}
+      {error ? <Text style={[styles.errorText, { color: theme.error }]}>{error}</Text> : null}
 
       <View style={styles.inputGroup}>
-        <Text style={styles.label}>Email</Text>
+        <Text style={[styles.label, { color: theme.secondary }]}>Email</Text>
         <TextInput
           value={email}
           onChangeText={setEmail}
-          style={styles.input}
+          style={[styles.input, { borderColor: theme.border, backgroundColor: theme.inputBg, color: theme.text }]}
           placeholder="user@company.com"
           keyboardType="email-address"
           textContentType="emailAddress"
@@ -86,11 +88,11 @@ export default function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
       </View>
 
       <View style={styles.inputGroup}>
-        <Text style={styles.label}>Password</Text>
+        <Text style={[styles.label, { color: theme.secondary }]}>Password</Text>
         <TextInput
           value={password}
           onChangeText={setPassword}
-          style={styles.input}
+          style={[styles.input, { borderColor: theme.border, backgroundColor: theme.inputBg, color: theme.text }]}
           placeholder="At least 6 characters"
           secureTextEntry
           textContentType="newPassword"
@@ -100,11 +102,11 @@ export default function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
       </View>
 
       <View style={styles.inputGroup}>
-        <Text style={styles.label}>Confirm password</Text>
+        <Text style={[styles.label, { color: theme.secondary }]}>Confirm password</Text>
         <TextInput
           value={confirmPassword}
           onChangeText={setConfirmPassword}
-          style={styles.input}
+          style={[styles.input, { borderColor: theme.border, backgroundColor: theme.inputBg, color: theme.text }]}
           placeholder="Repeat password"
           secureTextEntry
           textContentType="password"
@@ -116,14 +118,14 @@ export default function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
       <Pressable
         onPress={handleSubmit}
         disabled={submitDisabled}
-        style={[styles.primaryButton, submitDisabled ? styles.primaryButtonDisabled : null]}
+        style={[styles.primaryButton, { backgroundColor: theme.secondary }, submitDisabled ? styles.primaryButtonDisabled : null]}
       >
-        {loading ? <ActivityIndicator color="#ffffff" /> : <Text style={styles.primaryButtonText}>Create account</Text>}
+        {loading ? <ActivityIndicator color={theme.primary} /> : <Text style={[styles.primaryButtonText, { color: theme.primary }]}>Create account</Text>}
       </Pressable>
 
       <View style={styles.linksBlock}>
         <Pressable onPress={onSwitchToLogin}>
-          <Text style={styles.primaryLink}>I already have an account</Text>
+          <Text style={[styles.primaryLink, { color: theme.secondary }]}>I already have an account</Text>
         </Pressable>
       </View>
     </View>

@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 
 import { useAuth } from './useAuth';
+import { useAppTheme } from '../constants/theme';
 import { isValidEmail } from './validation';
 
 interface ForgotPasswordFormProps {
@@ -17,6 +18,7 @@ interface ForgotPasswordFormProps {
 
 export default function ForgotPasswordForm({ onSwitchToLogin }: ForgotPasswordFormProps) {
   const { firebase, sendPasswordReset } = useAuth();
+  const { theme } = useAppTheme();
   const [email, setEmail] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -58,15 +60,15 @@ export default function ForgotPasswordForm({ onSwitchToLogin }: ForgotPasswordFo
 
   return (
     <View>
-      {success ? <Text style={styles.successText}>{success}</Text> : null}
-      {error ? <Text style={styles.errorText}>{error}</Text> : null}
+      {success ? <Text style={[styles.successText, { color: theme.success }]}>{success}</Text> : null}
+      {error ? <Text style={[styles.errorText, { color: theme.error }]}>{error}</Text> : null}
 
       <View style={styles.inputGroup}>
-        <Text style={styles.label}>Email</Text>
+        <Text style={[styles.label, { color: theme.secondary }]}>Email</Text>
         <TextInput
           value={email}
           onChangeText={setEmail}
-          style={styles.input}
+          style={[styles.input, { borderColor: theme.border, backgroundColor: theme.inputBg, color: theme.text }]}
           placeholder="user@company.com"
           keyboardType="email-address"
           textContentType="emailAddress"
@@ -78,14 +80,14 @@ export default function ForgotPasswordForm({ onSwitchToLogin }: ForgotPasswordFo
       <Pressable
         onPress={handleSubmit}
         disabled={submitDisabled}
-        style={[styles.primaryButton, submitDisabled ? styles.primaryButtonDisabled : null]}
+        style={[styles.primaryButton, { backgroundColor: theme.secondary }, submitDisabled ? styles.primaryButtonDisabled : null]}
       >
-        {loading ? <ActivityIndicator color="#ffffff" /> : <Text style={styles.primaryButtonText}>Send reset link</Text>}
+        {loading ? <ActivityIndicator color={theme.primary} /> : <Text style={[styles.primaryButtonText, { color: theme.primary }]}>Send reset link</Text>}
       </Pressable>
 
       <View style={styles.linksBlock}>
         <Pressable onPress={onSwitchToLogin}>
-          <Text style={styles.primaryLink}>Back to login</Text>
+          <Text style={[styles.primaryLink, { color: theme.secondary }]}>Back to login</Text>
         </Pressable>
       </View>
     </View>

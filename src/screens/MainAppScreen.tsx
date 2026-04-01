@@ -169,6 +169,7 @@ function MainApp() {
   const cameraRef = useRef<CameraView>(null);
   const laserAnim = useRef(new Animated.Value(0)).current;
   const entryDraftRef = useRef<EntryDraftSnapshot | null>(null);
+  const entryOpenLockRef = useRef(false);
 
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const isCompactLayout = width < 390 || height < 780;
@@ -1019,32 +1020,43 @@ function MainApp() {
   }
 
   function openEditItemModal(item: ScanRecord) {
+    if (entryOpenLockRef.current) return;
+    entryOpenLockRef.current = true;
+    setTimeout(() => {
+      entryOpenLockRef.current = false;
+    }, 260);
+
+    const selected = {
+      ...item,
+      structuredFields: { ...(item.structuredFields || {}) },
+    };
     const visibleType = visibleScanType(item.type);
     const inferredType: ManualItemType =
-      item.codeType === 'office' || visibleType === 'OFFICE'
+      selected.codeType === 'office' || visibleType === 'OFFICE'
         ? 'OFFICE'
-        : item.codeType === 'pi' || visibleType === 'PI'
+        : selected.codeType === 'pi' || visibleType === 'PI'
           ? 'PI'
           : 'OTHER';
+    setEntryModalVisible(false);
     setEntryMode('edit');
     setEntryType(inferredType);
-    setEntryValue(item.codeNormalized);
-    setEntryLabel(item.label || item.customLabel || '');
-    setEntryTicket(item.ticketNumber || '');
-    setEntryOffice(item.officeCode || '');
-    setEntryNotes(item.notes || '');
-    setEntryEditId(item.id);
+    setEntryValue(selected.codeNormalized);
+    setEntryLabel(selected.label || selected.customLabel || '');
+    setEntryTicket(selected.ticketNumber || '');
+    setEntryOffice(selected.officeCode || '');
+    setEntryNotes(selected.notes || '');
+    setEntryEditId(selected.id);
     entryDraftRef.current = buildEntrySnapshot(
       'edit',
       inferredType,
-      item.codeNormalized,
-      item.label || item.customLabel || '',
-      item.ticketNumber || '',
-      item.notes || '',
-      item.officeCode || '',
-      item.id
+      selected.codeNormalized,
+      selected.label || selected.customLabel || '',
+      selected.ticketNumber || '',
+      selected.notes || '',
+      selected.officeCode || '',
+      selected.id
     );
-    setEntryModalVisible(true);
+    setTimeout(() => setEntryModalVisible(true), 0);
   }
 
   function buildManualHistoryRecord(value: string, type: ManualItemType): ScanRecord {
@@ -1321,7 +1333,6 @@ function MainApp() {
             onEditItem={openEditItemModal}
             onDeleteItem={deleteHistoryItem}
             onOpenBarcode={openBarcodePreview}
-            onOpenQr={openQrPreview}
             visibleScanType={visibleScanType}
           />
         ) : activeTab === 'notes' ? (
@@ -1379,6 +1390,7 @@ function MainApp() {
         onClose={() => setDateModalVisible(false)}
       />
       <HistoryItemModal
+        key={`${entryMode}-${entryEditId || 'new'}`}
         visible={entryModalVisible}
         mode={entryMode}
         value={entryValue}
