@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Platform, Pressable, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import Animated, { interpolate, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
@@ -73,7 +73,13 @@ export function BottomTabs({
   };
 
   return (
-    <View style={[mainAppStyles.footer, { backgroundColor: palette.card, borderColor: palette.border }]}>
+    <View
+      style={[
+        mainAppStyles.footer,
+        { backgroundColor: palette.card, borderColor: palette.border },
+        Platform.OS === 'web' ? { marginHorizontal: '15%', borderRadius: 16, marginBottom: 10, paddingHorizontal: 12 } : null,
+      ]}
+    >
       <Animated.View style={[scanAnim, { flex: 1 }]}>
         <Pressable onPress={() => onTabPress('scan')} style={[mainAppStyles.footerBtn, activeTab === 'scan' ? { backgroundColor: palette.accent + '14' } : null]}>
           {activeTab === 'scan' && <View style={[mainAppStyles.footerIndicator, { backgroundColor: palette.accent }]} />}

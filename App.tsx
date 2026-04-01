@@ -8,6 +8,7 @@ import { useAuth } from './src/auth/useAuth';
 import { useAppTheme } from './src/constants/theme';
 import { ThemeProvider } from './src/core/theme';
 import { loadSettings } from './src/core/settings';
+import { initPwaInstallBridge } from './src/core/pwa';
 import MainAppScreen from './src/screens/MainAppScreen';
 
 function AuthGate() {
@@ -15,6 +16,7 @@ function AuthGate() {
   const { setThemeName } = useAppTheme();
 
   useEffect(() => {
+    initPwaInstallBridge();
     loadSettings()
       .then((settings) => {
         const key = settings.theme === 'eu_blue' ? 'euBlue' : settings.theme;

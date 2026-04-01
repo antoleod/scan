@@ -1,8 +1,9 @@
 ﻿import React, { useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import { Platform, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 
 import { AppSettings, type PersistenceMode } from '../../../types';
 import { BARCODE_FORMAT_OPTIONS, type BarcodeFormat } from '../../../core/barcode';
+import { canInstallPwa, triggerPwaInstall } from '../../../core/pwa';
 import { useAppTheme } from '../../../constants/theme';
 
 type Palette = {
@@ -137,6 +138,7 @@ export function SettingsTab({
   const [passMode, setPassMode] = useState<'short' | 'phrase'>('short');
   const [passWords, setPassWords] = useState(3);
   const [passPhrase, setPassPhrase] = useState('');
+  const [installBusy, setInstallBusy] = useState(false);
 
   const themeOptions = useMemo<ThemeOption[]>(
     () => [
@@ -261,6 +263,34 @@ export function SettingsTab({
           <View style={styles.toggleRow}><Text style={[styles.toggleLabel, { color: palette.fg }]}>Auto detect</Text><Switch value={settings.autoDetect} onValueChange={(value) => onPatchSettings({ autoDetect: value, scanProfile: value ? 'auto' : settings.scanProfile })} /></View>
           <View style={styles.toggleRow}><Text style={[styles.toggleLabel, { color: palette.fg }]}>Open URL</Text><Switch value={settings.openUrls ?? true} onValueChange={(value) => onPatchSettings({ openUrls: value })} /></View>
           <View style={styles.toggleRow}><Text style={[styles.toggleLabel, { color: palette.fg }]}>OCR correction</Text><Switch value={settings.ocrCorrection} onValueChange={(value) => onPatchSettings({ ocrCorrection: value })} /></View>
+          <View style={styles.toggleRow}><Text style={[styles.toggleLabel, { color: palette.fg }]}>Stay signed in (15 days)</Text><Switch value={settings.staySignedIn ?? true} onValueChange={(value) => onPatchSettings({ staySignedIn: value })} /></View>
+          <View style={styles.toggleRow}><Text style={[styles.toggleLabel, { color: palette.fg }]}>Save password (encrypted)</Text><Switch value={settings.savePasswordEncrypted ?? false} onValueChange={(value) => onPatchSettings({ savePasswordEncrypted: value })} /></View>
+        </SectionCard>
+
+        <SectionCard title="Web App (PWA)" subtitle="Install this app in your browser." accent={palette.accent} subtitleColor={palette.muted} cardBackground={palette.card} cardBorder={palette.border}>
+          <Text style={{ color: palette.muted }}>
+            {Platform.OS === 'web'
+              ? canInstallPwa()
+                ? 'Install prompt available.'
+                : 'Install prompt not available yet. Use HTTPS and open the app once first.'
+              : 'Open the web version to install as a PWA.'}
+          </Text>
+          <View style={styles.bulkActions}>
+            <Pressable
+              disabled={Platform.OS !== 'web' || installBusy || !canInstallPwa()}
+              onPress={async () => {
+                setInstallBusy(true);
+                try {
+                  await triggerPwaInstall();
+                } finally {
+                  setInstallBusy(false);
+                }
+              }}
+              style={[styles.bulkButton, { backgroundColor: activeAccent, opacity: Platform.OS !== 'web' || installBusy || !canInstallPwa() ? 0.5 : 1 }]}
+            >
+              <Text style={[styles.bulkButtonText, { color: '#111' }]}>{installBusy ? 'Opening...' : 'Install Web App'}</Text>
+            </Pressable>
+          </View>
         </SectionCard>
 
         <SectionCard title="Bulk import" subtitle="Paste list (one per line, comma or tab)." accent={palette.accent} subtitleColor={palette.muted} cardBackground={palette.card} cardBorder={palette.border}>

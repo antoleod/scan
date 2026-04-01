@@ -1,8 +1,10 @@
 import React, { createContext, useEffect, useMemo, useState } from 'react';
 import { User } from 'firebase/auth';
 
+import { loadLastAuthTimestamp, saveLastAuthTimestamp, clearLastAuthTimestamp } from '../core/auth-storage';
 import { diag } from '../core/diagnostics';
 import { onFirebaseAuthState } from '../core/firebase';
+import { loadSettings } from '../core/settings';
 
 import { getFirebaseGuardState, login, logout, register, sendPasswordReset } from './authService';
 import { AuthContextValue, FirebaseGuardState } from './authTypes';
@@ -13,6 +15,8 @@ const defaultFirebaseGuard: FirebaseGuardState = {
   missingRequiredEnv: [],
   missingOptionalEnv: [],
 };
+
+const SESSION_MAX_AGE_MS = 15 * 24 * 60 * 60 * 1000;
 
 export const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
@@ -40,14 +44,42 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         unsubscribe = await onFirebaseAuthState((nextUser) => {
           if (!mounted) return;
-          setUser(nextUser);
-          if (nextUser) {
+          (async () => {
+            if (!nextUser) {
+              setUser(null);
+              setIsGuest(false);
+              void diag.info('auth.state.changed', { authenticated: false });
+              setIsLoading(false);
+              return;
+            }
+
+            const appSettings = await loadSettings();
+            const staySignedIn = appSettings.staySignedIn ?? true;
+            const lastAuthTs = await loadLastAuthTimestamp();
+            const sessionExpired = !lastAuthTs || Date.now() - lastAuthTs > SESSION_MAX_AGE_MS;
+
+            if (!staySignedIn || sessionExpired) {
+              await logout().catch(() => undefined);
+              await clearLastAuthTimestamp();
+              if (mounted) {
+                setUser(null);
+                setIsGuest(false);
+                setIsLoading(false);
+              }
+              void diag.info('auth.session.relogin_required', {
+                reason: !staySignedIn ? 'stay_signed_in_disabled' : 'expired_15_days',
+              });
+              return;
+            }
+
+            setUser(nextUser);
             setIsGuest(false);
             void diag.info('auth.state.changed', { authenticated: true, uid: nextUser.uid });
-          } else {
-            void diag.info('auth.state.changed', { authenticated: false });
-          }
-          setIsLoading(false);
+            setIsLoading(false);
+          })().catch(async (error) => {
+            await diag.error('auth.state.error', { message: String(error) });
+            if (mounted) setIsLoading(false);
+          });
         });
       } catch (error) {
         await diag.error('auth.bootstrap.error', { message: String(error) });
@@ -75,6 +107,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const authenticatedUser = await login(email, password);
     setIsGuest(false);
     setUser(authenticatedUser);
+    await saveLastAuthTimestamp(Date.now());
     await diag.info('auth.login.success', { uid: authenticatedUser.uid });
     return authenticatedUser;
   };
@@ -83,6 +116,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const authenticatedUser = await register(email, password);
     setIsGuest(false);
     setUser(authenticatedUser);
+    await saveLastAuthTimestamp(Date.now());
     await diag.info('auth.register.success', { uid: authenticatedUser.uid });
     return authenticatedUser;
   };
@@ -96,6 +130,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await logout();
     setUser(null);
     setIsGuest(false);
+    await clearLastAuthTimestamp();
     await diag.info('auth.logout.success');
   };
 

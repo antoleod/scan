@@ -17,6 +17,8 @@ export const defaultSettings: AppSettings = {
   barcodeTypes: ['qr', 'code128', 'code39', 'ean13', 'ean8'],
   laserSpeed: 'normal',
   historyAutoClearDays: 0,
+  staySignedIn: true,
+  savePasswordEncrypted: false,
 };
 
 export async function loadSettings(): Promise<AppSettings> {

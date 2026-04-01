@@ -7,6 +7,7 @@ import {
   Platform,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   TouchableOpacity,
@@ -27,8 +28,15 @@ import Animated, {
 
 import { useAppTheme } from '../constants/theme';
 import { normalizeIdentifier } from '../core/auth';
-import { loadLastIdentifier, saveLastIdentifier } from '../core/auth-storage';
+import {
+  clearSavedCredentials,
+  loadEncryptedCredentials,
+  loadLastIdentifier,
+  saveEncryptedCredentials,
+  saveLastIdentifier,
+} from '../core/auth-storage';
 import { isDeviceOnline } from '../core/network';
+import { loadSettings, saveSettings } from '../core/settings';
 import { isValidIdentifier } from '../core/validation';
 import { useAuth } from './useAuth';
 
@@ -64,6 +72,8 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
   const [errors, setErrors] = useState<{ username?: string; pin?: string }>({});
   const [focusedField, setFocusedField] = useState<'username' | 'pin' | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [staySignedIn, setStaySignedIn] = useState(true);
+  const [rememberPassword, setRememberPassword] = useState(false);
 
   const [displayedBrandingText, setDisplayedBrandingText] = useState('');
 
@@ -224,6 +234,23 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
       })
       .catch(() => { });
 
+    loadSettings()
+      .then((settings) => {
+        if (cancelled) return;
+        setStaySignedIn(settings.staySignedIn ?? true);
+        setRememberPassword(settings.savePasswordEncrypted ?? false);
+      })
+      .catch(() => undefined);
+
+    loadEncryptedCredentials()
+      .then((saved) => {
+        if (!saved || cancelled) return;
+        setUsername(saved.identifier);
+        setPin(saved.password);
+        setRememberPassword(true);
+      })
+      .catch(() => undefined);
+
     const checkConnection = async () => {
       if (!firebaseApiKey) {
         if (!cancelled) setConnectionState('error');
@@ -280,6 +307,20 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
     return valid;
   };
 
+  const updateLoginPreferences = async (next: { staySignedIn?: boolean; rememberPassword?: boolean }) => {
+    const current = await loadSettings();
+    await saveSettings({
+      ...current,
+      staySignedIn: next.staySignedIn ?? staySignedIn,
+      savePasswordEncrypted: next.rememberPassword ?? rememberPassword,
+    });
+    if (typeof next.rememberPassword === 'boolean') {
+      if (!next.rememberPassword) {
+        await clearSavedCredentials();
+      }
+    }
+  };
+
   const handleSignIn = async () => {
     if (!validate()) return;
 
@@ -288,6 +329,17 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
     try {
       await login(firebaseEmail, pin);
       await saveLastIdentifier(username);
+      const currentSettings = await loadSettings();
+      await saveSettings({
+        ...currentSettings,
+        staySignedIn,
+        savePasswordEncrypted: rememberPassword,
+      });
+      if (rememberPassword) {
+        await saveEncryptedCredentials(firebaseEmail, pin);
+      } else {
+        await clearSavedCredentials();
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unable to sign in right now.';
       setAuthError(message);
@@ -536,6 +588,33 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
               </Text>
             </View>
 
+            <View style={styles.toggleStack}>
+              <View style={styles.toggleRow}>
+                <Text style={[styles.toggleLabel, { color: theme.textSecondary }]}>Stay signed in (15 days)</Text>
+                <Switch
+                  value={staySignedIn}
+                  onValueChange={(value) => {
+                    setStaySignedIn(value);
+                    updateLoginPreferences({ staySignedIn: value }).catch(() => undefined);
+                  }}
+                  trackColor={{ false: `${theme.border}`, true: `${theme.secondary}88` }}
+                  thumbColor={staySignedIn ? theme.secondary : theme.textSecondary}
+                />
+              </View>
+              <View style={styles.toggleRow}>
+                <Text style={[styles.toggleLabel, { color: theme.textSecondary }]}>Save password (encrypted, this browser)</Text>
+                <Switch
+                  value={rememberPassword}
+                  onValueChange={(value) => {
+                    setRememberPassword(value);
+                    updateLoginPreferences({ rememberPassword: value }).catch(() => undefined);
+                  }}
+                  trackColor={{ false: `${theme.border}`, true: `${theme.secondary}88` }}
+                  thumbColor={rememberPassword ? theme.secondary : theme.textSecondary}
+                />
+              </View>
+            </View>
+
             <View style={styles.links}>
               <TouchableOpacity onPress={onSwitchToRegister} style={styles.linkAction}>
                 <Text style={[styles.link, { color: theme.secondary }]}>Create account</Text>
@@ -624,6 +703,9 @@ const styles = StyleSheet.create({
   statusRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   statusDot: { width: 6, height: 6, borderRadius: 3 },
   statusText: { fontSize: 11, fontWeight: '600' },
+  toggleStack: { gap: 8, marginTop: 2 },
+  toggleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
+  toggleLabel: { flex: 1, fontSize: 11, fontWeight: '600', lineHeight: 16 },
   links: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12 },
   linkAction: { paddingVertical: 4 },
   link: { fontSize: 12, fontWeight: '700' },

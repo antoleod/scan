@@ -28,6 +28,8 @@ export interface AppSettings {
   barcodeTypes: BarcodeType[];
   laserSpeed: 'slow' | 'normal' | 'fast';
   historyAutoClearDays: number;
+  staySignedIn: boolean;
+  savePasswordEncrypted: boolean;
 }
 
 export interface TemplateRule {
