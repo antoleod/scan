@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, FlatList, Linking, Modal, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { Alert, FlatList, Linking, Modal, Platform, Pressable, ScrollView, Text, TextInput, View, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 
@@ -20,12 +20,140 @@ type DateFilter = 'ALL' | 'TODAY' | 'WEEK' | 'MONTH';
 const PRIMARY_FILTERS = ['ALL', 'PI', 'RITM', 'REQ', 'INC'];
 const OVERFLOW_FILTERS = ['SCTASK', 'OFFICE', 'QR', 'OTHER'];
 
+const WEEK_DAYS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+function getDaysInMonth(year: number, month: number) {
+  return new Date(year, month + 1, 0).getDate();
+}
+function getFirstDayOfMonth(year: number, month: number) {
+  return new Date(year, month, 1).getDay();
+}
+function toDateKey(d: Date) {
+  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+}
+function recordToDateKey(ts: number | string) {
+  const d = new Date(ts);
+  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+}
+
 function formatType(type: string) {
   return String(type || '').trim().toUpperCase() || 'OTHER';
 }
 
 function uniqueFilters(values: string[]) {
   return Array.from(new Set(values.map((value) => formatType(value)).filter(Boolean)));
+}
+
+function HistoryCalendar({
+  palette,
+  items,
+  selectedDay,
+  onSelectDay,
+}: {
+  palette: Palette;
+  items: ScanRecord[];
+  selectedDay: string | null;
+  onSelectDay: (key: string | null) => void;
+}) {
+  const today = new Date();
+  const [year, setYear] = useState(today.getFullYear());
+  const [month, setMonth] = useState(today.getMonth());
+
+  const countByDay = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const item of items) {
+      const key = recordToDateKey(item.date);
+      map[key] = (map[key] || 0) + 1;
+    }
+    return map;
+  }, [items]);
+
+  const daysInMonth = getDaysInMonth(year, month);
+  const firstDay = getFirstDayOfMonth(year, month);
+  const todayKey = toDateKey(today);
+
+  function prevMonth() {
+    if (month === 0) { setYear(y => y - 1); setMonth(11); }
+    else setMonth(m => m - 1);
+  }
+  function nextMonth() {
+    if (month === 11) { setYear(y => y + 1); setMonth(0); }
+    else setMonth(m => m + 1);
+  }
+
+  const monthTotal = useMemo(() => {
+    let total = 0;
+    for (let d = 1; d <= daysInMonth; d++) {
+      const key = `${year}-${month}-${d}`;
+      total += countByDay[key] || 0;
+    }
+    return total;
+  }, [countByDay, year, month, daysInMonth]);
+
+  const cells: (number | null)[] = [];
+  for (let i = 0; i < firstDay; i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+
+  return (
+    <View style={calStyles.calWrap}>
+      <View style={calStyles.calHeader}>
+        <Pressable onPress={prevMonth} style={calStyles.navBtn}>
+          <Ionicons name="chevron-back" size={16} color={palette.fg} />
+        </Pressable>
+        <View style={{ flex: 1, alignItems: 'center' }}>
+          <Text style={[calStyles.calTitle, { color: palette.fg }]}>
+            {MONTH_NAMES[month]} {year}
+          </Text>
+          <Text style={{ color: palette.muted, fontSize: 11 }}>{monthTotal} captures</Text>
+        </View>
+        <Pressable onPress={nextMonth} style={calStyles.navBtn}>
+          <Ionicons name="chevron-forward" size={16} color={palette.fg} />
+        </Pressable>
+      </View>
+
+      <View style={calStyles.weekRow}>
+        {WEEK_DAYS.map((d, i) => (
+          <Text key={i} style={[calStyles.weekDay, { color: palette.muted }]}>{d}</Text>
+        ))}
+      </View>
+
+      <View style={calStyles.grid}>
+        {cells.map((day, i) => {
+          if (!day) return <View key={`e${i}`} style={calStyles.cell} />;
+          const key = `${year}-${month}-${day}`;
+          const count = countByDay[key] || 0;
+          const isToday = key === todayKey;
+          const isSelected = key === selectedDay;
+          return (
+            <Pressable
+              key={key}
+              onPress={() => onSelectDay(isSelected ? null : key)}
+              style={[
+                calStyles.cell,
+                isSelected && { backgroundColor: palette.accent, borderRadius: 8 },
+                isToday && !isSelected && { borderWidth: 1, borderColor: palette.accent, borderRadius: 8 },
+              ]}
+            >
+              <Text style={[
+                calStyles.dayNum,
+                { color: isSelected ? palette.bg : palette.fg },
+                isToday && !isSelected && { color: palette.accent, fontWeight: '800' },
+                count > 0 && !isSelected && { fontWeight: '700' },
+              ]}>
+                {day}
+              </Text>
+              {count > 0 ? (
+                <View style={[calStyles.dot, { backgroundColor: isSelected ? palette.bg : palette.accent }]} />
+              ) : (
+                <View style={calStyles.dotEmpty} />
+              )}
+            </Pressable>
+          );
+        })}
+      </View>
+    </View>
+  );
 }
 
 export function HistoryTab({
@@ -69,6 +197,8 @@ export function HistoryTab({
 }) {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [moreVisible, setMoreVisible] = useState(false);
+  const [calendarOpen, setCalendarOpen] = useState(false);
+  const [calendarDay, setCalendarDay] = useState<string | null>(null);
   const editLockRef = useRef(false);
 
   useEffect(() => {
@@ -76,6 +206,11 @@ export function HistoryTab({
     const timer = setTimeout(() => setCopiedId(null), 1200);
     return () => clearTimeout(timer);
   }, [copiedId]);
+
+  // Clear calendar day selection when date filter changes externally
+  useEffect(() => {
+    setCalendarDay(null);
+  }, [dateFilter, selectedDateLabel]);
 
   const allFilterTypes = useMemo(() => {
     const discovered = uniqueFilters(filteredHistory.map((item) => visibleScanType(item.type)));
@@ -88,6 +223,12 @@ export function HistoryTab({
   );
 
   const moreActive = !PRIMARY_FILTERS.includes(formatType(filterType));
+
+  // Apply local calendar day filter on top of filteredHistory
+  const displayHistory = useMemo(() => {
+    if (!calendarDay) return filteredHistory;
+    return filteredHistory.filter((item) => recordToDateKey(item.date) === calendarDay);
+  }, [filteredHistory, calendarDay]);
 
   async function copyValue(item: ScanRecord) {
     await Clipboard.setStringAsync(item.codeValue || item.codeNormalized);
@@ -152,38 +293,75 @@ export function HistoryTab({
             key={d}
             style={[
               mainAppStyles.filterChipCompact,
-              dateFilter === d ? { backgroundColor: palette.accent } : { borderColor: palette.border, borderWidth: 1 },
+              dateFilter === d && !calendarOpen ? { backgroundColor: palette.accent } : { borderColor: palette.border, borderWidth: 1 },
               mainAppStyles.filterChipNoGrow,
             ]}
-            onPress={() => onDateFilterChange(d)}
+            onPress={() => { onDateFilterChange(d); setCalendarOpen(false); setCalendarDay(null); }}
           >
-            <Text style={{ color: dateFilter === d ? '#fff' : palette.fg, fontSize: 12, fontWeight: '700' }}>{d}</Text>
+            <Text style={{ color: dateFilter === d && !calendarOpen ? '#fff' : palette.fg, fontSize: 12, fontWeight: '700' }}>{d}</Text>
           </Pressable>
         ))}
         <Pressable
           style={[
             mainAppStyles.filterChipCompact,
-            selectedDateLabel ? { backgroundColor: palette.accent } : { borderColor: palette.border, borderWidth: 1 },
+            selectedDateLabel && !calendarOpen ? { backgroundColor: palette.accent } : { borderColor: palette.border, borderWidth: 1 },
             mainAppStyles.filterChipNoGrow,
           ]}
           onPress={onOpenDatePicker}
         >
           <View style={mainAppStyles.compactAction}>
-            <Ionicons name="calendar-outline" size={14} color={selectedDateLabel ? '#fff' : palette.fg} />
-            <Text style={{ color: selectedDateLabel ? '#fff' : palette.fg, fontSize: 12, fontWeight: '700' }}>
+            <Ionicons name="calendar-outline" size={14} color={selectedDateLabel && !calendarOpen ? '#fff' : palette.fg} />
+            <Text style={{ color: selectedDateLabel && !calendarOpen ? '#fff' : palette.fg, fontSize: 12, fontWeight: '700' }}>
               {selectedDateLabel || 'DATE'}
             </Text>
           </View>
         </Pressable>
+        {/* Calendar toggle */}
+        <Pressable
+          style={[
+            mainAppStyles.filterChipCompact,
+            calendarOpen ? { backgroundColor: palette.accent } : { borderColor: palette.border, borderWidth: 1 },
+            mainAppStyles.filterChipNoGrow,
+          ]}
+          onPress={() => { setCalendarOpen(v => !v); if (calendarOpen) setCalendarDay(null); }}
+        >
+          <View style={mainAppStyles.compactAction}>
+            <Ionicons name="grid-outline" size={14} color={calendarOpen ? '#fff' : palette.fg} />
+            <Text style={{ color: calendarOpen ? '#fff' : palette.fg, fontSize: 12, fontWeight: '700' }}>CAL</Text>
+          </View>
+        </Pressable>
       </View>
 
+      {/* Inline calendar panel */}
+      {calendarOpen && (
+        <View style={[histStyles.calCard, { backgroundColor: palette.card, borderColor: palette.border }]}>
+          <HistoryCalendar
+            palette={palette}
+            items={filteredHistory}
+            selectedDay={calendarDay}
+            onSelectDay={setCalendarDay}
+          />
+          {calendarDay && (
+            <Pressable
+              style={[histStyles.clearDayBtn, { borderColor: palette.border }]}
+              onPress={() => setCalendarDay(null)}
+            >
+              <Ionicons name="close-circle-outline" size={14} color={palette.muted} />
+              <Text style={{ color: palette.muted, fontSize: 12, fontWeight: '700' }}>Clear day filter</Text>
+            </Pressable>
+          )}
+        </View>
+      )}
+
       <FlatList
-        data={filteredHistory}
+        data={displayHistory}
         keyExtractor={(item) => item.id}
         contentContainerStyle={mainAppStyles.listContent}
         ListEmptyComponent={
           <View style={[mainAppStyles.card, { backgroundColor: palette.card, borderColor: palette.border }]}>
-            <Text style={{ color: palette.fg }}>No scans yet.</Text>
+            <Text style={{ color: palette.fg }}>
+              {calendarDay ? 'No scans on this day.' : 'No scans yet.'}
+            </Text>
           </View>
         }
         renderItem={({ item }) => {
@@ -369,3 +547,33 @@ export function HistoryTab({
   );
 }
 
+const calStyles = StyleSheet.create({
+  calWrap: { padding: 12 },
+  calHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
+  calTitle: { fontSize: 14, fontWeight: '800' },
+  navBtn: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center' },
+  weekRow: { flexDirection: 'row', marginBottom: 4 },
+  weekDay: { flex: 1, textAlign: 'center', fontSize: 11, fontWeight: '700' },
+  grid: { flexDirection: 'row', flexWrap: 'wrap' },
+  cell: { width: `${100 / 7}%`, aspectRatio: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 2 },
+  dayNum: { fontSize: 13, fontWeight: '600' },
+  dot: { width: 4, height: 4, borderRadius: 99, marginTop: 1 },
+  dotEmpty: { width: 4, height: 4, marginTop: 1 },
+});
+
+const histStyles = StyleSheet.create({
+  calCard: {
+    borderWidth: 1,
+    borderRadius: 12,
+    marginBottom: 4,
+    overflow: 'hidden',
+  },
+  clearDayBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    borderTopWidth: 1,
+    paddingVertical: 10,
+  },
+});
