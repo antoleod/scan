@@ -458,32 +458,30 @@ export function HistoryTab({
                     <Text style={{ color: palette.fg, fontSize: 13, fontWeight: '700', flex: 1, textAlign: 'right' }} numberOfLines={1}>{ticketValue}</Text>
                   </View>
 
-                  <View style={{ borderWidth: 1, borderColor: `${palette.accent}55`, borderRadius: 12, padding: 10, backgroundColor: `${palette.accent}12`, gap: 8 }}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                      <Text style={{ color: palette.accent, fontSize: 11, fontWeight: '800', textTransform: 'uppercase' }}>PI</Text>
+                                    <View style={{ borderWidth: 1, borderColor: palette.border, borderRadius: 12, padding: 10, gap: 8 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                      <Text style={{ color: palette.accent, fontSize: 11, fontWeight: '800', textTransform: 'uppercase', width: 44 }}>PI</Text>
+                      <Text style={{ color: piValue ? palette.fg : palette.muted, fontSize: 13, fontWeight: '700', flex: 1 }} numberOfLines={1}>{piValue || '—'}</Text>
                       <Pressable
                         disabled={!piValue}
                         onPress={() => onOpenBarcode(piValue, 'pi')}
-                        style={[mainAppStyles.tinyBtn, { borderColor: palette.border, opacity: piValue ? 1 : 0.35, paddingVertical: 6 }]}
+                        style={[mainAppStyles.tinyBtn, { borderColor: palette.border, opacity: piValue ? 1 : 0.35, paddingVertical: 6, paddingHorizontal: 8 }]}
                       >
                         <Ionicons name="barcode-outline" size={14} color={palette.fg} />
                       </Pressable>
                     </View>
-                    <Text style={[mainAppStyles.code, { color: piValue ? palette.fg : palette.muted, fontSize: 15 }]} numberOfLines={2}>{piValue || 'â€”'}</Text>
-                  </View>
 
-                  <View style={{ borderWidth: 1, borderColor: `${palette.accent}40`, borderRadius: 12, padding: 10, backgroundColor: `${palette.accent}0D`, gap: 8 }}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                      <Text style={{ color: palette.accent, fontSize: 11, fontWeight: '800', textTransform: 'uppercase' }}>Office</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                      <Text style={{ color: palette.accent, fontSize: 11, fontWeight: '800', textTransform: 'uppercase', width: 44 }}>Office</Text>
+                      <Text style={{ color: officeValue ? palette.fg : palette.muted, fontSize: 13, fontWeight: '700', flex: 1 }} numberOfLines={1}>{officeValue || '—'}</Text>
                       <Pressable
                         disabled={!officeValue}
                         onPress={() => onOpenBarcode(officeValue, 'office')}
-                        style={[mainAppStyles.tinyBtn, { borderColor: palette.border, opacity: officeValue ? 1 : 0.35, paddingVertical: 6 }]}
+                        style={[mainAppStyles.tinyBtn, { borderColor: palette.border, opacity: officeValue ? 1 : 0.35, paddingVertical: 6, paddingHorizontal: 8 }]}
                       >
                         <Ionicons name="barcode-outline" size={14} color={palette.fg} />
                       </Pressable>
                     </View>
-                    <Text style={[mainAppStyles.code, { color: officeValue ? palette.fg : palette.muted, fontSize: 15 }]} numberOfLines={2}>{officeValue || 'â€”'}</Text>
                   </View>
 
                   <View style={{ borderWidth: 1, borderColor: palette.border, borderRadius: 12, padding: 10, gap: 6 }}>
@@ -613,3 +611,4 @@ const histStyles = StyleSheet.create({
     paddingVertical: 10,
   },
 });
+

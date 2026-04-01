@@ -1,5 +1,5 @@
 import React from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { CameraView } from 'expo-camera';
 import type { BarcodeType } from 'expo-camera';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
@@ -45,6 +45,9 @@ export function ScanTab({
   cameraBarcodeTypes,
   scanFeedback,
   onScanFromImage,
+  imageScanPreviewUri,
+  imageScanBusy,
+  onClearImagePreview,
   onTakePicture,
   onScanFromNfc,
   nfcBusy,
@@ -68,6 +71,9 @@ export function ScanTab({
   cameraBarcodeTypes: BarcodeType[];
   scanFeedback: Feedback;
   onScanFromImage: () => void;
+  imageScanPreviewUri: string | null;
+  imageScanBusy: boolean;
+  onClearImagePreview: () => void;
   onTakePicture: () => void;
   onScanFromNfc: () => void;
   nfcBusy: boolean;
@@ -161,6 +167,21 @@ export function ScanTab({
             <Text style={[styles.modeText, styles.modeTextTertiary]}>{nfcBusy ? 'Reading...' : nfcReady ? 'NFC' : 'NFC'}</Text>
           </Pressable>
         </View>
+
+        {imageScanPreviewUri ? (
+          <View style={styles.previewCard}>
+            <Image source={{ uri: imageScanPreviewUri }} style={styles.previewImage} resizeMode="cover" />
+            <View style={{ flex: 1, gap: 4 }}>
+              <Text style={styles.previewTitle}>{imageScanBusy ? 'Reading selected photo...' : 'Selected photo loaded'}</Text>
+              <Text style={styles.previewSubtitle}>
+                {imageScanBusy ? 'Searching barcode/QR in image.' : 'You can select another image or clear this preview.'}
+              </Text>
+            </View>
+            <Pressable style={styles.previewClearBtn} onPress={onClearImagePreview}>
+              <Ionicons name="close" size={16} color={C.muted} />
+            </Pressable>
+          </View>
+        ) : null}
 
         <Animated.View style={[styles.toast, toastStyle]}>
           <Text style={styles.toastTitle}>Scanning is taking too long</Text>
@@ -264,6 +285,43 @@ const styles = StyleSheet.create({
     backgroundColor: C.toast,
     padding: 12,
     gap: 8,
+  },
+  previewCard: {
+    marginHorizontal: 16,
+    marginBottom: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: C.border,
+    backgroundColor: C.chip,
+    padding: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  previewImage: {
+    width: 56,
+    height: 56,
+    borderRadius: 8,
+    backgroundColor: '#0b0b0b',
+  },
+  previewTitle: {
+    color: C.text,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  previewSubtitle: {
+    color: C.muted,
+    fontSize: 11,
+    lineHeight: 15,
+  },
+  previewClearBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: C.border,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   toastTitle: {
     color: C.text,

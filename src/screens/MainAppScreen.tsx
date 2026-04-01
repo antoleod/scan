@@ -160,6 +160,8 @@ function MainApp() {
   const [cameraReady, setCameraReady] = useState(false);
   const [torchEnabled, setTorchEnabled] = useState(false);
   const [manualCaptureBusy, setManualCaptureBusy] = useState(false);
+  const [imageScanBusy, setImageScanBusy] = useState(false);
+  const [imageScanPreviewUri, setImageScanPreviewUri] = useState<string | null>(null);
   const [nfcReady, setNfcReady] = useState(false);
   const [nfcBusy, setNfcBusy] = useState(false);
   const [backupImportVisible, setBackupImportVisible] = useState(false);
@@ -629,6 +631,7 @@ function MainApp() {
   }
 
   async function scanFromImage() {
+    if (imageScanBusy) return;
     const res = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       quality: 1,
@@ -636,17 +639,27 @@ function MainApp() {
     });
     if (res.canceled || !res.assets[0]?.uri) return;
 
+    const uri = res.assets[0].uri;
+    setImageScanPreviewUri(uri);
+    setImageScanBusy(true);
+    setScanState('saving_photo');
+
     try {
-      const results = await scanFromURLAsync(res.assets[0].uri, [...IMAGE_SCAN_BARCODE_TYPES]);
+      const results = await scanFromURLAsync(uri, [...IMAGE_SCAN_BARCODE_TYPES]);
       const payload = results.find((item) => String(item.data || '').trim())?.data;
       if (!payload) {
+        setScanState('error');
         Alert.alert('No result', 'No code detected in the image.');
         return;
       }
       await processIncomingScan(payload, 'image');
+      setScanState('saved');
     } catch (error) {
       await diag.warn('image.scan.error', { message: String(error) });
-      Alert.alert('Error', 'Could not scan the image.');
+      setScanState('error');
+      Alert.alert('Error', `Could not scan the image: ${String(error)}`);
+    } finally {
+      setImageScanBusy(false);
     }
   }
 
@@ -1292,6 +1305,9 @@ function MainApp() {
             cameraBarcodeTypes={cameraBarcodeTypes}
             scanFeedback={scanFeedback}
             onScanFromImage={scanFromImage}
+            imageScanPreviewUri={imageScanPreviewUri}
+            imageScanBusy={imageScanBusy}
+            onClearImagePreview={() => setImageScanPreviewUri(null)}
             onTakePicture={takePictureAndScan}
             onScanFromNfc={scanFromNfc}
             nfcBusy={nfcBusy}
