@@ -24,10 +24,18 @@ export default function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
   const [loading, setLoading] = useState(false);
   const normalizedEmail = email.trim().toLowerCase();
 
-  const submitDisabled = loading || !firebase.enabled;
+  const emailValid = isValidEmail(normalizedEmail);
+  const passwordValid = password.length >= 6;
+  const matches = password === confirmPassword && confirmPassword.length > 0;
+  const submitDisabled = loading || !emailValid || !passwordValid || !matches;
 
   const handleSubmit = async () => {
     setError(null);
+
+    if (!firebase.enabled) {
+      setError('Service temporarily unavailable. Configuration in progress.');
+      return;
+    }
 
     if (!normalizedEmail) {
       setError('Email is required.');
@@ -41,11 +49,6 @@ export default function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
 
     if (password.length < 6) {
       setError('Password must be at least 6 characters.');
-      return;
-    }
-
-    if (!/[A-Za-z]/.test(password) || !/\d/.test(password)) {
-      setError('Password must include letters and numbers.');
       return;
     }
 

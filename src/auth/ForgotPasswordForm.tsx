@@ -22,13 +22,18 @@ export default function ForgotPasswordForm({ onSwitchToLogin }: ForgotPasswordFo
   const [success, setSuccess] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const submitDisabled = loading || !firebase.enabled;
+  const submitDisabled = loading;
 
   const handleSubmit = async () => {
     setError(null);
     setSuccess(null);
 
     const normalizedEmail = email.trim().toLowerCase();
+
+    if (!firebase.enabled) {
+      setError('Service temporarily unavailable. Configuration in progress.');
+      return;
+    }
 
     if (!normalizedEmail) {
       setError('Email is required.');

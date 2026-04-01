@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import {
+  Animated,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -15,27 +16,75 @@ import RegisterForm from './RegisterForm';
 import { AuthView } from './authTypes';
 import { useAuth } from './useAuth';
 
+function AuthBackgroundEffects() {
+  const pulse = React.useRef(new Animated.Value(0)).current;
+  const drift = React.useRef(new Animated.Value(0)).current;
+
+  React.useEffect(() => {
+    const pulseLoop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, { toValue: 1, duration: 2600, useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 0, duration: 2600, useNativeDriver: true }),
+      ])
+    );
+    const driftLoop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(drift, { toValue: 1, duration: 4200, useNativeDriver: true }),
+        Animated.timing(drift, { toValue: 0, duration: 4200, useNativeDriver: true }),
+      ])
+    );
+    pulseLoop.start();
+    driftLoop.start();
+    return () => {
+      pulseLoop.stop();
+      driftLoop.stop();
+    };
+  }, [drift, pulse]);
+
+  const haloStyle = {
+    opacity: pulse.interpolate({ inputRange: [0, 1], outputRange: [0.2, 0.5] }),
+    transform: [{ scale: pulse.interpolate({ inputRange: [0, 1], outputRange: [0.92, 1.08] }) }],
+  };
+  const starsStyle = {
+    opacity: drift.interpolate({ inputRange: [0, 1], outputRange: [0.25, 0.5] }),
+    transform: [{ translateY: drift.interpolate({ inputRange: [0, 1], outputRange: [0, 8] }) }],
+  };
+
+  return (
+    <View pointerEvents="none" style={styles.fxWrap}>
+      <Animated.View style={[styles.fxHalo, haloStyle]} />
+      <View style={styles.fxGrid}>
+        <View style={[styles.fxGridV, { left: '20%' }]} />
+        <View style={[styles.fxGridV, { left: '40%' }]} />
+        <View style={[styles.fxGridV, { left: '60%' }]} />
+        <View style={[styles.fxGridV, { left: '80%' }]} />
+        <View style={[styles.fxGridH, { top: '30%' }]} />
+        <View style={[styles.fxGridH, { top: '55%' }]} />
+        <View style={[styles.fxGridH, { top: '80%' }]} />
+      </View>
+      <Animated.View style={[styles.fxStars, starsStyle]}>
+        <View style={[styles.fxStar, { top: '10%', left: '12%' }]} />
+        <View style={[styles.fxStar, { top: '18%', right: '18%' }]} />
+        <View style={[styles.fxStar, { top: '32%', left: '68%' }]} />
+        <View style={[styles.fxStar, { top: '62%', left: '22%' }]} />
+        <View style={[styles.fxStar, { top: '72%', right: '30%' }]} />
+      </Animated.View>
+      <View style={styles.fxReadability} />
+    </View>
+  );
+}
+
 function FirebaseGuardCard() {
   const { firebase } = useAuth();
 
   if (firebase.enabled) {
-    if (!firebase.missingOptionalEnv.length) {
-      return null;
-    }
-
-    return (
-      <View style={[styles.guardCard, styles.guardOptional]}>
-        <Text style={styles.guardTitle}>Firebase configured</Text>
-        <Text style={styles.guardText}>{firebase.message}</Text>
-      </View>
-    );
+    return null;
   }
 
   return (
     <View style={[styles.guardCard, styles.guardError]}>
-      <Text style={styles.guardTitle}>Firebase not configured</Text>
-      <Text style={styles.guardText}>{firebase.message}</Text>
-      <Text style={styles.guardHint}>Account access is disabled until these variables are defined.</Text>
+      <Text style={styles.guardTitle}>Service temporarily unavailable</Text>
+      <Text style={styles.guardText}>Configuration in progress. Please try again shortly.</Text>
     </View>
   );
 }
@@ -58,10 +107,11 @@ export default function AuthScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       style={styles.container}
     >
+      <AuthBackgroundEffects />
       <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content}>
         <View style={styles.brandArea}>
           <Text style={styles.kicker}>ORYXEN TECH</Text>
-          <Text style={styles.title}>BARRA SCANNER</Text>
+          <Text style={styles.title}>ORYXEN SCANNER</Text>
           <Text style={styles.subtitle}>{view === 'register' ? 'Create account' : 'Recover password'}</Text>
         </View>
 
@@ -173,5 +223,49 @@ const styles = StyleSheet.create({
     color: '#dce7f8',
     fontWeight: '700',
     fontSize: 13,
+  },
+  fxWrap: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  fxReadability: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(5, 10, 20, 0.26)',
+  },
+  fxHalo: {
+    position: 'absolute',
+    width: 260,
+    height: 260,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255, 153, 51, 0.16)',
+    top: 90,
+    alignSelf: 'center',
+  },
+  fxGrid: {
+    ...StyleSheet.absoluteFillObject,
+    opacity: 0.25,
+  },
+  fxGridV: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    width: 1,
+    backgroundColor: 'rgba(255, 176, 96, 0.16)',
+  },
+  fxGridH: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    height: 1,
+    backgroundColor: 'rgba(106, 146, 255, 0.12)',
+  },
+  fxStars: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  fxStar: {
+    position: 'absolute',
+    width: 3,
+    height: 3,
+    borderRadius: 99,
+    backgroundColor: 'rgba(228, 239, 255, 0.7)',
   },
 });

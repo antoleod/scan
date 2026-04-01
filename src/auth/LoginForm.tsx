@@ -7,8 +7,7 @@ import {
   Platform,
   ScrollView,
   StyleSheet,
-  Switch,
-  Text,
+    Text,
   TextInput,
   TouchableOpacity,
   View
@@ -36,11 +35,11 @@ import {
   saveLastIdentifier,
 } from '../core/auth-storage';
 import { isDeviceOnline } from '../core/network';
-import { loadSettings, saveSettings } from '../core/settings';
+import { loadSettings } from '../core/settings';
 import { isValidIdentifier } from '../core/validation';
 import { useAuth } from './useAuth';
 
-const fullBrandingText = 'ORYXEN TECH · BARRA SCANNER · SECURE TRAIL';
+const fullBrandingText = 'ORYXEN TECH · ORYXEN SCANNER · SECURE TRAIL';
 
 function AnimatedStripe({ index, theme, baseHeight, width, opacity }: { index: number; theme: any; baseHeight: number; width: number; opacity: number }) {
   const eqValue = useSharedValue(0);
@@ -64,7 +63,7 @@ interface LoginFormProps {
 }
 
 export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: LoginFormProps) {
-  const { login, enterAsGuest } = useAuth();
+  const { login, enterAsGuest, firebase } = useAuth();
   const [username, setUsername] = useState('');
   const [pin, setPin] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -72,8 +71,7 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
   const [errors, setErrors] = useState<{ username?: string; pin?: string }>({});
   const [focusedField, setFocusedField] = useState<'username' | 'pin' | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
-  const [staySignedIn, setStaySignedIn] = useState(true);
-  const [rememberPassword, setRememberPassword] = useState(false);
+    const [rememberPassword, setRememberPassword] = useState(false);
 
   const [displayedBrandingText, setDisplayedBrandingText] = useState('');
 
@@ -236,9 +234,7 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
 
     loadSettings()
       .then((settings) => {
-        if (cancelled) return;
-        setStaySignedIn(settings.staySignedIn ?? true);
-        setRememberPassword(settings.savePasswordEncrypted ?? false);
+        if (cancelled) return;        setRememberPassword(settings.savePasswordEncrypted ?? false);
       })
       .catch(() => undefined);
 
@@ -307,20 +303,6 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
     return valid;
   };
 
-  const updateLoginPreferences = async (next: { staySignedIn?: boolean; rememberPassword?: boolean }) => {
-    const current = await loadSettings();
-    await saveSettings({
-      ...current,
-      staySignedIn: next.staySignedIn ?? staySignedIn,
-      savePasswordEncrypted: next.rememberPassword ?? rememberPassword,
-    });
-    if (typeof next.rememberPassword === 'boolean') {
-      if (!next.rememberPassword) {
-        await clearSavedCredentials();
-      }
-    }
-  };
-
   const handleSignIn = async () => {
     if (!validate()) return;
 
@@ -329,12 +311,6 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
     try {
       await login(firebaseEmail, pin);
       await saveLastIdentifier(username);
-      const currentSettings = await loadSettings();
-      await saveSettings({
-        ...currentSettings,
-        staySignedIn,
-        savePasswordEncrypted: rememberPassword,
-      });
       if (rememberPassword) {
         await saveEncryptedCredentials(firebaseEmail, pin);
       } else {
@@ -440,6 +416,7 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
             </View>
           </View>
         )}
+        <View pointerEvents="none" style={styles.readabilityVeil} />
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
@@ -575,44 +552,17 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
               <Animated.View
                 style={[
                   styles.statusDot,
-                  { backgroundColor: connectionState === 'connected' ? theme.success : connectionState === 'error' ? theme.error : theme.warning },
+                  { backgroundColor: connectionState === 'connected' && firebase.enabled ? theme.success : theme.warning },
                   pulseStyle,
                 ]}
               />
               <Text style={[styles.statusText, { color: theme.textSecondary }]}>
-                {connectionState === 'connected'
-                  ? 'Firebase ready'
-                  : connectionState === 'error'
-                    ? 'Firebase config missing'
+                {!firebase.enabled
+                  ? 'Service temporarily unavailable. Configuration in progress.'
+                  : connectionState === 'connected'
+                    ? 'Firebase ready'
                     : 'Connectivity check limited (login may still work)'}
               </Text>
-            </View>
-
-            <View style={styles.toggleStack}>
-              <View style={styles.toggleRow}>
-                <Text style={[styles.toggleLabel, { color: theme.textSecondary }]}>Stay signed in (15 days)</Text>
-                <Switch
-                  value={staySignedIn}
-                  onValueChange={(value) => {
-                    setStaySignedIn(value);
-                    updateLoginPreferences({ staySignedIn: value }).catch(() => undefined);
-                  }}
-                  trackColor={{ false: `${theme.border}`, true: `${theme.secondary}88` }}
-                  thumbColor={staySignedIn ? theme.secondary : theme.textSecondary}
-                />
-              </View>
-              <View style={styles.toggleRow}>
-                <Text style={[styles.toggleLabel, { color: theme.textSecondary }]}>Save password (encrypted, this browser)</Text>
-                <Switch
-                  value={rememberPassword}
-                  onValueChange={(value) => {
-                    setRememberPassword(value);
-                    updateLoginPreferences({ rememberPassword: value }).catch(() => undefined);
-                  }}
-                  trackColor={{ false: `${theme.border}`, true: `${theme.secondary}88` }}
-                  thumbColor={rememberPassword ? theme.secondary : theme.textSecondary}
-                />
-              </View>
             </View>
 
             <View style={styles.links}>
@@ -649,6 +599,7 @@ const styles = StyleSheet.create({
   watermarkShell: {},
   watermarkContainer: { ...StyleSheet.absoluteFillObject },
   watermarkVisible: { opacity: 1 },
+  readabilityVeil: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(6, 11, 20, 0.28)' },
   gridLineV: { position: 'absolute', top: 0, bottom: 0, width: 1, opacity: 0.04 },
   gridLineH: { position: 'absolute', left: 0, right: 0, height: 1, opacity: 0.04 },
   techCircle: { position: 'absolute', borderRadius: 1000, borderWidth: 1, opacity: 0.07 },
@@ -703,9 +654,6 @@ const styles = StyleSheet.create({
   statusRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   statusDot: { width: 6, height: 6, borderRadius: 3 },
   statusText: { fontSize: 11, fontWeight: '600' },
-  toggleStack: { gap: 8, marginTop: 2 },
-  toggleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
-  toggleLabel: { flex: 1, fontSize: 11, fontWeight: '600', lineHeight: 16 },
   links: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12 },
   linkAction: { paddingVertical: 4 },
   link: { fontSize: 12, fontWeight: '700' },
@@ -716,5 +664,6 @@ const styles = StyleSheet.create({
   footerSignalDot: { position: 'absolute', width: 4, height: 4, borderRadius: 999, right: 12 },
   version: { fontSize: 9, fontWeight: '700', letterSpacing: 2, textTransform: 'uppercase', opacity: 0.4 },
 });
+
 
 

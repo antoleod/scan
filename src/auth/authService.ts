@@ -46,8 +46,8 @@ export function toFriendlyAuthError(error: unknown): string {
   }
 
   const message = readFirebaseErrorMessage(error);
-  if (message.toLowerCase().includes('firebase not configured')) {
-    return message;
+  if (message.toLowerCase().includes('firebase not configured') || message.toLowerCase().includes('missing variables')) {
+    return 'Service temporarily unavailable. Configuration in progress.';
   }
 
   return 'Authentication failed. Please try again.';
@@ -74,34 +74,37 @@ export async function getFirebaseGuardState(): Promise<FirebaseGuardState> {
   return {
     enabled: false,
     message: missing
-      ? `Firebase not configured. Missing variables: ${missing}`
-      : 'Firebase is not available in this environment.',
+      ? 'Service temporarily unavailable. Configuration in progress.'
+      : 'Service temporarily unavailable. Configuration in progress.',
     missingRequiredEnv: runtime.missingRequiredEnv,
     missingOptionalEnv: runtime.missingOptionalEnv,
   };
 }
 
 export async function login(email: string, password: string): Promise<User> {
+  await diag.info('auth.login.attempt', { emailDomain: (email.split('@')[1] || '').toLowerCase() || 'n/a' });
   try {
     return await loginWithEmail(email, password);
   } catch (error) {
     const friendly = toFriendlyAuthError(error);
-    await diag.warn('auth.login.error', { reason: friendly });
+    await diag.warn('auth.login.error', { reason: friendly, raw: readFirebaseErrorCode(error) || readFirebaseErrorMessage(error) });
     throw new Error(friendly);
   }
 }
 
 export async function register(email: string, password: string): Promise<User> {
+  await diag.info('auth.register.attempt', { emailDomain: (email.split('@')[1] || '').toLowerCase() || 'n/a' });
   try {
     return await registerWithEmail(email, password);
   } catch (error) {
     const friendly = toFriendlyAuthError(error);
-    await diag.warn('auth.register.error', { reason: friendly });
+    await diag.warn('auth.register.error', { reason: friendly, raw: readFirebaseErrorCode(error) || readFirebaseErrorMessage(error) });
     throw new Error(friendly);
   }
 }
 
 export async function sendPasswordReset(email: string): Promise<void> {
+  await diag.info('auth.reset.attempt', { emailDomain: (email.split('@')[1] || '').toLowerCase() || 'n/a' });
   try {
     await sendResetPasswordEmail(email);
   } catch (error) {

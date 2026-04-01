@@ -24,6 +24,7 @@ import {
 
 import { ScanRecord } from '../types';
 import type { NoteItem, NoteTemplate } from './notes';
+import { diag } from './diagnostics';
 
 const REQUIRED_FIREBASE_ENV = [
   'EXPO_PUBLIC_FIREBASE_API_KEY',
@@ -129,6 +130,11 @@ export async function initFirebaseRuntime(): Promise<FirebaseRuntime> {
       missingRequiredEnv,
       missingOptionalEnv,
     };
+    await diag.info('firebase.init', {
+      enabled: false,
+      missingRequired: missingRequiredEnv.length,
+      missingOptional: missingOptionalEnv.length,
+    });
 
     return runtime;
   }
@@ -146,6 +152,11 @@ export async function initFirebaseRuntime(): Promise<FirebaseRuntime> {
     missingRequiredEnv,
     missingOptionalEnv,
   };
+  await diag.info('firebase.init', {
+    enabled: true,
+    missingRequired: missingRequiredEnv.length,
+    missingOptional: missingOptionalEnv.length,
+  });
 
   return runtime;
 }
