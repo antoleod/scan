@@ -1659,4 +1659,21 @@ const styles = StyleSheet.create({
   },
   viewfinderCenter: {
     width: '80%',
-    borderColor: 'rgba(25
+    borderColor: 'rgba(255,255,255,0.7)',
+    borderWidth: 2,
+    borderRadius: 16,
+  },
+  viewfinderBottom: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'flex-start',
+    alignItems: 'center',
+    paddingTop: 24,
+  },
+  viewfinderText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+});
