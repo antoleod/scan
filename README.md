@@ -71,9 +71,16 @@ Optional environment variables:
 - `EXPO_PUBLIC_FIREBASE_APP_ID`
 - `EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET` (optional)
 - `EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID` (optional)
+- `EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID` (optional)
 - `EXPO_PUBLIC_ENABLE_UPDATES` (false by default)
 
 Copy `.env.example` to `.env` and fill in the values if you want Firebase auth and sync.
+
+For production (GitHub Pages), set the Firebase variables as repository Secrets.
+The deploy workflow reads only `secrets.*` and does not require committing `.env`.
+
+Important: on web clients, Firebase config values are public by design in the built app.
+Protect data with Firebase Auth + Firestore Security Rules + App Check; do not rely on hiding `EXPO_PUBLIC_*` values.
 
 ## Notes
 
