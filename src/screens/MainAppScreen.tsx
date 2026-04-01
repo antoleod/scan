@@ -493,10 +493,10 @@ function MainApp() {
       if (openUrls && isUrl && (source === 'camera' || source === 'image' || source === 'nfc')) {
         lastPayloadRef.current = { value: payload, ts: Date.now() };
 
-        Alert.alert('Enlace Detectado', `El código contiene una URL. ¿Deseas abrirla?\n\n${payload}`, [
-          { text: 'Cancelar', style: 'cancel' },
+        Alert.alert('Link Detected', `The scanned value contains a URL. Do you want to open it?\n\n${payload}`, [
+          { text: 'Cancel', style: 'cancel' },
           {
-            text: 'Abrir',
+            text: 'Open',
             onPress: async () => {
               try {
                 const supported = await Linking.canOpenURL(payload);
@@ -504,11 +504,11 @@ function MainApp() {
                   await Linking.openURL(payload);
                   await diag.info('url.opened', { url: payload });
                 } else {
-                  Alert.alert('Error', `No se puede abrir esta URL: ${payload}`);
+                  Alert.alert('Error', `Cannot open this URL: ${payload}`);
                 }
               } catch (e) {
                 await diag.error('url.open.error', { message: String(e), url: payload });
-                Alert.alert('Error', `No se pudo abrir el enlace: ${String(e)}`);
+                Alert.alert('Error', `Could not open the link: ${String(e)}`);
               }
             },
           },
@@ -1567,3 +1567,4 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
 });
+

@@ -28,22 +28,24 @@ export default function ForgotPasswordForm({ onSwitchToLogin }: ForgotPasswordFo
     setError(null);
     setSuccess(null);
 
-    if (!email.trim()) {
-      setError('Debes ingresar tu email.');
+    const normalizedEmail = email.trim().toLowerCase();
+
+    if (!normalizedEmail) {
+      setError('Email is required.');
       return;
     }
 
-    if (!isValidEmail(email)) {
-      setError('Email invalido.');
+    if (!isValidEmail(normalizedEmail)) {
+      setError('Invalid email format.');
       return;
     }
 
     setLoading(true);
     try {
-      await sendPasswordReset(email);
-      setSuccess('Te enviamos un correo para restablecer la contrasena.');
+      await sendPasswordReset(normalizedEmail);
+      setSuccess('Password reset email sent.');
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : 'No fue posible enviar el correo de reset.');
+      setError(submitError instanceof Error ? submitError.message : 'Could not send reset email.');
     } finally {
       setLoading(false);
     }
@@ -60,7 +62,7 @@ export default function ForgotPasswordForm({ onSwitchToLogin }: ForgotPasswordFo
           value={email}
           onChangeText={setEmail}
           style={styles.input}
-          placeholder="usuario@correo.com"
+          placeholder="user@company.com"
           keyboardType="email-address"
           textContentType="emailAddress"
           autoCapitalize="none"
@@ -73,12 +75,12 @@ export default function ForgotPasswordForm({ onSwitchToLogin }: ForgotPasswordFo
         disabled={submitDisabled}
         style={[styles.primaryButton, submitDisabled ? styles.primaryButtonDisabled : null]}
       >
-        {loading ? <ActivityIndicator color="#ffffff" /> : <Text style={styles.primaryButtonText}>Enviar reset</Text>}
+        {loading ? <ActivityIndicator color="#ffffff" /> : <Text style={styles.primaryButtonText}>Send reset link</Text>}
       </Pressable>
 
       <View style={styles.linksBlock}>
         <Pressable onPress={onSwitchToLogin}>
-          <Text style={styles.primaryLink}>Volver al login</Text>
+          <Text style={styles.primaryLink}>Back to login</Text>
         </Pressable>
       </View>
     </View>

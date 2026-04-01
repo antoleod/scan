@@ -22,37 +22,43 @@ export default function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const normalizedEmail = email.trim().toLowerCase();
 
   const submitDisabled = loading || !firebase.enabled;
 
   const handleSubmit = async () => {
     setError(null);
 
-    if (!email.trim()) {
-      setError('Debes ingresar un email.');
+    if (!normalizedEmail) {
+      setError('Email is required.');
       return;
     }
 
-    if (!isValidEmail(email)) {
-      setError('Email invalido.');
+    if (!isValidEmail(normalizedEmail)) {
+      setError('Invalid email format.');
       return;
     }
 
     if (password.length < 6) {
-      setError('La contrasena debe tener al menos 6 caracteres.');
+      setError('Password must be at least 6 characters.');
+      return;
+    }
+
+    if (!/[A-Za-z]/.test(password) || !/\d/.test(password)) {
+      setError('Password must include letters and numbers.');
       return;
     }
 
     if (password !== confirmPassword) {
-      setError('Las contrasenas no coinciden.');
+      setError('Passwords do not match.');
       return;
     }
 
     setLoading(true);
     try {
-      await register(email, password);
+      await register(normalizedEmail, password);
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : 'No fue posible crear la cuenta.');
+      setError(submitError instanceof Error ? submitError.message : 'Could not create the account.');
     } finally {
       setLoading(false);
     }
@@ -68,7 +74,7 @@ export default function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
           value={email}
           onChangeText={setEmail}
           style={styles.input}
-          placeholder="usuario@correo.com"
+          placeholder="user@company.com"
           keyboardType="email-address"
           textContentType="emailAddress"
           autoCapitalize="none"
@@ -77,12 +83,12 @@ export default function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
       </View>
 
       <View style={styles.inputGroup}>
-        <Text style={styles.label}>Contrasena</Text>
+        <Text style={styles.label}>Password</Text>
         <TextInput
           value={password}
           onChangeText={setPassword}
           style={styles.input}
-          placeholder="Minimo 6 caracteres"
+          placeholder="At least 6 characters"
           secureTextEntry
           textContentType="newPassword"
           autoCapitalize="none"
@@ -91,12 +97,12 @@ export default function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
       </View>
 
       <View style={styles.inputGroup}>
-        <Text style={styles.label}>Confirmar contrasena</Text>
+        <Text style={styles.label}>Confirm password</Text>
         <TextInput
           value={confirmPassword}
           onChangeText={setConfirmPassword}
           style={styles.input}
-          placeholder="Repite la contrasena"
+          placeholder="Repeat password"
           secureTextEntry
           textContentType="password"
           autoCapitalize="none"
@@ -109,12 +115,12 @@ export default function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
         disabled={submitDisabled}
         style={[styles.primaryButton, submitDisabled ? styles.primaryButtonDisabled : null]}
       >
-        {loading ? <ActivityIndicator color="#ffffff" /> : <Text style={styles.primaryButtonText}>Crear cuenta</Text>}
+        {loading ? <ActivityIndicator color="#ffffff" /> : <Text style={styles.primaryButtonText}>Create account</Text>}
       </Pressable>
 
       <View style={styles.linksBlock}>
         <Pressable onPress={onSwitchToLogin}>
-          <Text style={styles.primaryLink}>Ya tengo cuenta</Text>
+          <Text style={styles.primaryLink}>I already have an account</Text>
         </Pressable>
       </View>
     </View>

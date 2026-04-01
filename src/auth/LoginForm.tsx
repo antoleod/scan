@@ -10,15 +10,13 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  View,
-  type ViewStyle
+  View
 } from 'react-native';
 import Animated, {
   Easing,
   FadeIn,
   FadeInDown,
   interpolate,
-  SharedValue,
   useAnimatedStyle,
   useSharedValue,
   withDelay,
@@ -52,33 +50,6 @@ function AnimatedStripe({ index, theme, baseHeight, width, opacity }: { index: n
   );
 }
 
-function RotatingStarRing({ rotation, pulse, offset, theme, position, baseOpacity }: {
-  rotation: SharedValue<number>;
-  pulse: SharedValue<number>;
-  offset: number;
-  theme: any;
-  position: ViewStyle;
-  baseOpacity: number;
-}) {
-  const animatedStyle = useAnimatedStyle(() => ({
-    transform: [
-      { rotate: `${rotation.value - offset}deg` },
-      { scale: interpolate(pulse.value, [0, 1], [0.85, 1.15]) }
-    ],
-    opacity: interpolate(offset, [0, 4], [baseOpacity, 0.01]),
-  }));
-
-  return (
-    <Animated.View style={[styles.stars, position, animatedStyle]}>
-      {Array.from({ length: 12 }).map((_, index) => (
-        <Text key={index} style={[styles.star, { color: theme.secondary, transform: [{ rotate: `${index * 30}deg` }, { translateY: -30 }] }]}>
-          ★
-        </Text>
-      ))}
-    </Animated.View>
-  );
-}
-
 interface LoginFormProps {
   onSwitchToRegister: () => void;
   onSwitchToForgot: () => void;
@@ -95,10 +66,6 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
   const [authError, setAuthError] = useState<string | null>(null);
 
   const [displayedBrandingText, setDisplayedBrandingText] = useState('');
-  const [starPosition, setStarPosition] = useState<ViewStyle>({ top: '10%', right: '10%' });
-  const starRotation = useSharedValue(0);
-  const starPulse = useSharedValue(0);
-  const iconStarRotation = useSharedValue(0);
 
   useEffect(() => {
     let i = 0;
@@ -110,29 +77,6 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
     return () => clearInterval(interval);
   }, []);
 
-  useEffect(() => {
-    // Animación de rotación infinita (30 segundos por vuelta)
-    starRotation.value = withRepeat(
-      withTiming(360, { duration: 30000, easing: Easing.linear }),
-      -1,
-      false
-    );
-    starPulse.value = withRepeat(
-      withTiming(1, { duration: 4000, easing: Easing.inOut(Easing.sin) }),
-      -1,
-      true
-    );
-    iconStarRotation.value = withRepeat(
-      withTiming(360, { duration: 8000, easing: Easing.linear }),
-      -1,
-      false
-    );
-    // Aleatorizar posición (entre 5% y 75% de la pantalla para que no se corte)
-    setStarPosition({
-      top: `${Math.floor(Math.random() * 70 + 5)}%`,
-      right: `${Math.floor(Math.random() * 70 + 5)}%`,
-    });
-  }, [iconStarRotation, starRotation, starPulse]);
 
   const { theme, themeName } = useAppTheme();
   const scanProgress = useSharedValue(0);
@@ -228,11 +172,6 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
     ],
     opacity: interpolate(glitchValue.value, [0, 1], [1, 0.7]),
   }));
-
-  const iconStarRingStyle = useAnimatedStyle(() => ({
-    transform: [{ rotate: `${iconStarRotation.value}deg` }],
-  }));
-
   const pulseStyle = useAnimatedStyle(() => {
     // Efecto de distorsión sutil: jitter horizontal y skew diagonal
     // Se intensifica cerca del centro (0.5) del progreso de escaneo
@@ -392,18 +331,6 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
               <View style={[styles.techCircle, { bottom: -100, left: -60, width: 300, height: 300, borderColor: theme.primary, opacity: 0.03 }]} />
             </Animated.View>
 
-            {/* Estrellas de Europa Watermark */}
-            {[0, 1.5, 3, 4.5].map((angleOffset) => (
-              <RotatingStarRing
-                key={angleOffset}
-                rotation={starRotation}
-                pulse={starPulse}
-                offset={angleOffset}
-                theme={theme}
-                position={starPosition}
-                baseOpacity={0.08}
-              />
-            ))}
 
             {/* Rejilla Técnica */}
             <View style={[styles.gridLineV, { left: '20%', backgroundColor: theme.secondary }]} />
@@ -492,13 +419,7 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
 
           <Animated.View entering={FadeInDown.delay(160).duration(450)} style={styles.iconRow}>
             <Animated.View style={pulseStyle}>
-              <View style={styles.iconStarContainer}>
-                {/* Rotating EU star ring */}
-                <Animated.View style={[StyleSheet.absoluteFill, styles.iconStarRing, iconStarRingStyle]} pointerEvents="none">
-                  {Array.from({ length: 12 }).map((_, i) => (
-                    <Text key={i} style={[styles.iconStar, { color: theme.secondary, transform: [{ rotate: `${i * 30}deg` }, { translateY: -52 }] }]}>★</Text>
-                  ))}
-                </Animated.View>
+              <View style={styles.iconShell}>
                 {themeName === 'obsidianGold' ? (
                   <View style={styles.crosshairWrap}>
                     <Animated.View style={[styles.iconLaser, { backgroundColor: theme.secondary }, iconScanLineStyle]} />
@@ -672,9 +593,7 @@ const styles = StyleSheet.create({
   logoBar: {},
   logoDivider: { height: 1, opacity: 0.2 },
   iconRow: { alignItems: 'center', paddingVertical: 12 },
-  iconStarContainer: { width: 130, height: 130, alignItems: 'center', justifyContent: 'center' },
-  iconStarRing: { alignItems: 'center', justifyContent: 'center' },
-  iconStar: { position: 'absolute', fontSize: 11, fontWeight: '900' },
+  iconShell: { width: 130, height: 130, alignItems: 'center', justifyContent: 'center' },
   crosshairWrap: { width: 80, height: 80, alignItems: 'center', justifyContent: 'center' },
   iconLaser: { position: 'absolute', height: 1, zIndex: 2 },
   crosshairCircle: { position: 'absolute', width: 80, height: 80, borderRadius: 40, borderWidth: 1 },
@@ -714,6 +633,6 @@ const styles = StyleSheet.create({
   footerLine: { width: 44, height: 1, borderRadius: 999 },
   footerSignalDot: { position: 'absolute', width: 4, height: 4, borderRadius: 999, right: 12 },
   version: { fontSize: 9, fontWeight: '700', letterSpacing: 2, textTransform: 'uppercase', opacity: 0.4 },
-  stars: { position: 'absolute', width: 80, height: 80, alignItems: 'center', justifyContent: 'center' },
-  star: { position: 'absolute', fontSize: 10, fontWeight: '900' },
 });
+
+

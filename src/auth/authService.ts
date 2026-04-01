@@ -24,21 +24,21 @@ function readFirebaseErrorMessage(error: unknown): string {
     return error.message;
   }
 
-  return 'No fue posible completar la autenticacion.';
+  return 'Authentication could not be completed.';
 }
 
 export function toFriendlyAuthError(error: unknown): string {
   const code = readFirebaseErrorCode(error);
   const map: Record<string, string> = {
-    'auth/invalid-email': 'El email no tiene un formato valido.',
-    'auth/user-not-found': 'No existe una cuenta con ese email.',
-    'auth/wrong-password': 'La contrasena no es correcta.',
-    'auth/invalid-credential': 'Credenciales invalidas. Verifica email y contrasena.',
-    'auth/email-already-in-use': 'Este email ya esta registrado.',
-    'auth/weak-password': 'La contrasena debe tener al menos 6 caracteres.',
-    'auth/too-many-requests': 'Demasiados intentos. Intenta nuevamente en unos minutos.',
-    'auth/network-request-failed': 'Error de red. Revisa tu conexion e intenta otra vez.',
-    'auth/missing-password': 'Debes ingresar una contrasena.',
+    'auth/invalid-email': 'Email format is invalid.',
+    'auth/user-not-found': 'No account exists with this email.',
+    'auth/wrong-password': 'Password is incorrect.',
+    'auth/invalid-credential': 'Invalid credentials. Check email and password.',
+    'auth/email-already-in-use': 'This email is already registered.',
+    'auth/weak-password': 'Password must be at least 6 characters.',
+    'auth/too-many-requests': 'Too many attempts. Try again in a few minutes.',
+    'auth/network-request-failed': 'Network error. Check your connection and try again.',
+    'auth/missing-password': 'Password is required.',
   };
 
   if (code && map[code]) {
@@ -46,11 +46,11 @@ export function toFriendlyAuthError(error: unknown): string {
   }
 
   const message = readFirebaseErrorMessage(error);
-  if (message.toLowerCase().includes('firebase no configurado')) {
+  if (message.toLowerCase().includes('firebase not configured')) {
     return message;
   }
 
-  return 'No fue posible autenticarte. Intenta nuevamente.';
+  return 'Authentication failed. Please try again.';
 }
 
 export async function getFirebaseGuardState(): Promise<FirebaseGuardState> {
@@ -58,8 +58,8 @@ export async function getFirebaseGuardState(): Promise<FirebaseGuardState> {
 
   if (runtime.enabled) {
     const optionalMessage = runtime.missingOptionalEnv.length
-      ? `Opcionales sin definir: ${runtime.missingOptionalEnv.join(', ')}`
-      : 'Firebase configurado correctamente.';
+      ? `Optional variables not set: ${runtime.missingOptionalEnv.join(', ')}`
+      : 'Firebase is configured correctly.';
 
     return {
       enabled: true,
@@ -74,8 +74,8 @@ export async function getFirebaseGuardState(): Promise<FirebaseGuardState> {
   return {
     enabled: false,
     message: missing
-      ? `Firebase no configurado. Variables faltantes: ${missing}`
-      : 'Firebase no esta disponible en este entorno.',
+      ? `Firebase not configured. Missing variables: ${missing}`
+      : 'Firebase is not available in this environment.',
     missingRequiredEnv: runtime.missingRequiredEnv,
     missingOptionalEnv: runtime.missingOptionalEnv,
   };

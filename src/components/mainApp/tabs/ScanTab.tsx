@@ -71,18 +71,18 @@ export function ScanTab({
 }) {
   const statusLabel =
     scanState === 'detecting'
-      ? 'Detectando...'
+      ? 'Detecting...'
       : scanState === 'success'
-        ? 'Código detectado'
+        ? 'Code detected'
         : scanState === 'timeout'
-          ? 'El escaneo está tardando'
+          ? 'Scan is taking too long'
           : scanState === 'saving_photo'
-            ? 'Guardando foto...'
+            ? 'Saving photo...'
             : scanState === 'saved'
-              ? 'Foto guardada'
+              ? 'Photo saved'
               : scanState === 'error'
-                ? 'Error de escaneo'
-                : 'Apunta al código para escanear';
+                ? 'Scan error'
+                : 'Point to the code to scan';
 
   return (
     <View style={mainAppStyles.screen}>
@@ -160,9 +160,9 @@ export function ScanTab({
 
       {showManualCapture && (
         <View style={[mainAppStyles.scanFallbackCard, { backgroundColor: palette.card, borderColor: palette.accent }]}>
-          <Text style={[mainAppStyles.scanFallbackTitle, { color: palette.fg }]}>El escaneo está tardando</Text>
+          <Text style={[mainAppStyles.scanFallbackTitle, { color: palette.fg }]}>Scan is taking too long</Text>
           <Text style={[mainAppStyles.scanFallbackText, { color: palette.muted }]}>
-            Puedes tomar una foto y guardarla localmente para procesarla o revisarla después.
+            You can take a photo and save it locally to process or review later.
           </Text>
           <Pressable
             style={[
@@ -175,7 +175,7 @@ export function ScanTab({
           >
             <View style={mainAppStyles.btnContent}>
               {manualCaptureBusy ? <ActivityIndicator color="#fff" /> : <Ionicons name="camera" size={18} color="#fff" />}
-              <Text style={mainAppStyles.btnText}>{manualCaptureBusy ? 'Saving...' : 'Tomar foto'}</Text>
+              <Text style={mainAppStyles.btnText}>{manualCaptureBusy ? 'Saving...' : 'Take photo'}</Text>
             </View>
           </Pressable>
         </View>
@@ -206,3 +206,4 @@ export function ScanTab({
     </View>
   );
 }
+
