@@ -47,6 +47,9 @@ jobs:
       - name: Install reanimated runtime for web bundle
         run: npm install --no-save react-native-reanimated
 
+      - name: Install worklets runtime for reanimated babel plugin
+        run: npm install --no-save react-native-worklets
+
       - name: Configure Pages
         uses: actions/configure-pages@v5
         with:
