@@ -79,6 +79,14 @@ function visibleScanType(type: string) {
   return normalizeHistoryType(type);
 }
 
+const SCAN_TUNING = {
+  duplicateWindowMs: 350,
+  cooldownAfterUrlMs: 850,
+  cooldownAfterInvalidMs: 500,
+  cooldownAfterDuplicateMs: 500,
+  cooldownAfterSuccessMs: 700,
+};
+
 class SimpleErrorBoundary extends React.Component<{ children: React.ReactNode }, { error: Error | null }> {
   constructor(props: { children: React.ReactNode }) {
     super(props);
@@ -526,14 +534,14 @@ function MainApp() {
           },
         ]);
 
-        scanCooldownRef.current = Date.now() + 1200;
+        scanCooldownRef.current = Date.now() + SCAN_TUNING.cooldownAfterUrlMs;
         clearScanTimers();
         restartScannerSessionSoon();
         return;
       }
 
       const now = Date.now();
-      if (lastPayloadRef.current.value === payload && now - lastPayloadRef.current.ts < 800) return;
+      if (lastPayloadRef.current.value === payload && now - lastPayloadRef.current.ts < SCAN_TUNING.duplicateWindowMs) return;
       lastPayloadRef.current = { value: payload, ts: now };
 
       const outcome = await processScanInput(payload, source, settings, templates);
@@ -543,14 +551,14 @@ function MainApp() {
       }
       if (outcome.status === 'invalid') {
         setScanState('error');
-        scanCooldownRef.current = Date.now() + 800;
+        scanCooldownRef.current = Date.now() + SCAN_TUNING.cooldownAfterInvalidMs;
         clearScanTimers();
         restartScannerSessionSoon(1000);
         showFeedback('error', 'Invalid PI format');
         return;
       }
       if (outcome.status === 'duplicate') {
-        scanCooldownRef.current = Date.now() + 800;
+        scanCooldownRef.current = Date.now() + SCAN_TUNING.cooldownAfterDuplicateMs;
         clearScanTimers();
         restartScannerSessionSoon(900);
         showFeedback('duplicate', outcome.message);
@@ -559,7 +567,7 @@ function MainApp() {
 
       clearScanTimers();
       setScanState('success');
-      scanCooldownRef.current = Date.now() + 1200;
+      scanCooldownRef.current = Date.now() + SCAN_TUNING.cooldownAfterSuccessMs;
       setHistory(outcome.history);
       await triggerSuccessfulFeedback();
       showFeedback('success', outcome.record.codeNormalized);
