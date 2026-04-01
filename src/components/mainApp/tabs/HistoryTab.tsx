@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 
 import { ScanRecord } from '../../../types';
+import { HistorySort } from '../../../core/smartSearch';
 import { mainAppStyles } from '../styles';
 
 type Palette = {
@@ -162,11 +163,13 @@ export function HistoryTab({
   query,
   filterType,
   dateFilter,
+  sortBy,
   selection,
   selectedDateLabel,
   onQueryChange,
   onFilterTypeChange,
   onDateFilterChange,
+  onSortByChange,
   onOpenDatePicker,
   onToggleSelection,
   onLongPressSelection,
@@ -181,11 +184,13 @@ export function HistoryTab({
   query: string;
   filterType: string;
   dateFilter: DateFilter;
+  sortBy: HistorySort;
   selection: Set<string>;
   selectedDateLabel: string | null;
   onQueryChange: (value: string) => void;
   onFilterTypeChange: (value: string) => void;
   onDateFilterChange: (value: DateFilter) => void;
+  onSortByChange: (value: HistorySort) => void;
   onOpenDatePicker: () => void;
   onToggleSelection: (id: string) => void;
   onLongPressSelection: (id: string) => void;
@@ -283,6 +288,7 @@ export function HistoryTab({
 
   return (
     <View style={[mainAppStyles.screen, mainAppStyles.screenLocked]}>
+      <Text style={{ color: palette.muted, fontSize: 11, fontWeight: '700', textTransform: 'uppercase' }}>Search</Text>
       <TextInput
         value={query}
         onChangeText={onQueryChange}
@@ -291,6 +297,7 @@ export function HistoryTab({
         style={[mainAppStyles.input, { color: palette.fg, borderColor: palette.border, backgroundColor: palette.card }]}
       />
 
+      <Text style={{ color: palette.muted, fontSize: 11, fontWeight: '700', textTransform: 'uppercase' }}>Type</Text>
       <View style={mainAppStyles.filterBar}>
         <View style={mainAppStyles.filterPrimaryRow}>
           {PRIMARY_FILTERS.map((type) => renderFilterChip(type, filterType === type, () => onFilterTypeChange(type), true))}
@@ -298,18 +305,45 @@ export function HistoryTab({
         {renderFilterChip('...', moreActive, () => setMoreVisible(true), true)}
       </View>
 
+      <Text style={{ color: palette.muted, fontSize: 11, fontWeight: '700', textTransform: 'uppercase' }}>Sorting</Text>
       <View style={[mainAppStyles.filterRow, { alignItems: 'center' }]}>
-        {(['ALL', 'TODAY', 'WEEK', 'MONTH'] as DateFilter[]).map((d) => (
+        {([
+          { key: 'recent' as HistorySort, label: 'Most recent' },
+          { key: 'most_used' as HistorySort, label: 'Most used' },
+          { key: 'not_used' as HistorySort, label: 'Not used' },
+        ]).map((item) => (
           <Pressable
-            key={d}
+            key={item.key}
             style={[
               mainAppStyles.filterChipCompact,
-              dateFilter === d && !calendarOpen ? { backgroundColor: palette.accent } : { borderColor: palette.border, borderWidth: 1 },
+              sortBy === item.key ? { backgroundColor: palette.accent } : { borderColor: palette.border, borderWidth: 1 },
               mainAppStyles.filterChipNoGrow,
             ]}
-            onPress={() => { onDateFilterChange(d); setCalendarOpen(false); setCalendarDay(null); }}
+            onPress={() => onSortByChange(item.key)}
           >
-            <Text style={{ color: dateFilter === d && !calendarOpen ? '#fff' : palette.fg, fontSize: 12, fontWeight: '700' }}>{d}</Text>
+            <Text style={{ color: sortBy === item.key ? '#fff' : palette.fg, fontSize: 12, fontWeight: '700' }}>{item.label}</Text>
+          </Pressable>
+        ))}
+      </View>
+
+      <Text style={{ color: palette.muted, fontSize: 11, fontWeight: '700', textTransform: 'uppercase' }}>Date filters</Text>
+      <View style={[mainAppStyles.filterRow, { alignItems: 'center' }]}>
+        {([
+          { key: 'ALL' as DateFilter, label: 'All' },
+          { key: 'TODAY' as DateFilter, label: 'Today' },
+          { key: 'WEEK' as DateFilter, label: 'This week' },
+          { key: 'MONTH' as DateFilter, label: 'This month' },
+        ]).map((item) => (
+          <Pressable
+            key={item.key}
+            style={[
+              mainAppStyles.filterChipCompact,
+              dateFilter === item.key && !calendarOpen ? { backgroundColor: palette.accent } : { borderColor: palette.border, borderWidth: 1 },
+              mainAppStyles.filterChipNoGrow,
+            ]}
+            onPress={() => { onDateFilterChange(item.key); setCalendarOpen(false); setCalendarDay(null); }}
+          >
+            <Text style={{ color: dateFilter === item.key && !calendarOpen ? '#fff' : palette.fg, fontSize: 12, fontWeight: '700' }}>{item.label}</Text>
           </Pressable>
         ))}
         <Pressable

@@ -17,6 +17,7 @@ import {
   togglePinned,
   updateNoteText,
 } from '../../../core/notes';
+import { detectSearchKind, matchesNoteByQuery } from '../../../core/smartSearch';
 import { mainAppStyles } from '../styles';
 
 type Palette = {
@@ -198,8 +199,7 @@ export function NotesTab({ palette }: { palette: Palette }) {
   }, []);
 
   const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    let result = q ? notes.filter((item) => item.text.toLowerCase().includes(q)) : notes;
+    let result = search.trim() ? notes.filter((item) => matchesNoteByQuery(item, search)) : notes;
     if (noteFilter === 'work') result = result.filter((item) => item.category === 'work');
     else if (noteFilter === 'pinned') result = result.filter((item) => item.pinned);
     else if (noteFilter === 'images') result = result.filter((item) => item.kind === 'image');
@@ -214,6 +214,8 @@ export function NotesTab({ palette }: { palette: Palette }) {
     if (!q) return templates;
     return templates.filter((item) => `${item.name} ${item.subject} ${item.body}`.toLowerCase().includes(q));
   }, [templateSearch, templates]);
+
+  const detectedSearchKind = useMemo(() => detectSearchKind(search), [search]);
 
   const handleAdd = async () => {
     const result = await addNoteUnique(input, newNoteCategory);
@@ -286,6 +288,11 @@ export function NotesTab({ palette }: { palette: Palette }) {
           {/* Search + filters */}
           <View style={[mainAppStyles.card, styles.quickCard, { backgroundColor: palette.card, borderColor: palette.border }]}>
             <TextInput style={[mainAppStyles.input, { backgroundColor: palette.bg, color: palette.fg, borderColor: palette.border, marginTop: 0 }]} placeholder="Search notes..." placeholderTextColor={palette.muted} value={search} onChangeText={setSearch} />
+            {search.trim() ? (
+              <Text style={{ color: palette.muted, fontSize: 11, marginTop: 8 }}>
+                Smart search: {detectedSearchKind.toUpperCase()}
+              </Text>
+            ) : null}
             <View style={[styles.row, { marginTop: 10 }]}>
               {(['all', 'work', 'pinned', 'images'] as NoteFilter[]).map((item) => {
                 const active = noteFilter === item;

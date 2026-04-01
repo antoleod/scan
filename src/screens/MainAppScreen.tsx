@@ -44,6 +44,7 @@ import {
 import { IMAGE_SCAN_BARCODE_TYPES, buildScanRecord, processScanInput } from '../core/scanPipeline';
 import { ensureNfcReady, readNfcPayload } from '../core/nfc';
 import { applyImportedBackup, buildBackupBundle, parseBackupBundle, serializeBackupBundle } from '../core/backup';
+import { filterAndSortHistory, HistorySort } from '../core/smartSearch';
 import { playSuccessfulScanFeedback } from '../core/feedback';
 import { useAuth } from '../auth/useAuth';
 import { AppHeader } from '../components/mainApp/AppHeader';
@@ -133,6 +134,7 @@ function MainApp() {
   const [query, setQuery] = useState('');
   const [filterType, setFilterType] = useState('ALL');
   const [dateFilter, setDateFilter] = useState<DateFilter>('ALL');
+  const [historySort, setHistorySort] = useState<HistorySort>('recent');
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
 
   const [selection, setSelection] = useState<Set<string>>(new Set());
@@ -1212,37 +1214,16 @@ function MainApp() {
   }
 
   const filteredHistory = useMemo(() => {
-    const filtered = history.filter((x) => {
-      const itemType = visibleScanType(x.type);
-      const matchesQuery =
-        x.codeNormalized.toLowerCase().includes(query.toLowerCase()) ||
-        itemType.toLowerCase().includes(query.toLowerCase()) ||
-        (x.notes || '').toLowerCase().includes(query.toLowerCase()) ||
-        (x.customLabel || '').toLowerCase().includes(query.toLowerCase()) ||
-        (x.ticketNumber || '').toLowerCase().includes(query.toLowerCase()) ||
-        (x.officeCode || '').toLowerCase().includes(query.toLowerCase());
-      const matchesType = filterType === 'ALL' || itemType === filterType;
-
-      let matchesDate = true;
-      if (selectedDate) {
-        matchesDate = new Date(x.date).toDateString() === selectedDate.toDateString();
-      } else if (dateFilter !== 'ALL') {
-        const itemDate = new Date(x.date);
-        const now = new Date();
-        if (dateFilter === 'TODAY') {
-          matchesDate = itemDate.toDateString() === now.toDateString();
-        } else if (dateFilter === 'WEEK') {
-          matchesDate = itemDate.getTime() > now.getTime() - 7 * 24 * 60 * 60 * 1000;
-        } else if (dateFilter === 'MONTH') {
-          matchesDate = itemDate.getTime() > now.getTime() - 30 * 24 * 60 * 60 * 1000;
-        }
-      }
-
-      return matchesQuery && matchesType && matchesDate;
+    return filterAndSortHistory({
+      history,
+      query,
+      filterType,
+      dateFilter,
+      selectedDate,
+      sortBy: historySort,
+      visibleScanType,
     });
-    // Sort by most recent first
-    return filtered.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [history, query, filterType, dateFilter, selectedDate]);
+  }, [history, query, filterType, dateFilter, selectedDate, historySort]);
 
   const cameraBarcodeTypes = useMemo(() => {
     const enabledTypes = settings.barcodeTypes || SCAN_BARCODE_TYPES;
@@ -1337,11 +1318,13 @@ function MainApp() {
             query={query}
             filterType={filterType}
             dateFilter={dateFilter}
+            sortBy={historySort}
             selection={selection}
             selectedDateLabel={selectedDateLabel}
             onQueryChange={setQuery}
             onFilterTypeChange={setFilterType}
             onDateFilterChange={handleDateFilterChange}
+            onSortByChange={setHistorySort}
             onOpenDatePicker={() => setDateModalVisible(true)}
             onToggleSelection={toggleSelection}
             onLongPressSelection={handleLongPress}
