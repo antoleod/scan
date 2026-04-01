@@ -506,6 +506,8 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
                 autoCorrect={false}
                 keyboardAppearance="dark"
                 autoFocus // change 2: open keyboard immediately on mount
+                returnKeyType="next"
+                blurOnSubmit={false}
               />
               {errors.username ? <Text style={[styles.error, { color: theme.error }]}>{errors.username}</Text> : null}
               {username ? <Text style={[styles.helper, { color: theme.textSecondary }]}>Login id: <Text style={styles.helperStrong}>{normalizedUsername}</Text></Text> : null}
@@ -534,8 +536,11 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
                 onFocus={() => setFocusedField('pin')}
                 onBlur={() => setFocusedField(null)}
                 secureTextEntry
-                keyboardType="numeric"
                 keyboardAppearance="dark"
+                returnKeyType="go"
+                onSubmitEditing={() => {
+                  void handleSignIn();
+                }}
               />
               {errors.pin ? <Text style={[styles.error, { color: theme.error }]}>{errors.pin}</Text> : null}
               <Text style={[styles.note, { color: theme.textSecondary }]}>Use your workspace password.</Text>
