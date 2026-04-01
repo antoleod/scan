@@ -37,7 +37,7 @@ const config: ExpoConfig = {
   web: {
     favicon: "./assets/images/favicon.png",
     bundler: "metro",
-    output: "static",
+    output: "single",
     name: "Barra Scanner",
     shortName: "Barra",
     description: "Secure scanner workspace with offline-ready web support.",
