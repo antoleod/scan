@@ -139,12 +139,15 @@ const styles = StyleSheet.create({
   content: {
     flexGrow: 1,
     justifyContent: 'center',
+    alignItems: 'center',
     paddingHorizontal: 20,
     paddingVertical: 28,
   },
   brandArea: {
     alignItems: 'center',
     marginBottom: 18,
+    width: '100%',
+    maxWidth: 560,
   },
   kicker: { color: '#ffd84d', fontSize: 10, fontWeight: '900', letterSpacing: 2.5 },
   title: {
@@ -188,6 +191,8 @@ const styles = StyleSheet.create({
     marginTop: 6,
   },
   card: {
+    width: '100%',
+    maxWidth: 560,
     backgroundColor: '#0d162b',
     borderWidth: 1,
     borderColor: '#1f3358',
@@ -202,6 +207,8 @@ const styles = StyleSheet.create({
   guestBlock: {
     marginTop: 18,
     alignItems: 'center',
+    width: '100%',
+    maxWidth: 560,
   },
   guestText: {
     color: '#8da0be',

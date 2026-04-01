@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -72,6 +72,7 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
   const [focusedField, setFocusedField] = useState<'username' | 'pin' | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
     const [rememberPassword, setRememberPassword] = useState(false);
+  const passwordInputRef = useRef<TextInput | null>(null);
 
   const [displayedBrandingText, setDisplayedBrandingText] = useState('');
 
@@ -497,6 +498,9 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
                 autoCorrect={false}
                 keyboardAppearance="dark"
                 autoFocus // change 2: open keyboard immediately on mount
+                returnKeyType="next"
+                blurOnSubmit={false}
+                onSubmitEditing={() => passwordInputRef.current?.focus()}
               />
               {errors.username ? <Text style={[styles.error, { color: theme.error }]}>{errors.username}</Text> : null}
               {username ? <Text style={[styles.helper, { color: theme.textSecondary }]}>Login id: <Text style={styles.helperStrong}>{normalizedUsername}</Text></Text> : null}
@@ -505,6 +509,7 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
             <View style={styles.field}>
               <Text style={[styles.label, { color: theme.secondary }]}>PASSWORD</Text>
               <TextInput
+                ref={passwordInputRef}
                 style={[
                   styles.input,
                   {
@@ -526,6 +531,10 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
                 onBlur={() => setFocusedField(null)}
                 secureTextEntry
                 keyboardAppearance="dark"
+                returnKeyType="go"
+                onSubmitEditing={() => {
+                  void handleSignIn();
+                }}
               />
               {errors.pin ? <Text style={[styles.error, { color: theme.error }]}>{errors.pin}</Text> : null}
               <Text style={[styles.note, { color: theme.textSecondary }]}>Use your workspace password.</Text>

@@ -31,7 +31,7 @@ export default function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
   const emailValid = usernameValid && isValidEmail(normalizedEmail);
   const passwordValid = password.length >= 6;
   const matches = password === confirmPassword && confirmPassword.length > 0;
-  const submitDisabled = loading || !firebase.enabled || !emailValid || !passwordValid || !matches;
+  const submitDisabled = loading || !emailValid || !passwordValid || !matches;
 
   const handleSubmit = async () => {
     setError(null);
@@ -88,9 +88,7 @@ export default function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
         <Text style={{ color: theme.textSecondary, fontSize: 12, marginTop: 6 }}>
           Email generated: {normalizedUsername ? normalizedEmail : '@oryxen.tech'}
         </Text>
-        <Text style={{ color: firebase.enabled ? theme.textSecondary : theme.error, fontSize: 12, marginTop: 2 }}>
-          {firebase.enabled ? 'Create account will be sent to Firebase Auth.' : 'Firebase disabled: account creation unavailable.'}
-        </Text>
+        <Text style={{ color: theme.textSecondary, fontSize: 12, marginTop: 2 }}>Create account will be sent to Firebase Auth.</Text>
       </View>
 
       <View style={styles.inputGroup}>
@@ -118,6 +116,10 @@ export default function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
           textContentType="password"
           autoCapitalize="none"
           autoCorrect={false}
+          returnKeyType="go"
+          onSubmitEditing={() => {
+            void handleSubmit();
+          }}
         />
       </View>
 
