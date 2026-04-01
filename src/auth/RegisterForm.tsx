@@ -17,7 +17,7 @@ interface RegisterFormProps {
 }
 
 export default function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
-  const { register } = useAuth();
+  const { register, firebase } = useAuth();
   const { theme } = useAppTheme();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -31,10 +31,14 @@ export default function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
   const emailValid = usernameValid && isValidEmail(normalizedEmail);
   const passwordValid = password.length >= 6;
   const matches = password === confirmPassword && confirmPassword.length > 0;
-  const submitDisabled = loading || !emailValid || !passwordValid || !matches;
+  const submitDisabled = loading || !firebase.enabled || !emailValid || !passwordValid || !matches;
 
   const handleSubmit = async () => {
     setError(null);
+    if (!firebase.enabled) {
+      setError('Firebase no esta configurado. Activa las variables/secrets primero.');
+      return;
+    }
 
     if (!normalizedUsername) {
       setError('Username is required.');
@@ -83,6 +87,9 @@ export default function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
         />
         <Text style={{ color: theme.textSecondary, fontSize: 12, marginTop: 6 }}>
           Email generated: {normalizedUsername ? normalizedEmail : '@oryxen.tech'}
+        </Text>
+        <Text style={{ color: firebase.enabled ? theme.textSecondary : theme.error, fontSize: 12, marginTop: 2 }}>
+          {firebase.enabled ? 'Create account will be sent to Firebase Auth.' : 'Firebase disabled: account creation unavailable.'}
         </Text>
       </View>
 

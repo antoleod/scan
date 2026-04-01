@@ -567,8 +567,8 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
             </View>
 
             <View style={styles.links}>
-              <TouchableOpacity disabled style={styles.linkAction}>
-                <Text style={[styles.link, { color: theme.textSecondary, opacity: 0.5 }]}>Create account (disabled)</Text>
+              <TouchableOpacity onPress={onSwitchToRegister} style={styles.linkAction}>
+                <Text style={[styles.link, { color: theme.secondary }]}>Create account</Text>
               </TouchableOpacity>
               <Text style={[styles.linkDivider, { color: theme.textSecondary }]}>|</Text>
               <TouchableOpacity onPress={onSwitchToForgot} style={styles.linkAction}>
