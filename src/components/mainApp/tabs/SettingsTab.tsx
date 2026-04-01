@@ -1,7 +1,7 @@
 ﻿import React, { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 
-import { AppSettings } from '../../../types';
+import { AppSettings, type PersistenceMode } from '../../../types';
 import { BARCODE_FORMAT_OPTIONS, type BarcodeFormat } from '../../../core/barcode';
 import { useAppTheme } from '../../../constants/theme';
 
@@ -104,6 +104,7 @@ export function SettingsTab({
   userEmail,
   userUidPrefix,
   isGuest,
+  persistenceMode,
   visibleBarcodeTypes,
   barcodeOutputFormat,
 }: {
@@ -121,6 +122,7 @@ export function SettingsTab({
   userEmail: string | null;
   userUidPrefix: string | null;
   isGuest: boolean;
+  persistenceMode: PersistenceMode;
   visibleBarcodeTypes: string[];
   barcodeOutputFormat: BarcodeFormat;
 }) {
@@ -340,9 +342,10 @@ export function SettingsTab({
           </Pressable>
         </SectionCard>
 
-        <SectionCard title="Privacy + Security" subtitle="No secrets are hardcoded in the app bundle." accent={palette.accent} subtitleColor={palette.muted} cardBackground={palette.card} cardBorder={palette.border}>
-          <Text style={{ color: palette.muted }}>Firebase config source: runtime only (`/__/firebase/init.json` or `window.__BARRA_FIREBASE_CONFIG__`).</Text>
-          <Text style={{ color: palette.muted, marginTop: 4 }}>Session mode: {isGuest ? 'Local only (guest)' : 'Authenticated cloud sync'}</Text>
+        <SectionCard title="Privacy + Security" subtitle="No secrets are hardcoded in source code." accent={palette.accent} subtitleColor={palette.muted} cardBackground={palette.card} cardBorder={palette.border}>
+          <Text style={{ color: palette.muted }}>Firebase config source: `.env` using `EXPO_PUBLIC_FIREBASE_*` variables.</Text>
+          <Text style={{ color: palette.muted, marginTop: 4 }}>Persistence mode: {persistenceMode === 'firebase' ? 'Firebase cloud' : 'Local storage only'}</Text>
+          <Text style={{ color: palette.muted, marginTop: 4 }}>Session mode: {isGuest ? 'Guest (local)' : 'Authenticated'}</Text>
           <View style={styles.bulkActions}>
             <Pressable onPress={onRecheckFirebase} style={[styles.bulkButton, { backgroundColor: activeAccent }]}><Text style={[styles.bulkButtonText, { color: '#111' }]}>Validate runtime config</Text></Pressable>
           </View>

@@ -1250,6 +1250,7 @@ function MainApp() {
             userEmail={user?.email || null}
             userUidPrefix={user ? user.uid.substring(0, 8) : null}
             isGuest={isGuest}
+            persistenceMode={persistenceMode}
             visibleBarcodeTypes={SCAN_BARCODE_TYPES}
             barcodeOutputFormat={settings.barcodeOutputFormat}
           />
