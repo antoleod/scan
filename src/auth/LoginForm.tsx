@@ -553,7 +553,7 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
               <Animated.View
                 style={[
                   styles.statusDot,
-                  { backgroundColor: connectionState === 'connected' && firebase.enabled ? theme.success : theme.warning },
+                  { backgroundColor: !firebase.enabled ? '#B38A1A' : connectionState === 'connected' ? `${theme.secondary}CC` : '#B38A1A' },
                   pulseStyle,
                 ]}
               />

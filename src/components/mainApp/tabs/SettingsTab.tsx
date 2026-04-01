@@ -140,8 +140,20 @@ export function SettingsTab({
   const [passPhrase, setPassPhrase] = useState('');
   const [installBusy, setInstallBusy] = useState(false);
   const [pwaInstallAvailable, setPwaInstallAvailable] = useState(canInstallPwa());
+  const [webOnline, setWebOnline] = useState(Platform.OS !== 'web' ? true : (typeof navigator !== 'undefined' ? navigator.onLine : true));
 
   useEffect(() => subscribePwaInstallAvailability(setPwaInstallAvailable), []);
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+    const onOnline = () => setWebOnline(true);
+    const onOffline = () => setWebOnline(false);
+    window.addEventListener('online', onOnline);
+    window.addEventListener('offline', onOffline);
+    return () => {
+      window.removeEventListener('online', onOnline);
+      window.removeEventListener('offline', onOffline);
+    };
+  }, []);
 
   const themeOptions = useMemo<ThemeOption[]>(
     () => [
@@ -448,6 +460,7 @@ const styles = StyleSheet.create({
   fieldLabel: { fontSize: 10, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 2, fontFamily: 'monospace' },
   input: { minHeight: 42, borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 13 },
 });
+
 
 
 

@@ -1276,6 +1276,8 @@ function MainApp() {
     [activeTab]
   );
 
+  const webPanHandlers = Platform.OS === 'web' ? {} : swipeResponder.panHandlers;
+
   const content = (
     <SafeAreaView style={[styles.safe, { backgroundColor: palette.bg }]}>
       <StatusBar barStyle={isLightTheme ? 'dark-content' : 'light-content'} />
@@ -1292,7 +1294,7 @@ function MainApp() {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={isCompactLayout ? 6 : 0}
       >
-        <View style={styles.tabViewport} {...swipeResponder.panHandlers}>
+        <View style={styles.tabViewport} {...webPanHandlers}>
         {bootStatus !== 'ready' ? (
           <View style={styles.center}><Text style={{ color: palette.fg }}>{bootStatus === 'booting' ? 'Loading...' : 'Boot error'}</Text></View>
         ) : activeTab === 'scan' ? (

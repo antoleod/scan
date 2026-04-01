@@ -25,7 +25,12 @@ export async function loadSettings(): Promise<AppSettings> {
   const raw = await AsyncStorage.getItem(KEY);
   if (!raw) return defaultSettings;
   try {
-    return { ...defaultSettings, ...JSON.parse(raw) };
+    const parsed = { ...defaultSettings, ...JSON.parse(raw) } as AppSettings;
+    const allowedThemes: AppSettings['theme'][] = ['dark', 'light', 'eu_blue', 'custom', 'parliament', 'noirGraphite', 'midnightSteel', 'obsidianGold'];
+    if (!allowedThemes.includes(parsed.theme)) {
+      parsed.theme = 'dark';
+    }
+    return parsed;
   } catch {
     return defaultSettings;
   }
