@@ -89,7 +89,7 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
   const [username, setUsername] = useState('');
   const [pin, setPin] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [connectionState, setConnectionState] = useState<'checking' | 'connected' | 'error'>('checking');
+  const [connectionState, setConnectionState] = useState<'checking' | 'connected' | 'limited' | 'error'>('checking');
   const [errors, setErrors] = useState<{ username?: string; pin?: string }>({});
   const [focusedField, setFocusedField] = useState<'username' | 'pin' | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
@@ -292,7 +292,7 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
       }
 
       if (!isDeviceOnline()) {
-        if (!cancelled) setConnectionState('error');
+        if (!cancelled) setConnectionState('limited');
         return;
       }
 
@@ -306,7 +306,7 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
         await response.json().catch(() => null);
         if (!cancelled) setConnectionState('connected');
       } catch (error) {
-        if (!cancelled) setConnectionState('error');
+        if (!cancelled) setConnectionState('limited');
         if (isDeviceOnline()) console.error('Firebase connection check failed', error);
       }
     };
@@ -602,12 +602,16 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
               <Animated.View
                 style={[
                   styles.statusDot,
-                  { backgroundColor: connectionState === 'connected' ? theme.success : theme.error },
+                  { backgroundColor: connectionState === 'connected' ? theme.success : connectionState === 'error' ? theme.error : theme.warning },
                   pulseStyle,
                 ]}
               />
               <Text style={[styles.statusText, { color: theme.textSecondary }]}>
-                {connectionState === 'connected' ? 'Firebase ready' : 'Offline or Firebase unavailable'}
+                {connectionState === 'connected'
+                  ? 'Firebase ready'
+                  : connectionState === 'error'
+                    ? 'Firebase config missing'
+                    : 'Connectivity check limited (login may still work)'}
               </Text>
             </View>
 
