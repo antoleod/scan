@@ -19,14 +19,16 @@ interface RegisterFormProps {
 export default function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
   const { register } = useAuth();
   const { theme } = useAppTheme();
-  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const normalizedEmail = email.trim().toLowerCase();
+  const normalizedUsername = username.trim().toLowerCase().replace(/\s+/g, '');
+  const usernameValid = /^[a-z0-9._-]{3,}$/.test(normalizedUsername);
+  const normalizedEmail = `${normalizedUsername}@oryxen.tech`;
 
-  const emailValid = isValidEmail(normalizedEmail);
+  const emailValid = usernameValid && isValidEmail(normalizedEmail);
   const passwordValid = password.length >= 6;
   const matches = password === confirmPassword && confirmPassword.length > 0;
   const submitDisabled = loading || !emailValid || !passwordValid || !matches;
@@ -34,13 +36,13 @@ export default function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
   const handleSubmit = async () => {
     setError(null);
 
-    if (!normalizedEmail) {
-      setError('Email is required.');
+    if (!normalizedUsername) {
+      setError('Username is required.');
       return;
     }
 
-    if (!isValidEmail(normalizedEmail)) {
-      setError('Invalid email format.');
+    if (!usernameValid || !isValidEmail(normalizedEmail)) {
+      setError('Username invalid. Use 3+ chars: a-z, 0-9, dot, underscore or hyphen.');
       return;
     }
 
@@ -69,17 +71,19 @@ export default function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
       {error ? <Text style={[styles.errorText, { color: theme.error }]}>{error}</Text> : null}
 
       <View style={styles.inputGroup}>
-        <Text style={[styles.label, { color: theme.secondary }]}>Email</Text>
+        <Text style={[styles.label, { color: theme.secondary }]}>Username</Text>
         <TextInput
-          value={email}
-          onChangeText={setEmail}
+          value={username}
+          onChangeText={setUsername}
           style={[styles.input, { borderColor: theme.border, backgroundColor: theme.inputBg, color: theme.text }]}
-          placeholder="user@company.com"
-          keyboardType="email-address"
-          textContentType="emailAddress"
+          placeholder="jean"
+          textContentType="username"
           autoCapitalize="none"
           autoCorrect={false}
         />
+        <Text style={{ color: theme.textSecondary, fontSize: 12, marginTop: 6 }}>
+          Email generated: {normalizedUsername ? normalizedEmail : '@oryxen.tech'}
+        </Text>
       </View>
 
       <View style={styles.inputGroup}>

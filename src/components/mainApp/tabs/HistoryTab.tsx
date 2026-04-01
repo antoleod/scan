@@ -315,30 +315,18 @@ export function HistoryTab({
         <Pressable
           style={[
             mainAppStyles.filterChipCompact,
-            selectedDateLabel && !calendarOpen ? { backgroundColor: palette.accent } : { borderColor: palette.border, borderWidth: 1 },
+            selectedDateLabel || calendarOpen ? { backgroundColor: palette.accent } : { borderColor: palette.border, borderWidth: 1 },
             mainAppStyles.filterChipNoGrow,
           ]}
           onPress={onOpenDatePicker}
+          onLongPress={() => { setCalendarOpen(v => !v); if (calendarOpen) setCalendarDay(null); }}
         >
           <View style={mainAppStyles.compactAction}>
-            <Ionicons name="calendar-outline" size={14} color={selectedDateLabel && !calendarOpen ? '#fff' : palette.fg} />
-            <Text style={{ color: selectedDateLabel && !calendarOpen ? '#fff' : palette.fg, fontSize: 12, fontWeight: '700' }}>
-              {selectedDateLabel || 'DATE'}
+            <Ionicons name="calendar-outline" size={14} color={selectedDateLabel || calendarOpen ? '#fff' : palette.fg} />
+            <Ionicons name="grid-outline" size={14} color={selectedDateLabel || calendarOpen ? '#fff' : palette.fg} />
+            <Text style={{ color: selectedDateLabel || calendarOpen ? '#fff' : palette.fg, fontSize: 12, fontWeight: '700' }}>
+              {selectedDateLabel || 'DATE/CAL'}
             </Text>
-          </View>
-        </Pressable>
-        {/* Calendar toggle */}
-        <Pressable
-          style={[
-            mainAppStyles.filterChipCompact,
-            calendarOpen ? { backgroundColor: palette.accent } : { borderColor: palette.border, borderWidth: 1 },
-            mainAppStyles.filterChipNoGrow,
-          ]}
-          onPress={() => { setCalendarOpen(v => !v); if (calendarOpen) setCalendarDay(null); }}
-        >
-          <View style={mainAppStyles.compactAction}>
-            <Ionicons name="grid-outline" size={14} color={calendarOpen ? '#fff' : palette.fg} />
-            <Text style={{ color: calendarOpen ? '#fff' : palette.fg, fontSize: 12, fontWeight: '700' }}>CAL</Text>
           </View>
         </Pressable>
       </View>
