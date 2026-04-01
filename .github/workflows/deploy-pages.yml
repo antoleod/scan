@@ -34,6 +34,9 @@ jobs:
       - name: Install Expo web runtime for static render
         run: npm install --no-save @expo/metro-runtime
 
+      - name: Install reanimated runtime for web bundle
+        run: npm install --no-save react-native-reanimated
+
       - name: Configure Pages
         uses: actions/configure-pages@v5
         with:
