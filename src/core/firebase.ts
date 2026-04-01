@@ -23,6 +23,7 @@ import {
 } from 'firebase/firestore';
 
 import { ScanRecord } from '../types';
+import type { NoteItem, NoteTemplate } from './notes';
 
 const REQUIRED_FIREBASE_ENV = [
   'EXPO_PUBLIC_FIREBASE_API_KEY',
@@ -232,4 +233,46 @@ export async function syncScansWithFirebase(local: ScanRecord[]) {
   });
 
   return { pushed, server };
+}
+
+export async function syncNotesWithFirebase(localNotes: NoteItem[], localTemplates: NoteTemplate[]) {
+  const rt = await initFirebaseRuntime();
+  if (!rt.enabled || !rt.auth || !rt.db) {
+    throw new Error(buildFirebaseDisabledErrorMessage(rt));
+  }
+
+  const user = rt.auth.currentUser;
+  if (!user) throw new Error('No authenticated session to sync notes.');
+
+  const uid = user.uid;
+  const notesRef = collection(rt.db, 'users', uid, 'notes');
+  const templatesRef = collection(rt.db, 'users', uid, 'noteTemplates');
+
+  let pushedNotes = 0;
+  for (const note of localNotes.slice(0, 3000)) {
+    await setDoc(doc(notesRef, note.id), { ...note, uid, updatedAtServer: serverTimestamp() }, { merge: true });
+    pushedNotes += 1;
+  }
+
+  let pushedTemplates = 0;
+  for (const template of localTemplates.slice(0, 300)) {
+    await setDoc(doc(templatesRef, template.id), { ...template, uid, updatedAtServer: serverTimestamp() }, { merge: true });
+    pushedTemplates += 1;
+  }
+
+  const notesSnap = await getDocs(query(notesRef));
+  const serverNotes: NoteItem[] = [];
+  notesSnap.forEach((d) => {
+    const x = d.data() as NoteItem;
+    serverNotes.push({ ...x, id: x.id || d.id });
+  });
+
+  const templatesSnap = await getDocs(query(templatesRef));
+  const serverTemplates: NoteTemplate[] = [];
+  templatesSnap.forEach((d) => {
+    const x = d.data() as NoteTemplate;
+    serverTemplates.push({ ...x, id: x.id || d.id });
+  });
+
+  return { pushedNotes, pushedTemplates, serverNotes, serverTemplates };
 }

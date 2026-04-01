@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { syncNotesWithFirebase } from './firebase';
 
 const NOTES_KEY = '@barra_notes_v1';
 const TEMPLATES_KEY = '@barra_note_templates_v1';
@@ -77,6 +78,22 @@ export async function saveNotes(items: NoteItem[]): Promise<void> {
   await AsyncStorage.setItem(NOTES_KEY, JSON.stringify(normalizeNotes(items).slice(0, 3000)));
 }
 
+async function syncNotesStateIfAuthenticated(notesOverride?: NoteItem[], templatesOverride?: NoteTemplate[]): Promise<void> {
+  try {
+    const notes = notesOverride || (await loadNotes());
+    const templates = templatesOverride || (await loadTemplates());
+    const result = await syncNotesWithFirebase(notes, templates);
+    if (result.serverNotes.length) {
+      await AsyncStorage.setItem(NOTES_KEY, JSON.stringify(normalizeNotes(result.serverNotes).slice(0, 3000)));
+    }
+    if (result.serverTemplates.length) {
+      await AsyncStorage.setItem(TEMPLATES_KEY, JSON.stringify(result.serverTemplates.slice(0, 300)));
+    }
+  } catch {
+    // keep local flow responsive when offline or unauthenticated
+  }
+}
+
 function isDuplicateText(notes: NoteItem[], value: string) {
   const normalized = normalizeText(value).toLowerCase();
   return notes.some((item) => item.kind === 'text' && normalizeText(item.text).toLowerCase() === normalized);
@@ -110,6 +127,7 @@ export async function addNoteUnique(
     ...current,
   ];
   await saveNotes(next);
+  await syncNotesStateIfAuthenticated(normalizeNotes(next));
   return { notes: normalizeNotes(next), inserted: true };
 }
 
@@ -145,6 +163,7 @@ export async function addImageNoteUnique(dataUri: string, title = 'Screenshot ca
     ...current,
   ];
   await saveNotes(next);
+  await syncNotesStateIfAuthenticated(normalizeNotes(next));
   return { notes: normalizeNotes(next), inserted: true };
 }
 
@@ -152,6 +171,7 @@ export async function removeNote(id: string): Promise<NoteItem[]> {
   const current = await loadNotes();
   const next = current.filter((item) => item.id !== id);
   await saveNotes(next);
+  await syncNotesStateIfAuthenticated(normalizeNotes(next));
   return normalizeNotes(next);
 }
 
@@ -163,6 +183,7 @@ export async function updateNoteText(id: string, text: string): Promise<NoteItem
     item.id === id ? { ...item, text: nextText, updatedAt: Date.now() } : item,
   );
   await saveNotes(next);
+  await syncNotesStateIfAuthenticated(normalizeNotes(next));
   return normalizeNotes(next);
 }
 
@@ -172,11 +193,13 @@ export async function togglePinned(id: string): Promise<NoteItem[]> {
     item.id === id ? { ...item, pinned: !item.pinned, updatedAt: Date.now() } : item,
   );
   await saveNotes(next);
+  await syncNotesStateIfAuthenticated(normalizeNotes(next));
   return normalizeNotes(next);
 }
 
 export async function clearNotes(): Promise<void> {
   await AsyncStorage.removeItem(NOTES_KEY);
+  await syncNotesStateIfAuthenticated([], undefined);
 }
 
 export async function loadTemplates(): Promise<NoteTemplate[]> {
@@ -205,6 +228,7 @@ export async function loadTemplates(): Promise<NoteTemplate[]> {
 
 export async function saveTemplates(items: NoteTemplate[]): Promise<void> {
   await AsyncStorage.setItem(TEMPLATES_KEY, JSON.stringify(items.slice(0, 300)));
+  await syncNotesStateIfAuthenticated(undefined, items.slice(0, 300));
 }
 
 export async function addTemplate(template: Omit<NoteTemplate, 'id' | 'createdAt' | 'updatedAt'>): Promise<NoteTemplate[]> {
@@ -220,6 +244,7 @@ export async function addTemplate(template: Omit<NoteTemplate, 'id' | 'createdAt
     ...current,
   ];
   await saveTemplates(next);
+  await syncNotesStateIfAuthenticated(undefined, next);
   return next;
 }
 
@@ -264,6 +289,7 @@ export async function ensureWorkNotesAndEmailTemplates(): Promise<{
     ];
     notes = normalizeNotes([...examples, ...notes]);
     await saveNotes(notes);
+    await syncNotesStateIfAuthenticated(notes, templates);
   }
 
   const hasEmailTemplates = templates.some((item) => item.kind === 'email');
@@ -300,6 +326,7 @@ export async function ensureWorkNotesAndEmailTemplates(): Promise<{
     ];
     templates = [...emailTemplates, ...templates];
     await saveTemplates(templates);
+    await syncNotesStateIfAuthenticated(notes, templates);
   }
 
   return { notes, templates };
@@ -309,6 +336,7 @@ export async function removeTemplate(id: string): Promise<NoteTemplate[]> {
   const current = await loadTemplates();
   const next = current.filter((item) => item.id !== id);
   await saveTemplates(next);
+  await syncNotesStateIfAuthenticated(undefined, next);
   return next;
 }
 

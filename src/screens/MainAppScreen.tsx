@@ -38,6 +38,7 @@ import { SCAN_BARCODE_TYPES, type CodeType, normalizeCodeValue } from '../core/c
 import {
   initFirebaseRuntime,
   recheckFirebaseRuntime,
+  syncNotesWithFirebase,
   syncScansWithFirebase,
 } from '../core/firebase';
 import { IMAGE_SCAN_BARCODE_TYPES, buildScanRecord, processScanInput } from '../core/scanPipeline';
@@ -58,6 +59,7 @@ import { QrModal } from '../components/mainApp/QrModal';
 import { ScanTab } from '../components/mainApp/tabs/ScanTab';
 import { SelectionFooter } from '../components/mainApp/SelectionFooter';
 import { SettingsTab } from '../components/mainApp/tabs/SettingsTab';
+import { loadNotes as loadWorkNotes, loadTemplates as loadNoteTemplates, saveNotes as saveWorkNotes, saveTemplates as saveNoteTemplates } from '../core/notes';
 
 type Tab = 'scan' | 'history' | 'notes' | 'settings';
 type ManualItemType = 'PI' | 'OFFICE' | 'OTHER';
@@ -153,6 +155,7 @@ function MainApp() {
     resume: null,
   });
   const feedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autoSyncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const cameraRef = useRef<CameraView>(null);
   const laserAnim = useRef(new Animated.Value(0)).current;
 
@@ -288,6 +291,9 @@ function MainApp() {
       mounted = false;
       if (feedbackTimerRef.current) {
         clearTimeout(feedbackTimerRef.current);
+      }
+      if (autoSyncTimerRef.current) {
+        clearTimeout(autoSyncTimerRef.current);
       }
     };
   }, []);
@@ -873,7 +879,7 @@ function MainApp() {
     }
   }
 
-  async function syncNow() {
+  async function syncNow(showAlert = true) {
     if (syncBusy || !user) return;
 
     setSyncBusy(true);
@@ -887,15 +893,35 @@ function MainApp() {
       }
       setHistory(merged);
       await saveHistory(merged);
+
+      const localNotes = await loadWorkNotes();
+      const localNoteTemplates = await loadNoteTemplates();
+      const notesSync = await syncNotesWithFirebase(localNotes, localNoteTemplates);
+      await saveWorkNotes(notesSync.serverNotes);
+      await saveNoteTemplates(notesSync.serverTemplates);
+
       await diag.info('firebase.sync.ok', { pushed: result.pushed, total: merged.length });
-      Alert.alert('Sync', `OK. pushed=${result.pushed}, total=${merged.length}`);
+      if (showAlert) {
+        Alert.alert(
+          'Sync',
+          `OK. scans pushed=${result.pushed}, scans total=${merged.length}, notes=${notesSync.serverNotes.length}, templates=${notesSync.serverTemplates.length}`
+        );
+      }
     } catch (error) {
       await diag.error('firebase.sync.error', { message: String(error) });
-      Alert.alert('Sync error', String(error));
+      if (showAlert) Alert.alert('Sync error', String(error));
     } finally {
       setSyncBusy(false);
     }
   }
+
+  useEffect(() => {
+    if (!user || persistenceMode !== 'firebase') return;
+    if (autoSyncTimerRef.current) clearTimeout(autoSyncTimerRef.current);
+    autoSyncTimerRef.current = setTimeout(() => {
+      syncNow(false).catch(() => undefined);
+    }, 1400);
+  }, [history, user, persistenceMode]);
 
   async function clearAllHistory() {
     Alert.alert('Confirm', 'Clear local history?', [
