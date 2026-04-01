@@ -118,6 +118,10 @@ export function ScanTab({
             <View style={mainAppStyles.viewfinderMiddle}>
               <View style={mainAppStyles.viewfinderSide} />
               <View style={mainAppStyles.viewfinderCenter}>
+                <View style={[mainAppStyles.viewfinderCorner, mainAppStyles.viewfinderCornerTL]} />
+                <View style={[mainAppStyles.viewfinderCorner, mainAppStyles.viewfinderCornerTR]} />
+                <View style={[mainAppStyles.viewfinderCorner, mainAppStyles.viewfinderCornerBL]} />
+                <View style={[mainAppStyles.viewfinderCorner, mainAppStyles.viewfinderCornerBR]} />
                 <Animated.View
                   style={[
                     mainAppStyles.laser,
@@ -135,7 +139,9 @@ export function ScanTab({
               <View style={mainAppStyles.viewfinderSide} />
             </View>
             <View style={mainAppStyles.viewfinderBottom}>
-              <Text style={mainAppStyles.viewfinderText}>{statusLabel}</Text>
+              <View style={mainAppStyles.viewfinderPill}>
+                <Text style={mainAppStyles.viewfinderText}>{statusLabel}</Text>
+              </View>
             </View>
           </View>
 
@@ -176,9 +182,9 @@ export function ScanTab({
       )}
 
       <View style={mainAppStyles.rowButtons}>
-        <Pressable style={[mainAppStyles.btn, mainAppStyles.actionBtn, { backgroundColor: palette.card, borderColor: palette.border }]} onPress={onScanFromImage}>
+        <Pressable style={[mainAppStyles.btn, mainAppStyles.actionBtn, { flex: 1, backgroundColor: palette.card, borderColor: palette.border }]} onPress={onScanFromImage}>
           <View style={mainAppStyles.btnContent}>
-            <Ionicons name="images-outline" size={18} color={palette.fg} />
+            <Ionicons name="images-outline" size={19} color={palette.fg} />
             <Text style={[mainAppStyles.btnText, { color: palette.fg }]}>Image scan</Text>
           </View>
         </Pressable>
@@ -186,13 +192,13 @@ export function ScanTab({
           style={[
             mainAppStyles.btn,
             mainAppStyles.actionBtn,
-            { backgroundColor: palette.card, borderColor: palette.border, opacity: nfcBusy ? 0.7 : 1 },
+            { flex: 1, backgroundColor: palette.card, borderColor: palette.border, opacity: nfcBusy ? 0.7 : 1 },
           ]}
           onPress={onScanFromNfc}
           disabled={nfcBusy}
         >
           <View style={mainAppStyles.btnContent}>
-            <MaterialCommunityIcons name="nfc-variant" size={18} color={palette.fg} />
+            <MaterialCommunityIcons name="nfc-variant" size={19} color={palette.fg} />
             <Text style={[mainAppStyles.btnText, { color: palette.fg }]}>{nfcBusy ? 'Reading NFC...' : nfcReady ? 'NFC' : 'NFC (setup)'}</Text>
           </View>
         </Pressable>

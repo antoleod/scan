@@ -74,45 +74,49 @@ export function BottomTabs({
 
   return (
     <View style={[mainAppStyles.footer, { backgroundColor: palette.card, borderColor: palette.border }]}>
-      <Animated.View style={scanAnim}>
-      <Pressable onPress={() => onTabPress('scan')} style={[mainAppStyles.footerBtn, activeTab === 'scan' ? { backgroundColor: palette.accent + '18', borderRadius: 10 } : null]}>
-        <View style={mainAppStyles.footerBtnInner}>
-          <Ionicons name="scan" size={18} color={activeTab === 'scan' ? palette.accent : palette.muted} />
-          <Text style={{ color: activeTab === 'scan' ? palette.accent : palette.muted, fontWeight: '700' }}>SCAN</Text>
-        </View>
-      </Pressable>
+      <Animated.View style={[scanAnim, { flex: 1 }]}>
+        <Pressable onPress={() => onTabPress('scan')} style={[mainAppStyles.footerBtn, activeTab === 'scan' ? { backgroundColor: palette.accent + '14' } : null]}>
+          {activeTab === 'scan' && <View style={[mainAppStyles.footerIndicator, { backgroundColor: palette.accent }]} />}
+          <View style={mainAppStyles.footerBtnInner}>
+            <Ionicons name="scan" size={activeTab === 'scan' ? 22 : 20} color={activeTab === 'scan' ? palette.accent : palette.muted} />
+            <Text style={{ color: activeTab === 'scan' ? palette.accent : palette.muted, fontSize: 9, fontWeight: '700', letterSpacing: 0.8 }}>SCAN</Text>
+          </View>
+        </Pressable>
       </Animated.View>
-      <Animated.View style={addAnim}>
-      <Pressable onPress={onAdd} style={[mainAppStyles.footerAddBtn, { backgroundColor: palette.accent, borderColor: palette.accent }]}>
-        <View style={mainAppStyles.footerBtnInner}>
-          <Ionicons name="add" size={20} color="#fff" />
-          <Text style={{ color: '#fff', fontWeight: '800' }}>Add</Text>
-        </View>
-      </Pressable>
+      <Animated.View style={[addAnim, { flex: 1 }]}>
+        <Pressable onPress={onAdd} style={[mainAppStyles.footerAddBtn, { backgroundColor: palette.accent, borderColor: palette.accent + 'cc' }]}>
+          <View style={mainAppStyles.footerBtnInner}>
+            <Ionicons name="add" size={22} color="#fff" />
+            <Text style={{ color: '#fff', fontSize: 9, fontWeight: '800', letterSpacing: 0.6 }}>ADD</Text>
+          </View>
+        </Pressable>
       </Animated.View>
-      <Animated.View style={historyAnim}>
-      <Pressable onPress={() => onTabPress('history')} style={[mainAppStyles.footerBtn, activeTab === 'history' ? { backgroundColor: palette.accent + '18', borderRadius: 10 } : null]}>
-        <View style={mainAppStyles.footerBtnInner}>
-          <Ionicons name="time-outline" size={18} color={activeTab === 'history' ? palette.accent : palette.muted} />
-          <Text style={{ color: activeTab === 'history' ? palette.accent : palette.muted, fontWeight: '700' }}>HISTORY</Text>
-        </View>
-      </Pressable>
+      <Animated.View style={[historyAnim, { flex: 1 }]}>
+        <Pressable onPress={() => onTabPress('history')} style={[mainAppStyles.footerBtn, activeTab === 'history' ? { backgroundColor: palette.accent + '14' } : null]}>
+          {activeTab === 'history' && <View style={[mainAppStyles.footerIndicator, { backgroundColor: palette.accent }]} />}
+          <View style={mainAppStyles.footerBtnInner}>
+            <Ionicons name="time-outline" size={activeTab === 'history' ? 22 : 20} color={activeTab === 'history' ? palette.accent : palette.muted} />
+            <Text style={{ color: activeTab === 'history' ? palette.accent : palette.muted, fontSize: 9, fontWeight: '700', letterSpacing: 0.8 }}>HISTORY</Text>
+          </View>
+        </Pressable>
       </Animated.View>
-      <Animated.View style={notesAnim}>
-      <Pressable onPress={() => onTabPress('notes')} style={[mainAppStyles.footerBtn, activeTab === 'notes' ? { backgroundColor: palette.accent + '18', borderRadius: 10 } : null]}>
-        <View style={mainAppStyles.footerBtnInner}>
-          <Ionicons name="document-text-outline" size={18} color={activeTab === 'notes' ? palette.accent : palette.muted} />
-          <Text style={{ color: activeTab === 'notes' ? palette.accent : palette.muted, fontWeight: '700' }}>NOTES</Text>
-        </View>
-      </Pressable>
+      <Animated.View style={[notesAnim, { flex: 1 }]}>
+        <Pressable onPress={() => onTabPress('notes')} style={[mainAppStyles.footerBtn, activeTab === 'notes' ? { backgroundColor: palette.accent + '14' } : null]}>
+          {activeTab === 'notes' && <View style={[mainAppStyles.footerIndicator, { backgroundColor: palette.accent }]} />}
+          <View style={mainAppStyles.footerBtnInner}>
+            <Ionicons name="document-text-outline" size={activeTab === 'notes' ? 22 : 20} color={activeTab === 'notes' ? palette.accent : palette.muted} />
+            <Text style={{ color: activeTab === 'notes' ? palette.accent : palette.muted, fontSize: 9, fontWeight: '700', letterSpacing: 0.8 }}>NOTES</Text>
+          </View>
+        </Pressable>
       </Animated.View>
-      <Animated.View style={settingsAnim}>
-      <Pressable onPress={() => onTabPress('settings')} style={[mainAppStyles.footerBtn, activeTab === 'settings' ? { backgroundColor: palette.accent + '18', borderRadius: 10 } : null]}>
-        <View style={mainAppStyles.footerBtnInner}>
-          <Ionicons name="settings-outline" size={18} color={activeTab === 'settings' ? palette.accent : palette.muted} />
-          <Text style={{ color: activeTab === 'settings' ? palette.accent : palette.muted, fontWeight: '700' }}>SETTINGS</Text>
-        </View>
-      </Pressable>
+      <Animated.View style={[settingsAnim, { flex: 1 }]}>
+        <Pressable onPress={() => onTabPress('settings')} style={[mainAppStyles.footerBtn, activeTab === 'settings' ? { backgroundColor: palette.accent + '14' } : null]}>
+          {activeTab === 'settings' && <View style={[mainAppStyles.footerIndicator, { backgroundColor: palette.accent }]} />}
+          <View style={mainAppStyles.footerBtnInner}>
+            <Ionicons name="settings-outline" size={activeTab === 'settings' ? 22 : 20} color={activeTab === 'settings' ? palette.accent : palette.muted} />
+            <Text style={{ color: activeTab === 'settings' ? palette.accent : palette.muted, fontSize: 9, fontWeight: '700', letterSpacing: 0.8 }}>SETTINGS</Text>
+          </View>
+        </Pressable>
       </Animated.View>
     </View>
   );
