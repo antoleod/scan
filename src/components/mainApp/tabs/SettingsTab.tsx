@@ -1,5 +1,5 @@
 ﻿import React, { useEffect, useMemo, useState } from 'react';
-import { Alert, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import { Alert, Linking, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 import { AppSettings, type PersistenceMode } from '../../../types';
@@ -184,23 +184,28 @@ export function SettingsTab({
           <View style={styles.toggleRow}><Text style={[styles.toggleLabel, { color: palette.fg }]}>OCR correction</Text><Switch value={settings.ocrCorrection} onValueChange={(value) => onPatchSettings({ ocrCorrection: value })} /></View>
         </SectionCard>
 
-        {!isInstalled && Platform.OS === 'web' ? (
-          <SectionCard title="PWA" subtitle="Install when available." accent={palette.accent} subtitleColor={palette.muted} cardBackground={palette.card} cardBorder={palette.border}>
+        {Platform.OS === 'web' ? (
+          <SectionCard title="PWA" subtitle="Install and desktop mode." accent={palette.accent} subtitleColor={palette.muted} cardBackground={palette.card} cardBorder={palette.border} defaultOpen>
             <Pressable
               disabled={installBusy}
               onPress={async () => {
                 if (pwaInstallAvailable) {
                   setInstallBusy(true);
                   try {
-                    await triggerPwaInstall();
+                    const result = await triggerPwaInstall();
+                    Alert.alert(result.accepted ? 'Installed' : 'Install canceled', result.accepted ? 'The app was added to desktop.' : 'You can retry from this button.');
                   } finally {
                     setInstallBusy(false);
                   }
                   return;
                 }
+                const browser = typeof navigator !== 'undefined' ? (navigator.userAgent || '').toLowerCase() : '';
+                const isChromeEdge = browser.includes('chrome') || browser.includes('edg');
                 Alert.alert(
-                  'Install app',
-                  'Install is not yet available in this tab. In Chrome/Edge use menu > Install app, then reload this page.'
+                  'Manual install',
+                  isChromeEdge
+                    ? 'Use browser menu (⋮) > Install app. If it does not appear, refresh and interact with the app for a few seconds.'
+                    : 'Use your browser install option (Add to Home screen / Install app). Chrome or Edge on desktop gives the best support.'
                 );
               }}
               style={[styles.bulkButton, { backgroundColor: activeAccent, opacity: installBusy ? 0.6 : 1 }]}
@@ -209,10 +214,20 @@ export function SettingsTab({
                 {installBusy ? 'Opening...' : pwaInstallAvailable ? 'Install Web App' : 'Install (Manual)'}
               </Text>
             </Pressable>
+            <Pressable
+              onPress={() => {
+                void Linking.openURL('https://support.google.com/chrome/answer/9658361');
+              }}
+              style={[styles.bulkButton, { backgroundColor: 'transparent', borderWidth: 1, borderColor: palette.border }]}
+            >
+              <Text style={[styles.bulkButtonText, { color: palette.fg }]}>Open install guide</Text>
+            </Pressable>
             <Text style={[styles.helperLine, { color: palette.muted }]}>
-              {pwaInstallAvailable
-                ? 'Installer ready in this browser session.'
-                : 'If the installer does not appear, open browser menu and choose Install app.'}
+              {isInstalled
+                ? 'PWA appears installed in this browser profile.'
+                : pwaInstallAvailable
+                  ? 'Installer ready in this browser session.'
+                  : 'Auto prompt not available; use manual install from browser menu.'}
             </Text>
           </SectionCard>
         ) : null}
