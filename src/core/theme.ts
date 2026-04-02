@@ -58,14 +58,14 @@ export const themeTokens = {
     card: '#000A00',
     inputBg: '#000500',
     text: '#00FF41', // Bright Matrix Green
-    textSecondary: '#008F11', // Medium Console Green
+    textSecondary: '#00BB22', // Readable Console Green (contrast ≥ 8:1 on card)
     primary: '#003B00', // Deep Forest Structure
     secondary: '#00FF41',
     border: '#003B00',
     success: '#00FF41',
     warning: '#F59E0B',
     error: '#FF0000',
-    icon: '#008F11',
+    icon: '#00BB22',
   },
   dark: {
     background: '#020202', // Pitch Black
@@ -74,14 +74,14 @@ export const themeTokens = {
     card: '#0A0A0A',
     inputBg: '#050505',
     text: '#00FF41', // Matrix Green
-    textSecondary: '#008F11', // Darker Terminal Green
+    textSecondary: '#00BB22', // Readable Terminal Green (contrast ≥ 8:1 on card)
     primary: '#003B00', // Deep Forest Structure
     secondary: '#00FF41', // Matrix Highlight
     border: '#003B00',
     success: '#00FF41',
     warning: '#D1FFD1',
     error: '#FF0000',
-    icon: '#008F11',
+    icon: '#00BB22',
   },
   light: {
     background: '#F7F9FC',
@@ -170,7 +170,7 @@ export const themeTokens = {
     card: '#111116',
     inputBg: '#0D0D10',
     text: '#E0E0E0',
-    textSecondary: '#555555',
+    textSecondary: '#AAAAAA', // Raised from #555555 for legible contrast on #111116 card
     primary: '#111116',
     secondary: '#C8A96E',
     border: '#1E1E24',

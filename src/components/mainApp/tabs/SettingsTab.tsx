@@ -1,5 +1,6 @@
 ﻿import React, { useEffect, useMemo, useState } from 'react';
 import { Alert, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 
 import { AppSettings, type PersistenceMode } from '../../../types';
 import { BARCODE_FORMAT_OPTIONS, type BarcodeFormat } from '../../../core/barcode';
@@ -27,12 +28,12 @@ function SectionCard({ title, subtitle, accent, subtitleColor, cardBackground, c
   const [open, setOpen] = useState(defaultOpen);
   return (
     <View style={[styles.sectionCard, { borderLeftColor: accent, backgroundColor: cardBackground, borderColor: cardBorder }]}>
-      <Pressable onPress={() => setOpen((v) => !v)} style={styles.sectionHeader}>
+      <Pressable onPress={() => setOpen((v) => !v)} style={({ pressed }) => [styles.sectionHeader, { opacity: pressed ? 0.8 : 1 }]}>
         <View style={{ flex: 1 }}>
           <Text style={[styles.sectionTitle, { color: accent }]}>{title}</Text>
           {subtitle ? <Text style={[styles.sectionSubtitle, { color: subtitleColor }]}>{subtitle}</Text> : null}
         </View>
-        <Text style={[styles.chevron, { color: accent }]}>{open ? 'v' : '>'}</Text>
+        <Ionicons name={open ? 'chevron-down' : 'chevron-forward'} size={16} color={accent} />
       </Pressable>
       {open ? children : null}
     </View>
@@ -48,7 +49,7 @@ function ThemeCard({ option, active, onPress }: { option: ThemeOption; active: b
   }, [active]);
 
   return (
-    <Pressable onPress={onPress} style={[styles.themeCard, { backgroundColor: option.background, borderColor: active ? option.accent : option.border, borderWidth: active ? (pulse ? 2.3 : 1.5) : 1 }]}>
+    <Pressable onPress={onPress} style={({ pressed }) => [styles.themeCard, { backgroundColor: option.background, borderColor: active ? option.accent : option.border, borderWidth: active ? (pulse ? 2.3 : 1.5) : 1, opacity: pressed ? 0.85 : 1 }]}>
       <View style={[styles.themeSwatch, { backgroundColor: option.accent }]} />
       <Text style={[styles.themeCardText, { color: option.text }]}>{option.label}</Text>
       {active ? <Text style={[styles.check, { color: option.accent }]}>ACTIVE</Text> : null}
@@ -146,7 +147,8 @@ export function SettingsTab({
 
   return (
     <View style={[styles.screen, { backgroundColor: palette.bg }]}>
-      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={styles.scrollOuter} showsVerticalScrollIndicator={false}>
+        <View style={styles.container}>
         <View style={styles.header}>
           <Text style={[styles.kicker, { color: activeAccent }]}>SETTINGS</Text>
           <Text style={[styles.pageTitle, { color: palette.fg }]}>Configuration</Text>
@@ -197,7 +199,7 @@ export function SettingsTab({
             {barcodeOptions.map((format) => {
               const selected = barcodeOutputFormat === format.name;
               return (
-                <Pressable key={format.name} onPress={() => { const match = BARCODE_FORMAT_OPTIONS.find((opt) => opt.value === format.name); if (!match || format.hardwareOnly) return; onPatchSettings({ barcodeOutputFormat: match.value }); }} style={[styles.formatCard, { borderColor: selected ? activeAccent : palette.border, backgroundColor: palette.card }]}>
+                <Pressable key={format.name} onPress={() => { const match = BARCODE_FORMAT_OPTIONS.find((opt) => opt.value === format.name); if (!match || format.hardwareOnly) return; onPatchSettings({ barcodeOutputFormat: match.value }); }} style={({ pressed }) => [styles.formatCard, { borderColor: selected ? activeAccent : palette.border, backgroundColor: palette.card, opacity: pressed ? 0.8 : 1 }]}>
                   <Text style={[styles.formatName, { color: palette.fg }]}>{format.label}</Text>
                   <Text style={[styles.formatDescription, { color: palette.muted }]}>{format.description}</Text>
                 </Pressable>
@@ -208,17 +210,17 @@ export function SettingsTab({
         </SectionCard>
 
         <SectionCard title="Data + Sync" subtitle="Backup and synchronization." accent={palette.accent} subtitleColor={palette.muted} cardBackground={palette.card} cardBorder={palette.border}>
-          <View style={styles.bulkActions}>
-            <Pressable onPress={onExportCsv} style={[styles.bulkButton, { backgroundColor: activeAccent }]}><Text style={[styles.bulkButtonText, { color: '#111' }]}>Export CSV</Text></Pressable>
-            <Pressable onPress={onExportBackup} style={[styles.bulkButton, { backgroundColor: activeAccent }]}><Text style={[styles.bulkButtonText, { color: '#111' }]}>Export backup</Text></Pressable>
-            <Pressable onPress={onOpenBackupImport} style={[styles.bulkButton, { backgroundColor: activeAccent }]}><Text style={[styles.bulkButtonText, { color: '#111' }]}>Import</Text></Pressable>
-            <Pressable onPress={onRecheckFirebase} style={[styles.bulkButton, { backgroundColor: activeAccent }]}><Text style={[styles.bulkButtonText, { color: '#111' }]}>Recheck Firebase</Text></Pressable>
-            <Pressable disabled={syncBusy} onPress={onSyncNow} style={[styles.bulkButton, { backgroundColor: activeAccent, opacity: syncBusy ? 0.6 : 1 }]}><Text style={[styles.bulkButtonText, { color: '#111' }]}>{syncBusy ? 'Syncing' : 'Sync now'}</Text></Pressable>
-            <Pressable onPress={() => Alert.alert('Clear history', 'Are you sure you want to clear all history?', [{ text: 'Cancel', style: 'cancel' }, { text: 'Clear', style: 'destructive', onPress: onClearHistory }])} style={[styles.bulkButton, { backgroundColor: '#ef4444' }]}><Text style={[styles.bulkButtonText, { color: '#fff' }]}>Clear history</Text></Pressable>
-            <Pressable onPress={() => Alert.alert('Hard delete history', 'Delete all history locally, cache and cloud?', [{ text: 'Cancel', style: 'cancel' }, { text: 'Delete', style: 'destructive', onPress: onHardDeleteHistory }])} style={[styles.bulkButton, { backgroundColor: '#991b1b' }]}><Text style={[styles.bulkButtonText, { color: '#fff' }]}>Hard delete history</Text></Pressable>
-            <Pressable onPress={() => Alert.alert('Hard delete notes', 'Delete all notes locally and in cloud?', [{ text: 'Cancel', style: 'cancel' }, { text: 'Delete', style: 'destructive', onPress: onHardDeleteNotes }])} style={[styles.bulkButton, { backgroundColor: '#b91c1c' }]}><Text style={[styles.bulkButtonText, { color: '#fff' }]}>Hard delete notes</Text></Pressable>
-            <Pressable onPress={() => Alert.alert('Hard delete clipboard', 'Delete all clipboard memory locally?', [{ text: 'Cancel', style: 'cancel' }, { text: 'Delete', style: 'destructive', onPress: onHardDeleteClipboard }])} style={[styles.bulkButton, { backgroundColor: '#b91c1c' }]}><Text style={[styles.bulkButtonText, { color: '#fff' }]}>Hard delete clipboard</Text></Pressable>
-            <Pressable onPress={() => Alert.alert('Hard delete templates', 'Delete all templates locally and in cloud?', [{ text: 'Cancel', style: 'cancel' }, { text: 'Delete', style: 'destructive', onPress: onHardDeleteTemplates }])} style={[styles.bulkButton, { backgroundColor: '#b91c1c' }]}><Text style={[styles.bulkButtonText, { color: '#fff' }]}>Hard delete templates</Text></Pressable>
+          <View style={styles.bulkGrid}>
+            <Pressable onPress={onExportCsv} style={({ pressed }) => [styles.bulkButton, styles.bulkGridItem, { backgroundColor: activeAccent, opacity: pressed ? 0.8 : 1 }]}><Text style={[styles.bulkButtonText, { color: '#111' }]}>Export CSV</Text></Pressable>
+            <Pressable onPress={onExportBackup} style={({ pressed }) => [styles.bulkButton, styles.bulkGridItem, { backgroundColor: activeAccent, opacity: pressed ? 0.8 : 1 }]}><Text style={[styles.bulkButtonText, { color: '#111' }]}>Export backup</Text></Pressable>
+            <Pressable onPress={onOpenBackupImport} style={({ pressed }) => [styles.bulkButton, styles.bulkGridItem, { backgroundColor: activeAccent, opacity: pressed ? 0.8 : 1 }]}><Text style={[styles.bulkButtonText, { color: '#111' }]}>Import</Text></Pressable>
+            <Pressable onPress={onRecheckFirebase} style={({ pressed }) => [styles.bulkButton, styles.bulkGridItem, { backgroundColor: activeAccent, opacity: pressed ? 0.8 : 1 }]}><Text style={[styles.bulkButtonText, { color: '#111' }]}>Recheck Firebase</Text></Pressable>
+            <Pressable disabled={syncBusy} onPress={onSyncNow} style={({ pressed }) => [styles.bulkButton, styles.bulkGridItem, { backgroundColor: activeAccent, opacity: syncBusy ? 0.6 : pressed ? 0.8 : 1 }]}><Text style={[styles.bulkButtonText, { color: '#111' }]}>{syncBusy ? 'Syncing' : 'Sync now'}</Text></Pressable>
+            <Pressable onPress={() => Alert.alert('Clear history', 'Are you sure you want to clear all history?', [{ text: 'Cancel', style: 'cancel' }, { text: 'Clear', style: 'destructive', onPress: onClearHistory }])} style={({ pressed }) => [styles.bulkButton, styles.bulkGridItem, { backgroundColor: '#ef4444', opacity: pressed ? 0.8 : 1 }]}><Text style={[styles.bulkButtonText, { color: '#fff' }]}>Clear history</Text></Pressable>
+            <Pressable onPress={() => Alert.alert('Hard delete history', 'Delete all history locally, cache and cloud?', [{ text: 'Cancel', style: 'cancel' }, { text: 'Delete', style: 'destructive', onPress: onHardDeleteHistory }])} style={({ pressed }) => [styles.bulkButton, styles.bulkGridItem, { backgroundColor: '#991b1b', opacity: pressed ? 0.8 : 1 }]}><Text style={[styles.bulkButtonText, { color: '#fff' }]}>Hard delete history</Text></Pressable>
+            <Pressable onPress={() => Alert.alert('Hard delete notes', 'Delete all notes locally and in cloud?', [{ text: 'Cancel', style: 'cancel' }, { text: 'Delete', style: 'destructive', onPress: onHardDeleteNotes }])} style={({ pressed }) => [styles.bulkButton, styles.bulkGridItem, { backgroundColor: '#b91c1c', opacity: pressed ? 0.8 : 1 }]}><Text style={[styles.bulkButtonText, { color: '#fff' }]}>Hard delete notes</Text></Pressable>
+            <Pressable onPress={() => Alert.alert('Hard delete clipboard', 'Delete all clipboard memory locally?', [{ text: 'Cancel', style: 'cancel' }, { text: 'Delete', style: 'destructive', onPress: onHardDeleteClipboard }])} style={({ pressed }) => [styles.bulkButton, styles.bulkGridItem, { backgroundColor: '#b91c1c', opacity: pressed ? 0.8 : 1 }]}><Text style={[styles.bulkButtonText, { color: '#fff' }]}>Hard delete clipboard</Text></Pressable>
+            <Pressable onPress={() => Alert.alert('Hard delete templates', 'Delete all templates locally and in cloud?', [{ text: 'Cancel', style: 'cancel' }, { text: 'Delete', style: 'destructive', onPress: onHardDeleteTemplates }])} style={({ pressed }) => [styles.bulkButton, styles.bulkGridItem, { backgroundColor: '#b91c1c', opacity: pressed ? 0.8 : 1 }]}><Text style={[styles.bulkButtonText, { color: '#fff' }]}>Hard delete templates</Text></Pressable>
           </View>
           <Text style={{ color: palette.muted, marginTop: 6 }}>Mode: {isGuest ? 'Guest' : 'Authenticated'} | Persistence: {persistenceMode === 'firebase' ? 'Firebase' : 'Local'}</Text>
           {userEmail ? <Text style={{ color: palette.fg, marginTop: 2 }}>{userEmail}</Text> : null}
@@ -229,6 +231,7 @@ export function SettingsTab({
             <Text style={[styles.bulkButtonText, { color: '#fff' }]}>Log off</Text>
           </Pressable>
         </View>
+        </View>
       </ScrollView>
     </View>
   );
@@ -236,7 +239,8 @@ export function SettingsTab({
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
-  container: { padding: 16, gap: 14, paddingBottom: 120 },
+  scrollOuter: { alignItems: 'center' },
+  container: { padding: 16, gap: 14, paddingBottom: 120, width: '100%', maxWidth: 960 },
   header: { gap: 8, paddingTop: 6 },
   kicker: { fontSize: 10, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 3, fontFamily: 'monospace' },
   pageTitle: { fontSize: 22, fontWeight: '900', letterSpacing: -0.6 },
@@ -259,6 +263,8 @@ const styles = StyleSheet.create({
   toggleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 12 },
   toggleLabel: { fontSize: 13, fontWeight: '700' },
   bulkActions: { flexDirection: 'row', gap: 10, flexWrap: 'wrap' },
+  bulkGrid: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
+  bulkGridItem: { flexBasis: '48%', flexGrow: 1, minWidth: 120 },
   bulkButton: { minHeight: 40, borderRadius: 10, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 14 },
   bulkButtonText: { fontSize: 12, fontWeight: '900', textTransform: 'uppercase', letterSpacing: 1 },
   bottomLogout: { marginTop: 4, paddingTop: 4, borderTopWidth: 1, borderTopColor: 'rgba(148,163,184,0.2)' },

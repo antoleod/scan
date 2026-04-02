@@ -97,7 +97,7 @@ export function HistoryTab({
   }
 
   return (
-    <View style={[mainAppStyles.screen, mainAppStyles.screenLocked]}>
+    <View style={[mainAppStyles.screen, mainAppStyles.screenLocked, { alignSelf: 'center', maxWidth: 1200 }]}>
       <TextInput
         value={query}
         onChangeText={onQueryChange}
@@ -150,7 +150,7 @@ export function HistoryTab({
         numColumns={columns}
         key={`history-grid-${columns}`}
         keyExtractor={(item) => item.id}
-        contentContainerStyle={mainAppStyles.listContent}
+        contentContainerStyle={[mainAppStyles.listContent, { gap: 8 }]}
         columnWrapperStyle={columns > 1 ? { gap: 10 } : undefined}
         ListEmptyComponent={<View style={[mainAppStyles.card, { backgroundColor: palette.card, borderColor: palette.border }]}><Text style={{ color: palette.fg }}>No scans yet.</Text></View>}
         renderItem={({ item }) => {
@@ -182,7 +182,7 @@ export function HistoryTab({
               style={[
                 mainAppStyles.card,
                 mainAppStyles.cardContained,
-                { backgroundColor: palette.card, borderColor: palette.border },
+                { backgroundColor: palette.card, borderColor: palette.border, marginBottom: 0 },
                 columns > 1 ? { flex: 1, minWidth: 0 } : null,
                 isSelected && { borderColor: palette.accent, borderWidth: 2 },
               ]}
@@ -211,8 +211,9 @@ export function HistoryTab({
                   </View>
 
                   {expanded ? <Text style={{ color: palette.fg, fontSize: 12, lineHeight: 17 }}>{notesValue}</Text> : null}
-                  <Pressable onPress={() => setExpandedId(expanded ? null : item.id)}>
-                    <Text style={{ color: palette.accent, fontSize: 12, fontWeight: '700' }}>{expanded ? 'View less' : 'View more'}</Text>
+                  <Pressable onPress={() => setExpandedId(expanded ? null : item.id)} style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-start', opacity: pressed ? 0.7 : 1 })}>
+                    <Ionicons name={expanded ? 'chevron-up-outline' : 'chevron-down-outline'} size={12} color={palette.accent} />
+                    <Text style={{ color: palette.accent, fontSize: 11, fontWeight: '700' }}>{expanded ? 'Less' : 'More'}</Text>
                   </Pressable>
                 </View>
 
@@ -229,12 +230,12 @@ export function HistoryTab({
               </Pressable>
 
               <View style={[mainAppStyles.itemActions, { alignItems: 'center' }]}>
-                <Pressable style={[mainAppStyles.tinyBtn, { borderColor: palette.border, flexDirection: 'row', alignItems: 'center', gap: 6 }]} onPress={() => copyValue(item)}>
+                <Pressable style={({ pressed }) => [mainAppStyles.tinyBtn, { borderColor: palette.border, flexDirection: 'row', alignItems: 'center', gap: 6, opacity: pressed ? 0.75 : 1 }]} onPress={() => copyValue(item)}>
                   <Ionicons name="copy-outline" size={14} color={palette.fg} />
                   {showActionLabels ? <Text style={{ color: palette.fg, fontSize: 11, fontWeight: '700' }}>Copy</Text> : null}
                 </Pressable>
                 <Pressable
-                  style={[mainAppStyles.tinyBtn, { borderColor: palette.border, flexDirection: 'row', alignItems: 'center', gap: 6 }]}
+                  style={({ pressed }) => [mainAppStyles.tinyBtn, { borderColor: palette.border, flexDirection: 'row', alignItems: 'center', gap: 6, opacity: pressed ? 0.75 : 1 }]}
                   onPress={() => {
                     if (editLockRef.current) return;
                     editLockRef.current = true;
@@ -247,11 +248,11 @@ export function HistoryTab({
                   <Ionicons name="create-outline" size={14} color={palette.fg} />
                   {showActionLabels ? <Text style={{ color: palette.fg, fontSize: 11, fontWeight: '700' }}>Edit</Text> : null}
                 </Pressable>
-                <Pressable style={[mainAppStyles.tinyBtn, { borderColor: palette.border, flexDirection: 'row', alignItems: 'center', gap: 6 }]} onPress={() => onToggleUsed(item.id)}>
+                <Pressable style={({ pressed }) => [mainAppStyles.tinyBtn, { borderColor: palette.border, flexDirection: 'row', alignItems: 'center', gap: 6, opacity: pressed ? 0.75 : 1 }]} onPress={() => onToggleUsed(item.id)}>
                   <Ionicons name={used ? 'checkmark-circle-outline' : 'ellipse-outline'} size={14} color={palette.fg} />
                   {showActionLabels ? <Text style={{ color: palette.fg, fontSize: 11, fontWeight: '700' }}>{used ? 'Unuse' : 'Use'}</Text> : null}
                 </Pressable>
-                <Pressable style={[mainAppStyles.tinyBtn, { borderColor: palette.border, flexDirection: 'row', alignItems: 'center', gap: 6 }]} onPress={() => confirmDelete(item)}>
+                <Pressable style={({ pressed }) => [mainAppStyles.tinyBtn, { borderColor: palette.border, flexDirection: 'row', alignItems: 'center', gap: 6, opacity: pressed ? 0.75 : 1 }]} onPress={() => confirmDelete(item)}>
                   <Ionicons name="trash-outline" size={14} color={palette.fg} />
                   {showActionLabels ? <Text style={{ color: palette.fg, fontSize: 11, fontWeight: '700' }}>Delete</Text> : null}
                 </Pressable>
