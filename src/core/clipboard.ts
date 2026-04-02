@@ -107,3 +107,10 @@ export async function addClipboardImageUnique(imageDataUri: string): Promise<{ e
 export async function clearClipboardEntries(): Promise<void> {
   await AsyncStorage.removeItem(CLIPBOARD_KEY);
 }
+
+export async function updateClipboardEntryCategory(id: string, category: ClipboardCategory): Promise<ClipboardEntry[]> {
+  const current = await loadClipboardEntries();
+  const next = current.map((entry) => (entry.id === id ? { ...entry, category } : entry));
+  await saveClipboardEntries(next);
+  return next;
+}

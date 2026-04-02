@@ -127,7 +127,7 @@ function MainApp() {
   const { height, width } = useWindowDimensions();
   const [bootStatus, setBootStatus] = useState<BootStatus>('booting');
   const [persistenceMode, setPersistenceMode] = useState<PersistenceMode>('local');
-  const [activeTab, setActiveTab] = useState<Tab>('scan');
+  const [activeTab, setActiveTab] = useState<Tab>('notes');
   const [settings, setSettings] = useState<AppSettings>(defaultSettings);
   const [history, setHistory] = useState<ScanRecord[]>([]);
   const [templates, setTemplates] = useState<TemplateRule[]>([]);
@@ -1289,7 +1289,7 @@ function MainApp() {
       ? `Firebase (${user.email || 'user'})`
       : 'Firebase guest';
   const selectedDateLabel = selectedDate ? selectedDate.toLocaleDateString() : null;
-  const tabOrder: Tab[] = ['scan', 'history', 'notes', 'settings'];
+  const tabOrder: Tab[] = ['notes', 'scan', 'history', 'settings'];
 
   const swipeResponder = useMemo(() => {
     if (Platform.OS === 'web') return null;

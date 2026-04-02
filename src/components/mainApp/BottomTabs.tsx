@@ -80,12 +80,12 @@ export function BottomTabs({
         Platform.OS === 'web' ? { width: '100%', borderRadius: 0, marginBottom: 0, paddingHorizontal: 10 } : null,
       ]}
     >
-      <Animated.View style={[scanAnim, { flex: 1 }]}>
-        <Pressable onPress={() => onTabPress('scan')} style={[mainAppStyles.footerBtn, activeTab === 'scan' ? { backgroundColor: palette.accent + '14' } : null]}>
-          {activeTab === 'scan' && <View style={[mainAppStyles.footerIndicator, { backgroundColor: palette.accent }]} />}
+      <Animated.View style={[notesAnim, { flex: 1 }]}>
+        <Pressable onPress={() => onTabPress('notes')} style={[mainAppStyles.footerBtn, activeTab === 'notes' ? { backgroundColor: palette.accent + '14' } : null]}>
+          {activeTab === 'notes' && <View style={[mainAppStyles.footerIndicator, { backgroundColor: palette.accent }]} />}
           <View style={mainAppStyles.footerBtnInner}>
-            <Ionicons name="scan" size={activeTab === 'scan' ? 22 : 20} color={activeTab === 'scan' ? palette.accent : palette.muted} />
-            <Text style={{ color: activeTab === 'scan' ? palette.accent : palette.muted, fontSize: 9, fontWeight: '700', letterSpacing: 0.8 }}>SCAN</Text>
+            <Ionicons name="document-text-outline" size={activeTab === 'notes' ? 22 : 20} color={activeTab === 'notes' ? palette.accent : palette.muted} />
+            <Text style={{ color: activeTab === 'notes' ? palette.accent : palette.muted, fontSize: 9, fontWeight: '700', letterSpacing: 0.8 }}>NOTES</Text>
           </View>
         </Pressable>
       </Animated.View>
@@ -106,12 +106,12 @@ export function BottomTabs({
           </View>
         </Pressable>
       </Animated.View>
-      <Animated.View style={[notesAnim, { flex: 1 }]}>
-        <Pressable onPress={() => onTabPress('notes')} style={[mainAppStyles.footerBtn, activeTab === 'notes' ? { backgroundColor: palette.accent + '14' } : null]}>
-          {activeTab === 'notes' && <View style={[mainAppStyles.footerIndicator, { backgroundColor: palette.accent }]} />}
+      <Animated.View style={[scanAnim, { flex: 1 }]}>
+        <Pressable onPress={() => onTabPress('scan')} style={[mainAppStyles.footerBtn, activeTab === 'scan' ? { backgroundColor: palette.accent + '14' } : null]}>
+          {activeTab === 'scan' && <View style={[mainAppStyles.footerIndicator, { backgroundColor: palette.accent }]} />}
           <View style={mainAppStyles.footerBtnInner}>
-            <Ionicons name="document-text-outline" size={activeTab === 'notes' ? 22 : 20} color={activeTab === 'notes' ? palette.accent : palette.muted} />
-            <Text style={{ color: activeTab === 'notes' ? palette.accent : palette.muted, fontSize: 9, fontWeight: '700', letterSpacing: 0.8 }}>NOTES</Text>
+            <Ionicons name="scan" size={activeTab === 'scan' ? 22 : 20} color={activeTab === 'scan' ? palette.accent : palette.muted} />
+            <Text style={{ color: activeTab === 'scan' ? palette.accent : palette.muted, fontSize: 9, fontWeight: '700', letterSpacing: 0.8 }}>SCAN</Text>
           </View>
         </Pressable>
       </Animated.View>

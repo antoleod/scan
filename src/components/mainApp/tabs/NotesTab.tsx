@@ -29,7 +29,7 @@ import {
   refreshNotesFromCloudSilently,
 } from '../../../core/notes';
 import { ClipboardEntry } from '../../../core/clipboard.types';
-import { addClipboardEntryUnique, addClipboardImageUnique, loadClipboardEntries } from '../../../core/clipboard';
+import { addClipboardEntryUnique, addClipboardImageUnique, loadClipboardEntries, updateClipboardEntryCategory } from '../../../core/clipboard';
 import { mainAppStyles } from '../styles';
 
 type Palette = { bg: string; fg: string; accent: string; muted: string; card: string; border: string };
@@ -137,7 +137,6 @@ export function NotesTab({ palette }: { palette: Palette }) {
   const [draftText, setDraftText] = useState('');
   const [draftImages, setDraftImages] = useState<string[]>([]);
   const [manualCategory, setManualCategory] = useState<NoteCategory | null>(null);
-  const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<NoteFilter>('all');
   const [expandedNoteId, setExpandedNoteId] = useState<string | null>(null);
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
@@ -155,6 +154,10 @@ export function NotesTab({ palette }: { palette: Palette }) {
   const [previewEntry, setPreviewEntry] = useState<ClipboardEntry | null>(null);
   const [previewNoteImageUri, setPreviewNoteImageUri] = useState<string | null>(null);
   const [shareNote, setShareNote] = useState<NoteItem | null>(null);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchText, setSearchText] = useState('');
+  const [searchCategory, setSearchCategory] = useState<'all' | string>('all');
+  const [searchDate, setSearchDate] = useState('');
   const [lastNoteTap, setLastNoteTap] = useState<{ id: string; ts: number } | null>(null);
   const [lastTap, setLastTap] = useState<{ id: string; ts: number } | null>(null);
 
@@ -235,8 +238,40 @@ export function NotesTab({ palette }: { palette: Palette }) {
       reader.readAsDataURL(file);
     };
 
+    const onCopyOrCut = () => {
+      setTimeout(() => {
+        Clipboard.getStringAsync().then((text) => {
+          const value = String(text || '').trim();
+          if (!value) return;
+          addClipboardEntryUnique(value).then((result) => {
+            if (result.inserted) setClipboardItems(result.entries);
+          }).catch(() => undefined);
+        }).catch(() => undefined);
+      }, 40);
+    };
+
+    const onFocus = () => {
+      Clipboard.getStringAsync().then((text) => {
+        const value = String(text || '').trim();
+        if (!value) return;
+        addClipboardEntryUnique(value).then((result) => {
+          if (result.inserted) setClipboardItems(result.entries);
+        }).catch(() => undefined);
+      }).catch(() => undefined);
+    };
+
     window.addEventListener('paste', onPaste);
-    return () => window.removeEventListener('paste', onPaste);
+    window.addEventListener('copy', onCopyOrCut);
+    window.addEventListener('cut', onCopyOrCut);
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onFocus);
+    return () => {
+      window.removeEventListener('paste', onPaste);
+      window.removeEventListener('copy', onCopyOrCut);
+      window.removeEventListener('cut', onCopyOrCut);
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onFocus);
+    };
   }, []);
 
   useEffect(() => {
@@ -272,7 +307,7 @@ export function NotesTab({ palette }: { palette: Palette }) {
       }
     };
 
-    const timer = setInterval(() => { tick().catch(() => undefined); }, 900);
+    const timer = setInterval(() => { tick().catch(() => undefined); }, 300);
     tick().catch(() => undefined);
 
     return () => {
@@ -281,9 +316,14 @@ export function NotesTab({ palette }: { palette: Palette }) {
     };
   }, [clipboardAvailable]);
 
+  const noteCategories = useMemo(() => Array.from(new Set(notes.map((n) => n.category))), [notes]);
+  const clipboardCategories = useMemo(() => Array.from(new Set(clipboardItems.map((n) => n.category))), [clipboardItems]);
+
   const filteredNotes = useMemo(() => {
-    const q = search.trim().toLowerCase();
+    const q = searchText.trim().toLowerCase();
     let next = q ? notes.filter((n) => `${n.text} ${(n.attachments || []).join(' ')} ${n.category}`.toLowerCase().includes(q)) : notes;
+    if (searchCategory !== 'all') next = next.filter((n) => n.category === searchCategory);
+    if (searchDate) next = next.filter((n) => new Date(n.updatedAt).toISOString().slice(0, 10) === searchDate);
     if (activeGroupId === 'personal') {
       next = next.filter((n) => !n.groupId);
     } else {
@@ -294,7 +334,7 @@ export function NotesTab({ palette }: { palette: Palette }) {
     if (filter === 'archived') next = next.filter((n) => n.archived);
     if (filter !== 'archived') next = next.filter((n) => !n.archived);
     return next;
-  }, [notes, search, filter, activeGroupId]);
+  }, [notes, searchText, searchCategory, searchDate, filter, activeGroupId]);
 
   const filteredTemplates = useMemo(() => {
     const q = templateSearch.trim().toLowerCase();
@@ -302,8 +342,25 @@ export function NotesTab({ palette }: { palette: Palette }) {
     return templates.filter((t) => `${t.name} ${t.subject} ${t.body}`.toLowerCase().includes(q));
   }, [templates, templateSearch]);
 
+  const filteredClipboard = useMemo(() => {
+    const q = searchText.trim().toLowerCase();
+    let next = q ? clipboardItems.filter((n) => `${n.content} ${n.category}`.toLowerCase().includes(q)) : clipboardItems;
+    if (searchCategory !== 'all') next = next.filter((n) => n.category === searchCategory);
+    if (searchDate) next = next.filter((n) => new Date(n.capturedAt).toISOString().slice(0, 10) === searchDate);
+    return next;
+  }, [clipboardItems, searchText, searchCategory, searchDate]);
+
   const noteRows = useMemo(() => chunk(filteredNotes, isDesktop ? desktopColumns : 1), [filteredNotes, isDesktop, desktopColumns]);
-  const clipboardRows = useMemo(() => chunk(clipboardItems, isDesktop ? desktopColumns : 1), [clipboardItems, isDesktop, desktopColumns]);
+  const groupedClipboard = useMemo(() => {
+    const map = new Map<string, ClipboardEntry[]>();
+    for (const entry of filteredClipboard) {
+      const key = new Date(entry.capturedAt).toISOString().slice(0, 10);
+      const list = map.get(key) || [];
+      list.push(entry);
+      map.set(key, list);
+    }
+    return Array.from(map.entries()).sort((a, b) => (a[0] < b[0] ? 1 : -1));
+  }, [filteredClipboard]);
 
   async function addImageToDraft() {
     const picked = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.9, base64: false });
@@ -571,7 +628,6 @@ export function NotesTab({ palette }: { palette: Palette }) {
             {smartResult ? <View style={[mainAppStyles.card, { backgroundColor: palette.card, borderColor: palette.border }]}><Text style={{ color: palette.fg, fontWeight: '800', marginBottom: 6 }}>Generated structure</Text><Text style={{ color: palette.fg, fontSize: 12, lineHeight: 18 }}>{smartResult.summary}</Text><View style={styles.editorActions}><Pressable style={[styles.iconOnlyAction, { borderColor: palette.border }]} onPress={() => saveDraftAsNote().catch(() => undefined)}><Ionicons name="document-text-outline" size={16} color={palette.fg} /></Pressable><Pressable style={[styles.iconOnlyAction, { borderColor: palette.border }]} onPress={() => { setWorkspaceTab('templates'); setTemplateName(smartResult.ticketNumber || 'Generated template'); setTemplateSubject(`Follow-up ${smartResult.ticketNumber || ''}`.trim()); setTemplateBody(smartResult.summary); }}><Ionicons name="layers-outline" size={16} color={palette.fg} /></Pressable><Pressable style={[styles.iconOnlyAction, { borderColor: palette.border }]} onPress={() => createOutlookEventFromContent(smartResult.summary).catch(() => undefined)}><Ionicons name="calendar-outline" size={16} color={palette.fg} /></Pressable></View></View> : null}
 
             <View style={[mainAppStyles.card, { backgroundColor: palette.card, borderColor: palette.border }]}>
-              <TextInput style={[mainAppStyles.input, { backgroundColor: palette.bg, color: palette.fg, borderColor: palette.border, marginTop: 0 }]} placeholder="Search notes" placeholderTextColor={palette.muted} value={search} onChangeText={setSearch} />
               <View style={styles.filterRow}>{(['all', 'work', 'pinned', 'archived'] as NoteFilter[]).map((item) => <Pressable key={item} style={[styles.categoryChip, { borderColor: filter === item ? palette.accent : palette.border }]} onPress={() => setFilter(item)}><Text style={{ color: palette.fg, fontSize: 11, fontWeight: '700' }}>{item}</Text></Pressable>)}</View>
             </View>
 
@@ -708,9 +764,12 @@ export function NotesTab({ palette }: { palette: Palette }) {
           <>
             <View style={[mainAppStyles.card, { backgroundColor: palette.card, borderColor: palette.border }]}><View style={styles.editorHeader}><Text style={{ color: palette.fg, fontWeight: '800' }}>Clipboard timeline</Text><View style={styles.editorActions}><Pressable style={[styles.iconOnlyAction, { borderColor: palette.border }]} onPress={() => importScreenshotToClipboard().catch(() => undefined)}><Ionicons name="image-outline" size={16} color={palette.fg} /></Pressable></View></View><Text style={{ color: palette.muted, fontSize: 11, marginTop: 4 }}>{clipboardAvailable ? 'Active capture (app focus required). Duplicates are ignored.' : 'Clipboard capture not available on this device.'}</Text></View>
             <View style={styles.gridWrap}>
-              {clipboardRows.map((row, rowIndex) => (
-                <View key={`clip-row-${rowIndex}`} style={styles.gridRow}>
-                  {row.map((entry) => {
+              {groupedClipboard.map(([day, entries]) => (
+                <View key={day} style={{ gap: 8 }}>
+                  <Text style={{ color: palette.muted, fontSize: 11, fontWeight: '800' }}>{day}</Text>
+                  {chunk(entries, isDesktop ? desktopColumns : 1).map((row, rowIndex) => (
+                    <View key={`clip-row-${day}-${rowIndex}`} style={styles.gridRow}>
+                      {row.map((entry) => {
                     const eventDate = parseFollowUpDate(entry.content);
                     return (
                       <Pressable
@@ -726,6 +785,10 @@ export function NotesTab({ palette }: { palette: Palette }) {
                         <Text style={{ color: palette.fg, fontSize: 12 }} numberOfLines={2}>{entry.content}</Text>
                         <Text style={{ color: palette.muted, fontSize: 10 }}>Double tap to preview</Text>
                         <View style={styles.editorActions}>
+                          <Pressable onPress={() => updateClipboardEntryCategory(entry.id, 'general').then(setClipboardItems)}><Text style={{ color: palette.muted, fontSize: 10 }}>G</Text></Pressable>
+                          <Pressable onPress={() => updateClipboardEntryCategory(entry.id, 'code').then(setClipboardItems)}><Text style={{ color: palette.muted, fontSize: 10 }}>C</Text></Pressable>
+                          <Pressable onPress={() => updateClipboardEntryCategory(entry.id, 'servicenow').then(setClipboardItems)}><Text style={{ color: palette.muted, fontSize: 10 }}>S</Text></Pressable>
+                          <Pressable onPress={() => updateClipboardEntryCategory(entry.id, 'link').then(setClipboardItems)}><Text style={{ color: palette.muted, fontSize: 10 }}>L</Text></Pressable>
                           <Pressable onPress={() => forceCopyToClipboard(entry.content).catch(() => undefined)}><Ionicons name="copy-outline" size={16} color={palette.fg} /></Pressable>
                           <Pressable onPress={() => sendClipboardToNote(entry).catch(() => undefined)}><Ionicons name="document-text-outline" size={16} color={palette.fg} /></Pressable>
                           <Pressable onPress={() => sendClipboardToTemplate(entry)}><Ionicons name="layers-outline" size={16} color={palette.fg} /></Pressable>
@@ -733,14 +796,43 @@ export function NotesTab({ palette }: { palette: Palette }) {
                         </View>
                       </Pressable>
                     );
-                  })}
-                  {row.length < (isDesktop ? desktopColumns : 1) ? Array.from({ length: (isDesktop ? desktopColumns : 1) - row.length }).map((_, i) => <View key={`clip-fill-${i}`} style={{ flex: 1 }} />) : null}
+                      })}
+                      {row.length < (isDesktop ? desktopColumns : 1) ? Array.from({ length: (isDesktop ? desktopColumns : 1) - row.length }).map((_, i) => <View key={`clip-fill-${day}-${i}`} style={{ flex: 1 }} />) : null}
+                    </View>
+                  ))}
                 </View>
               ))}
             </View>
           </>
         ) : null}
       </View>
+
+      {(workspaceTab === 'notes' || workspaceTab === 'clipboard') ? (
+        <Pressable style={[styles.floatingSearch, { backgroundColor: palette.accent }]} onPress={() => setSearchOpen(true)}>
+          <Ionicons name="search" size={18} color="#fff" />
+        </Pressable>
+      ) : null}
+
+      <Modal animationType="fade" transparent visible={searchOpen} onRequestClose={() => setSearchOpen(false)} statusBarTranslucent>
+        <Pressable style={mainAppStyles.modalBackdrop} onPress={() => setSearchOpen(false)}>
+          <Pressable style={[mainAppStyles.modalForm, { backgroundColor: palette.card, borderColor: palette.border, maxWidth: 560 }]} onPress={() => null}>
+            <View style={mainAppStyles.modalHeader}>
+              <Text style={[mainAppStyles.sectionTitle, { color: palette.fg }]}>Smart search</Text>
+              <Pressable style={[mainAppStyles.modalCloseBtn, { borderColor: palette.border }]} onPress={() => setSearchOpen(false)}>
+                <Ionicons name="close" size={18} color={palette.fg} />
+              </Pressable>
+            </View>
+            <TextInput style={[mainAppStyles.input, { backgroundColor: palette.bg, color: palette.fg, borderColor: palette.border, marginTop: 0 }]} placeholder="Search text..." placeholderTextColor={palette.muted} value={searchText} onChangeText={setSearchText} />
+            <TextInput style={[mainAppStyles.input, { backgroundColor: palette.bg, color: palette.fg, borderColor: palette.border }]} placeholder="Date (YYYY-MM-DD)" placeholderTextColor={palette.muted} value={searchDate} onChangeText={setSearchDate} />
+            <View style={styles.filterRow}>
+              <Pressable style={[styles.categoryChip, { borderColor: searchCategory === 'all' ? palette.accent : palette.border }]} onPress={() => setSearchCategory('all')}><Text style={{ color: palette.fg, fontSize: 11, fontWeight: '700' }}>all</Text></Pressable>
+              {(workspaceTab === 'notes' ? noteCategories : clipboardCategories).map((c) => (
+                <Pressable key={c} style={[styles.categoryChip, { borderColor: searchCategory === c ? palette.accent : palette.border }]} onPress={() => setSearchCategory(c)}><Text style={{ color: palette.fg, fontSize: 11, fontWeight: '700' }}>{c}</Text></Pressable>
+              ))}
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       <Modal animationType="fade" transparent visible={Boolean(previewEntry)} onRequestClose={() => setPreviewEntry(null)} statusBarTranslucent>
         <Pressable style={mainAppStyles.modalBackdrop} onPress={() => setPreviewEntry(null)}>
@@ -863,4 +955,5 @@ const styles = StyleSheet.create({
   previewImageLarge: { width: '100%', height: 420, borderRadius: 10, backgroundColor: '#000' },
   previewActions: { marginTop: 14, flexDirection: 'row', gap: 10 },
   previewBtn: { flex: 1, minHeight: 40, borderRadius: 10, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  floatingSearch: { position: 'absolute', right: 16, bottom: 18, width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center', zIndex: 20 },
 });
