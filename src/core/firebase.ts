@@ -14,6 +14,7 @@ import {
 import {
   Firestore,
   collection,
+  deleteDoc,
   doc,
   getDocs,
   getFirestore,
@@ -268,16 +269,40 @@ export async function syncNotesWithFirebase(localNotes: NoteItem[], localTemplat
   const notesRef = collection(rt.db, 'users', uid, 'notes');
   const templatesRef = collection(rt.db, 'users', uid, 'noteTemplates');
 
+  const notesSnapBefore = await getDocs(query(notesRef));
+  const serverNoteIds = new Set<string>();
+  notesSnapBefore.forEach((d) => serverNoteIds.add(d.id));
+
+  const templatesSnapBefore = await getDocs(query(templatesRef));
+  const serverTemplateIds = new Set<string>();
+  templatesSnapBefore.forEach((d) => serverTemplateIds.add(d.id));
+
+  const localNotesLimited = localNotes.slice(0, 3000);
+  const localNoteIds = new Set(localNotesLimited.map((note) => note.id));
   let pushedNotes = 0;
-  for (const note of localNotes.slice(0, 3000)) {
+  for (const note of localNotesLimited) {
     await setDoc(doc(notesRef, note.id), { ...note, uid, updatedAtServer: serverTimestamp() }, { merge: true });
     pushedNotes += 1;
   }
 
+  const localTemplatesLimited = localTemplates.slice(0, 300);
+  const localTemplateIds = new Set(localTemplatesLimited.map((template) => template.id));
   let pushedTemplates = 0;
-  for (const template of localTemplates.slice(0, 300)) {
+  for (const template of localTemplatesLimited) {
     await setDoc(doc(templatesRef, template.id), { ...template, uid, updatedAtServer: serverTimestamp() }, { merge: true });
     pushedTemplates += 1;
+  }
+
+  // Local state is authoritative for deletions to avoid "reviving" removed notes/templates.
+  for (const serverId of serverNoteIds) {
+    if (!localNoteIds.has(serverId)) {
+      await deleteDoc(doc(notesRef, serverId));
+    }
+  }
+  for (const serverId of serverTemplateIds) {
+    if (!localTemplateIds.has(serverId)) {
+      await deleteDoc(doc(templatesRef, serverId));
+    }
   }
 
   const notesSnap = await getDocs(query(notesRef));

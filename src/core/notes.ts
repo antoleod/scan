@@ -85,12 +85,8 @@ async function syncNotesStateIfAuthenticated(notesOverride?: NoteItem[], templat
     const notes = notesOverride || (await loadNotes());
     const templates = templatesOverride || (await loadTemplates());
     const result = await syncNotesWithFirebase(notes, templates);
-    if (result.serverNotes.length) {
-      await AsyncStorage.setItem(NOTES_KEY, JSON.stringify(normalizeNotes(result.serverNotes).slice(0, 3000)));
-    }
-    if (result.serverTemplates.length) {
-      await AsyncStorage.setItem(TEMPLATES_KEY, JSON.stringify(result.serverTemplates.slice(0, 300)));
-    }
+    await AsyncStorage.setItem(NOTES_KEY, JSON.stringify(normalizeNotes(result.serverNotes).slice(0, 3000)));
+    await AsyncStorage.setItem(TEMPLATES_KEY, JSON.stringify(result.serverTemplates.slice(0, 300)));
   } catch {
     // keep local flow responsive when offline or unauthenticated
   }

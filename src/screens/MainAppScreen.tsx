@@ -974,6 +974,12 @@ function MainApp() {
     }, 1400);
   }, [history, user, persistenceMode]);
 
+  useEffect(() => {
+    if (!user || persistenceMode !== 'firebase') return;
+    // Fast cross-device sync on login/session restore.
+    syncNow(false).catch(() => undefined);
+  }, [user?.uid, persistenceMode]);
+
   async function clearAllHistory() {
     Alert.alert('Confirm', 'Clear local history?', [
       { text: 'Cancel', style: 'cancel' },
