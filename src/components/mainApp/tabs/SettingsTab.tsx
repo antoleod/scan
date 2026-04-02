@@ -113,7 +113,7 @@ export function SettingsTab({
   const themeOptions = useMemo<ThemeOption[]>(() => [
     { key: 'dark', label: 'Enterprise', background: '#0A1740', text: '#FFFFFF', border: 'rgba(255,216,77,0.15)', accent: '#FFD84D' },
     { key: 'light', label: 'Light', background: '#FFFFFF', text: '#111111', border: '#D0D8E8', accent: '#0052CC' },
-    { key: 'eu_blue', label: 'Matrix', background: '#040f08', text: '#9df8b1', border: '#1a4a2b', accent: '#31ff65' },
+    { key: 'eu_blue', label: 'Matrix', background: '#020402', text: '#8dff7a', border: '#0f2e10', accent: '#39ff14' },
     { key: 'custom', label: 'Custom', background: '#112244', text: '#00D4FF', border: '#00AACC', accent: '#00D4FF' },
     { key: 'parliament', label: 'Parliament', background: '#2A1245', text: '#FFCC00', border: '#6B3FB5', accent: '#FFCC00' },
     { key: 'noirGraphite', label: 'Noir', background: '#1A1A1A', text: '#FFFFFF', border: '#333333', accent: '#FF6B00' },
@@ -212,11 +212,11 @@ export function SettingsTab({
           {userEmail ? <Text style={{ color: palette.fg, marginTop: 2 }}>{userEmail}</Text> : null}
         </SectionCard>
 
-        <SectionCard title="Log off" subtitle="End current session." accent={palette.accent} subtitleColor={palette.muted} cardBackground={palette.card} cardBorder={palette.border}>
-          <View style={styles.bulkActions}>
-            <Pressable onPress={onLogout} style={[styles.bulkButton, { backgroundColor: palette.accent }]}><Text style={[styles.bulkButtonText, { color: '#fff' }]}>Log off</Text></Pressable>
-          </View>
-        </SectionCard>
+        <View style={styles.bottomLogout}>
+          <Pressable onPress={onLogout} style={[styles.bulkButton, styles.bottomLogoutBtn, { backgroundColor: palette.accent }]}>
+            <Text style={[styles.bulkButtonText, { color: '#fff' }]}>Log off</Text>
+          </Pressable>
+        </View>
       </ScrollView>
     </View>
   );
@@ -249,6 +249,8 @@ const styles = StyleSheet.create({
   bulkActions: { flexDirection: 'row', gap: 10, flexWrap: 'wrap' },
   bulkButton: { minHeight: 40, borderRadius: 10, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 14 },
   bulkButtonText: { fontSize: 12, fontWeight: '900', textTransform: 'uppercase', letterSpacing: 1 },
+  bottomLogout: { marginTop: 4, paddingTop: 4, borderTopWidth: 1, borderTopColor: 'rgba(148,163,184,0.2)' },
+  bottomLogoutBtn: { alignSelf: 'stretch' },
   passwordResult: { borderWidth: 1, borderRadius: 12, padding: 12, gap: 10 },
   passwordResultText: { fontSize: 13, fontWeight: '800', letterSpacing: 0.4, lineHeight: 18 },
   input: { minHeight: 42, borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 13 },

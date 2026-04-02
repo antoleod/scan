@@ -3,6 +3,7 @@ import { syncNotesWithFirebase } from './firebase';
 
 const NOTES_KEY = '@barra_notes_v1';
 const TEMPLATES_KEY = '@barra_note_templates_v1';
+const NOTES_SEEDED_KEY = '@barra_notes_seeded_v1';
 
 export type NoteKind = 'text' | 'image';
 export type NoteCategory = 'general' | 'work';
@@ -230,7 +231,9 @@ export async function togglePinned(id: string): Promise<NoteItem[]> {
 }
 
 export async function clearNotes(): Promise<void> {
-  await AsyncStorage.removeItem(NOTES_KEY);
+  await AsyncStorage.setItem(NOTES_KEY, JSON.stringify([]));
+  // Mark as initialized to avoid demo reseeding after user clears everything.
+  await AsyncStorage.setItem(NOTES_SEEDED_KEY, '1');
   await syncNotesStateIfAuthenticated([], undefined);
 }
 
@@ -286,9 +289,10 @@ export async function ensureWorkNotesAndEmailTemplates(): Promise<{
 }> {
   let notes = await loadNotes();
   let templates = await loadTemplates();
+  const seeded = (await AsyncStorage.getItem(NOTES_SEEDED_KEY)) === '1';
 
   const hasWorkNotes = notes.some((item) => item.category === 'work');
-  if (!hasWorkNotes) {
+  if (!seeded && !hasWorkNotes && notes.length === 0) {
     const now = Date.now();
     const examples: NoteItem[] = [
       {
@@ -321,6 +325,7 @@ export async function ensureWorkNotesAndEmailTemplates(): Promise<{
     ];
     notes = normalizeNotes([...examples, ...notes]);
     await saveNotes(notes);
+    await AsyncStorage.setItem(NOTES_SEEDED_KEY, '1');
     await syncNotesStateIfAuthenticated(notes, templates);
   }
 

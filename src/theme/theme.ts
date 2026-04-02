@@ -16,12 +16,12 @@
     border: '#C3D2EA',
   },
   eu_blue: {
-    bg: '#050d08',
-    fg: '#C4FFC9',
-    accent: '#31ff65',
-    muted: '#6fa77b',
-    card: '#08150d',
-    border: '#14301f',
+    bg: '#010301',
+    fg: '#93ff83',
+    accent: '#39ff14',
+    muted: '#4e8f49',
+    card: '#040904',
+    border: '#0f2e10',
   },
   custom: {
     bg: '#0A1628',
