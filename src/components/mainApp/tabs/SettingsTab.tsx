@@ -4,7 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { AppSettings, type PersistenceMode } from '../../../types';
 import { BARCODE_FORMAT_OPTIONS, type BarcodeFormat } from '../../../core/barcode';
-import { canInstallPwa, subscribePwaInstallAvailability, triggerPwaInstall } from '../../../core/pwa';
+import { canInstallPwa, getPwaInstallDiagnostics, subscribePwaInstallAvailability, triggerPwaInstall } from '../../../core/pwa';
 import { useAppTheme } from '../../../constants/theme';
 
 type Palette = { bg: string; fg: string; accent: string; muted: string; card: string; border: string };
@@ -109,8 +109,15 @@ export function SettingsTab({
   const [installBusy, setInstallBusy] = useState(false);
   const [pwaInstallAvailable, setPwaInstallAvailable] = useState(canInstallPwa());
   const [isInstalled, setIsInstalled] = useState(false);
+  const [pwaDiag, setPwaDiag] = useState(getPwaInstallDiagnostics());
 
   useEffect(() => subscribePwaInstallAvailability(setPwaInstallAvailable), []);
+  useEffect(() => {
+    const tick = () => setPwaDiag(getPwaInstallDiagnostics());
+    tick();
+    const id = setInterval(tick, 2000);
+    return () => clearInterval(id);
+  }, []);
   useEffect(() => {
     if (Platform.OS !== 'web' || typeof window === 'undefined') return;
     setIsInstalled(window.matchMedia('(display-mode: standalone)').matches);
@@ -223,11 +230,7 @@ export function SettingsTab({
               <Text style={[styles.bulkButtonText, { color: palette.fg }]}>Open install guide</Text>
             </Pressable>
             <Text style={[styles.helperLine, { color: palette.muted }]}>
-              {isInstalled
-                ? 'PWA appears installed in this browser profile.'
-                : pwaInstallAvailable
-                  ? 'Installer ready in this browser session.'
-                  : 'Auto prompt not available; use manual install from browser menu.'}
+              {pwaDiag.reason}
             </Text>
           </SectionCard>
         ) : null}

@@ -1,5 +1,15 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { clearNotesInFirebase, clearTemplatesInFirebase, deleteNoteFromFirebase, deleteTemplateFromFirebase, fetchNotesFromFirebase, syncNotesWithFirebase } from './firebase';
+import {
+  clearNotesInFirebase,
+  clearTemplatesInFirebase,
+  deleteNoteFromFirebase,
+  deleteSharedGroupNote,
+  deleteTemplateFromFirebase,
+  fetchNotesFromFirebase,
+  fetchSharedGroupNotesForCurrentUser,
+  syncNotesWithFirebase,
+  upsertSharedGroupNote,
+} from './firebase';
 
 const NOTES_KEY = '@barra_notes_v1';
 const TEMPLATES_KEY = '@barra_note_templates_v1';
@@ -13,6 +23,9 @@ export interface NoteItem {
   kind: NoteKind;
   category: NoteCategory;
   text: string;
+  groupId?: string;
+  color?: 'default' | 'amber' | 'mint' | 'sky' | 'rose';
+  archived?: boolean;
   imageBase64?: string;
   imageMimeType?: string;
   attachments?: string[];
@@ -45,6 +58,7 @@ function normalizeText(value: string) {
 
 function normalizeNotes(items: NoteItem[]): NoteItem[] {
   return [...items].sort((a, b) => {
+    if (Boolean(a.archived) !== Boolean(b.archived)) return a.archived ? 1 : -1;
     if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
     return b.updatedAt - a.updatedAt;
   });
@@ -63,6 +77,9 @@ export async function loadNotes(): Promise<NoteItem[]> {
           kind: item?.kind === 'image' ? 'image' : 'text',
           category: item?.category === 'work' ? 'work' : 'general',
           text: String(item?.text || ''),
+          groupId: typeof item?.groupId === 'string' ? item.groupId : undefined,
+          color: (['default', 'amber', 'mint', 'sky', 'rose'].includes(String(item?.color || '')) ? item.color : 'default') as NoteItem['color'],
+          archived: Boolean(item?.archived),
           imageBase64: typeof item?.imageBase64 === 'string' ? item.imageBase64 : undefined,
           imageMimeType: typeof item?.imageMimeType === 'string' ? item.imageMimeType : undefined,
           attachments: Array.isArray(item?.attachments) ? item.attachments.map((v: unknown) => String(v || '')).filter(Boolean).slice(0, 8) : undefined,
@@ -96,6 +113,20 @@ async function syncNotesStateIfAuthenticated(notesOverride?: NoteItem[], templat
 function isDuplicateText(notes: NoteItem[], value: string) {
   const normalized = normalizeText(value).toLowerCase();
   return notes.some((item) => item.kind === 'text' && normalizeText(item.text).toLowerCase() === normalized);
+}
+
+function normalizeAttachmentList(attachments: string[]) {
+  return attachments.map((v) => String(v || '').trim()).filter(Boolean).sort();
+}
+
+function sameAttachments(a: string[] = [], b: string[] = []) {
+  const aa = normalizeAttachmentList(a);
+  const bb = normalizeAttachmentList(b);
+  if (aa.length !== bb.length) return false;
+  for (let i = 0; i < aa.length; i += 1) {
+    if (aa[i] !== bb[i]) return false;
+  }
+  return true;
 }
 
 function isDuplicateImage(notes: NoteItem[], base64: string) {
@@ -134,13 +165,18 @@ export async function addRichNoteUnique(
   text: string,
   category: NoteCategory = 'general',
   attachments: string[] = [],
+  groupId?: string,
 ): Promise<{ notes: NoteItem[]; inserted: boolean }> {
   const trimmed = text.trim();
   const normalizedAttachments = attachments.map((item) => String(item || '').trim()).filter(Boolean).slice(0, 8);
   if (!trimmed && normalizedAttachments.length === 0) return { notes: await loadNotes(), inserted: false };
 
   const current = await loadNotes();
-  if (trimmed && isDuplicateText(current, trimmed)) {
+  if (current.some((item) =>
+    item.kind === 'text' &&
+    normalizeText(item.text).toLowerCase() === normalizeText(trimmed || 'Attachment note').toLowerCase() &&
+    sameAttachments(item.attachments || [], normalizedAttachments)
+  )) {
     return { notes: current, inserted: false };
   }
 
@@ -151,6 +187,9 @@ export async function addRichNoteUnique(
       kind: 'text',
       category,
       text: trimmed || 'Attachment note',
+      groupId: groupId?.trim() || undefined,
+      color: 'default',
+      archived: false,
       attachments: normalizedAttachments.length ? normalizedAttachments : undefined,
       pinned: false,
       createdAt: now,
@@ -161,6 +200,9 @@ export async function addRichNoteUnique(
 
   await saveNotes(next);
   await syncNotesStateIfAuthenticated(normalizeNotes(next));
+  if (groupId?.trim()) {
+    await upsertSharedGroupNote(groupId.trim(), next[0]);
+  }
   return { notes: normalizeNotes(next), inserted: true };
 }
 
@@ -187,6 +229,8 @@ export async function addImageNoteUnique(dataUri: string, title = 'Screenshot ca
       kind: 'image',
       category: 'general',
       text: title,
+      color: 'default',
+      archived: false,
       imageBase64: base64,
       imageMimeType: mimeType,
       pinned: false,
@@ -202,11 +246,16 @@ export async function addImageNoteUnique(dataUri: string, title = 'Screenshot ca
 
 export async function removeNote(id: string): Promise<NoteItem[]> {
   const current = await loadNotes();
+  const existing = current.find((item) => item.id === id);
   const next = current.filter((item) => item.id !== id);
   const normalized = normalizeNotes(next);
   await saveNotes(normalized);
   try {
-    await deleteNoteFromFirebase(id);
+    if (existing?.groupId) {
+      await deleteSharedGroupNote(existing.groupId, id);
+    } else {
+      await deleteNoteFromFirebase(id);
+    }
   } catch {
     await syncNotesStateIfAuthenticated(normalized);
   }
@@ -222,6 +271,10 @@ export async function updateNoteText(id: string, text: string): Promise<NoteItem
   );
   await saveNotes(next);
   await syncNotesStateIfAuthenticated(normalizeNotes(next));
+  const updated = next.find((item) => item.id === id);
+  if (updated?.groupId) {
+    await upsertSharedGroupNote(updated.groupId, updated);
+  }
   return normalizeNotes(next);
 }
 
@@ -232,6 +285,38 @@ export async function togglePinned(id: string): Promise<NoteItem[]> {
   );
   await saveNotes(next);
   await syncNotesStateIfAuthenticated(normalizeNotes(next));
+  const updated = next.find((item) => item.id === id);
+  if (updated?.groupId) {
+    await upsertSharedGroupNote(updated.groupId, updated);
+  }
+  return normalizeNotes(next);
+}
+
+export async function setNoteColor(id: string, color: NoteItem['color'] = 'default'): Promise<NoteItem[]> {
+  const current = await loadNotes();
+  const next = current.map((item) =>
+    item.id === id ? { ...item, color, updatedAt: Date.now() } : item,
+  );
+  await saveNotes(next);
+  await syncNotesStateIfAuthenticated(normalizeNotes(next));
+  const updated = next.find((item) => item.id === id);
+  if (updated?.groupId) {
+    await upsertSharedGroupNote(updated.groupId, updated);
+  }
+  return normalizeNotes(next);
+}
+
+export async function toggleArchived(id: string): Promise<NoteItem[]> {
+  const current = await loadNotes();
+  const next = current.map((item) =>
+    item.id === id ? { ...item, archived: !item.archived, updatedAt: Date.now() } : item,
+  );
+  await saveNotes(next);
+  await syncNotesStateIfAuthenticated(normalizeNotes(next));
+  const updated = next.find((item) => item.id === id);
+  if (updated?.groupId) {
+    await upsertSharedGroupNote(updated.groupId, updated);
+  }
   return normalizeNotes(next);
 }
 
@@ -408,7 +493,8 @@ export async function hardDeleteAllTemplates(): Promise<void> {
 export async function refreshNotesFromCloudSilently(): Promise<{ notes: NoteItem[]; templates: NoteTemplate[] } | null> {
   try {
     const result = await fetchNotesFromFirebase();
-    const notes = normalizeNotes(result.serverNotes).slice(0, 3000);
+    const sharedNotes = await fetchSharedGroupNotesForCurrentUser();
+    const notes = normalizeNotes([...result.serverNotes, ...sharedNotes]).slice(0, 3000);
     const templates = result.serverTemplates.slice(0, 300);
     await AsyncStorage.setItem(NOTES_KEY, JSON.stringify(notes));
     await AsyncStorage.setItem(TEMPLATES_KEY, JSON.stringify(templates));

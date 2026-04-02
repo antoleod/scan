@@ -12,15 +12,19 @@ import {
   User,
 } from 'firebase/auth';
 import {
+  arrayUnion,
   Firestore,
   collection,
   deleteDoc,
   doc,
   getDocs,
   getFirestore,
+  getDoc,
   query,
   serverTimestamp,
   setDoc,
+  updateDoc,
+  where,
 } from 'firebase/firestore';
 
 import { ScanRecord } from '../types';
@@ -402,4 +406,102 @@ export async function clearTemplatesInFirebase(): Promise<void> {
   for (const item of snap.docs) {
     await deleteDoc(doc(templatesRef, item.id));
   }
+}
+
+export type SharedNoteGroup = {
+  id: string;
+  name: string;
+  ownerUid: string;
+  members: string[];
+  inviteCode: string;
+  updatedAt?: unknown;
+};
+
+function normalizeInviteCode(value: string): string {
+  return String(value || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 12);
+}
+
+export async function createSharedNoteGroup(name: string): Promise<SharedNoteGroup> {
+  const rt = await initFirebaseRuntime();
+  if (!rt.enabled || !rt.auth || !rt.db) throw new Error(buildFirebaseDisabledErrorMessage(rt));
+  const user = rt.auth.currentUser;
+  if (!user) throw new Error('No authenticated session to create a group.');
+
+  const cleanName = String(name || '').trim() || 'Shared Notes';
+  const groupId = `grp_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  const inviteCode = normalizeInviteCode(`${cleanName.slice(0, 4)}${Math.random().toString(36).slice(2, 8)}`);
+  const payload: SharedNoteGroup = {
+    id: groupId,
+    name: cleanName,
+    ownerUid: user.uid,
+    members: [user.uid],
+    inviteCode,
+  };
+  await setDoc(doc(rt.db, 'noteGroups', groupId), { ...payload, updatedAt: serverTimestamp() }, { merge: true });
+  return payload;
+}
+
+export async function joinSharedNoteGroup(inviteCodeInput: string): Promise<SharedNoteGroup | null> {
+  const rt = await initFirebaseRuntime();
+  if (!rt.enabled || !rt.auth || !rt.db) throw new Error(buildFirebaseDisabledErrorMessage(rt));
+  const user = rt.auth.currentUser;
+  if (!user) throw new Error('No authenticated session to join a group.');
+  const inviteCode = normalizeInviteCode(inviteCodeInput);
+  if (!inviteCode) return null;
+
+  const groupsRef = collection(rt.db, 'noteGroups');
+  const snap = await getDocs(query(groupsRef, where('inviteCode', '==', inviteCode)));
+  if (snap.empty) return null;
+  const first = snap.docs[0];
+  const base = first.data() as SharedNoteGroup;
+  const nextMembers = Array.from(new Set([...(base.members || []), user.uid]));
+  await updateDoc(doc(rt.db, 'noteGroups', first.id), { members: arrayUnion(user.uid), updatedAt: serverTimestamp() });
+  return { ...base, id: first.id, members: nextMembers };
+}
+
+export async function fetchSharedGroupsForCurrentUser(): Promise<SharedNoteGroup[]> {
+  const rt = await initFirebaseRuntime();
+  if (!rt.enabled || !rt.auth || !rt.db) return [];
+  const user = rt.auth.currentUser;
+  if (!user) return [];
+  const groupsRef = collection(rt.db, 'noteGroups');
+  const snap = await getDocs(query(groupsRef, where('members', 'array-contains', user.uid)));
+  const groups: SharedNoteGroup[] = [];
+  snap.forEach((d) => {
+    groups.push({ ...(d.data() as SharedNoteGroup), id: d.id });
+  });
+  return groups;
+}
+
+export async function upsertSharedGroupNote(groupId: string, note: NoteItem): Promise<void> {
+  const rt = await initFirebaseRuntime();
+  if (!rt.enabled || !rt.auth || !rt.db) return;
+  const user = rt.auth.currentUser;
+  if (!user || !groupId) return;
+  const groupRef = doc(rt.db, 'noteGroups', groupId);
+  const groupSnap = await getDoc(groupRef);
+  if (!groupSnap.exists()) return;
+  await setDoc(doc(rt.db, 'noteGroups', groupId, 'notes', note.id), { ...note, groupId, updatedAtServer: serverTimestamp() }, { merge: true });
+}
+
+export async function deleteSharedGroupNote(groupId: string, noteId: string): Promise<void> {
+  const rt = await initFirebaseRuntime();
+  if (!rt.enabled || !rt.auth || !rt.db) return;
+  if (!groupId || !noteId) return;
+  await deleteDoc(doc(rt.db, 'noteGroups', groupId, 'notes', noteId));
+}
+
+export async function fetchSharedGroupNotesForCurrentUser(): Promise<NoteItem[]> {
+  const groups = await fetchSharedGroupsForCurrentUser();
+  const rt = await initFirebaseRuntime();
+  if (!rt.enabled || !rt.db) return [];
+  const notes: NoteItem[] = [];
+  for (const group of groups) {
+    const snap = await getDocs(query(collection(rt.db, 'noteGroups', group.id, 'notes')));
+    snap.forEach((d) => {
+      const note = d.data() as NoteItem;
+      notes.push({ ...note, id: note.id || d.id, groupId: group.id });
+    });
+  }
+  return notes;
 }
