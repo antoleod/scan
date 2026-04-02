@@ -1,5 +1,5 @@
 ﻿import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, FlatList, Linking, Modal, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { Alert, FlatList, Linking, Modal, Platform, Pressable, ScrollView, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 
@@ -59,10 +59,13 @@ export function HistoryTab({
   onOpenBarcode: (value: string, codeType?: 'pi' | 'office' | 'other') => void;
   visibleScanType: (type: string) => string;
 }) {
+  const { width } = useWindowDimensions();
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [moreVisible, setMoreVisible] = useState(false);
   const editLockRef = useRef(false);
+  const columns = width >= 1500 ? 3 : width >= 980 ? 2 : 1;
+  const showActionLabels = width >= 1200;
 
   useEffect(() => {
     if (!copiedId) return;
@@ -144,8 +147,11 @@ export function HistoryTab({
 
       <FlatList
         data={filteredHistory}
+        numColumns={columns}
+        key={`history-grid-${columns}`}
         keyExtractor={(item) => item.id}
         contentContainerStyle={mainAppStyles.listContent}
+        columnWrapperStyle={columns > 1 ? { gap: 10 } : undefined}
         ListEmptyComponent={<View style={[mainAppStyles.card, { backgroundColor: palette.card, borderColor: palette.border }]}><Text style={{ color: palette.fg }}>No scans yet.</Text></View>}
         renderItem={({ item }) => {
           const isSelected = selection.has(item.id);
@@ -172,7 +178,15 @@ export function HistoryTab({
           };
 
           return (
-            <View style={[mainAppStyles.card, mainAppStyles.cardContained, { backgroundColor: palette.card, borderColor: palette.border }, isSelected && { borderColor: palette.accent, borderWidth: 2 }]}>
+            <View
+              style={[
+                mainAppStyles.card,
+                mainAppStyles.cardContained,
+                { backgroundColor: palette.card, borderColor: palette.border },
+                columns > 1 ? { flex: 1, minWidth: 0 } : null,
+                isSelected && { borderColor: palette.accent, borderWidth: 2 },
+              ]}
+            >
               <Pressable onPress={handlePress} onLongPress={() => onLongPressSelection(item.id)} style={({ pressed }) => ({ opacity: pressed ? 0.8 : 1 })}>
                 <View style={{ gap: 6 }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
@@ -214,10 +228,13 @@ export function HistoryTab({
                 </View>
               </Pressable>
 
-              <View style={mainAppStyles.itemActions}>
-                <Pressable style={[mainAppStyles.tinyBtn, { borderColor: palette.border }]} onPress={() => copyValue(item)}><Ionicons name="copy-outline" size={14} color={palette.fg} /></Pressable>
+              <View style={[mainAppStyles.itemActions, { alignItems: 'center' }]}>
+                <Pressable style={[mainAppStyles.tinyBtn, { borderColor: palette.border, flexDirection: 'row', alignItems: 'center', gap: 6 }]} onPress={() => copyValue(item)}>
+                  <Ionicons name="copy-outline" size={14} color={palette.fg} />
+                  {showActionLabels ? <Text style={{ color: palette.fg, fontSize: 11, fontWeight: '700' }}>Copy</Text> : null}
+                </Pressable>
                 <Pressable
-                  style={[mainAppStyles.tinyBtn, { borderColor: palette.border }]}
+                  style={[mainAppStyles.tinyBtn, { borderColor: palette.border, flexDirection: 'row', alignItems: 'center', gap: 6 }]}
                   onPress={() => {
                     if (editLockRef.current) return;
                     editLockRef.current = true;
@@ -228,9 +245,16 @@ export function HistoryTab({
                   }}
                 >
                   <Ionicons name="create-outline" size={14} color={palette.fg} />
+                  {showActionLabels ? <Text style={{ color: palette.fg, fontSize: 11, fontWeight: '700' }}>Edit</Text> : null}
                 </Pressable>
-                <Pressable style={[mainAppStyles.tinyBtn, { borderColor: palette.border }]} onPress={() => onToggleUsed(item.id)}><Ionicons name={used ? 'checkmark-circle-outline' : 'ellipse-outline'} size={14} color={palette.fg} /></Pressable>
-                <Pressable style={[mainAppStyles.tinyBtn, { borderColor: palette.border }]} onPress={() => confirmDelete(item)}><Ionicons name="trash-outline" size={14} color={palette.fg} /></Pressable>
+                <Pressable style={[mainAppStyles.tinyBtn, { borderColor: palette.border, flexDirection: 'row', alignItems: 'center', gap: 6 }]} onPress={() => onToggleUsed(item.id)}>
+                  <Ionicons name={used ? 'checkmark-circle-outline' : 'ellipse-outline'} size={14} color={palette.fg} />
+                  {showActionLabels ? <Text style={{ color: palette.fg, fontSize: 11, fontWeight: '700' }}>{used ? 'Unuse' : 'Use'}</Text> : null}
+                </Pressable>
+                <Pressable style={[mainAppStyles.tinyBtn, { borderColor: palette.border, flexDirection: 'row', alignItems: 'center', gap: 6 }]} onPress={() => confirmDelete(item)}>
+                  <Ionicons name="trash-outline" size={14} color={palette.fg} />
+                  {showActionLabels ? <Text style={{ color: palette.fg, fontSize: 11, fontWeight: '700' }}>Delete</Text> : null}
+                </Pressable>
               </View>
             </View>
           );
