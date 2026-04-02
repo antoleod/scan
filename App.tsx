@@ -44,7 +44,7 @@ function AuthGate() {
 export default function App() {
   return (
     <SafeAreaProvider>
-      <ThemeProvider initialThemeName="dark">
+      <ThemeProvider initialThemeName="noirGraphite">
         <AuthProvider>
           <AuthGate />
         </AuthProvider>

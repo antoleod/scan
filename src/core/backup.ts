@@ -157,7 +157,7 @@ function sanitizeSettings(value: unknown): AppSettings {
     autoDetect: asBoolean(source.autoDetect, defaultSettings.autoDetect),
     scanProfile: asString(source.scanProfile, defaultSettings.scanProfile).trim() || defaultSettings.scanProfile,
     serviceNowBaseUrl: asString(source.serviceNowBaseUrl, defaultSettings.serviceNowBaseUrl).trim(),
-    theme: (['dark', 'light', 'eu_blue', 'custom'].includes(asString(source.theme, defaultSettings.theme))
+    theme: (['dark', 'light', 'eu_blue', 'custom', 'parliament', 'noirGraphite', 'midnightSteel', 'obsidianGold'].includes(asString(source.theme, defaultSettings.theme))
       ? asString(source.theme, defaultSettings.theme)
       : defaultSettings.theme) as AppSettings['theme'],
     customAccent: asString(source.customAccent, defaultSettings.customAccent).trim(),

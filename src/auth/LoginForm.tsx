@@ -100,8 +100,20 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
 
 
   const { theme, themeName } = useAppTheme();
+  const isWeb = Platform.OS === 'web';
   const { height } = useWindowDimensions();
   const scanProgress = useSharedValue(0);
+  const fx = useMemo(
+    () => ({
+      qrOpacity: isWeb ? 0.18 : 0.1,
+      stripeOpacity: isWeb ? 0.05 : 0.02,
+      brandingOpacity: isWeb ? 0.62 : 0.4,
+      brandingStripeOpacity: isWeb ? 0.12 : 0.06,
+      dataStripeOpacity: isWeb ? 0.06 : 0.03,
+      textOpacity: isWeb ? 0.2 : 0.12,
+    }),
+    [isWeb]
+  );
 
   const palette = useMemo(() => {
     if (themeName === 'euBlue') {
@@ -429,25 +441,25 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
 
             {/* QR Code Watermark */}
             <View style={[styles.qrWatermark, { borderColor: theme.secondary }]}>
-              <Ionicons name="qr-code-outline" size={44} color={theme.secondary} style={{ opacity: 0.1 }} />
+              <Ionicons name="qr-code-outline" size={44} color={theme.secondary} style={{ opacity: fx.qrOpacity }} />
             </View>
 
             {/* Left technical watermark with vertical barcode and central branding */}
             <View style={styles.leftWatermark}>
               <View style={styles.leftBarcode}>
                 {Array.from({ length: 8 }).map((_, i) => (
-                  <View key={i} style={[styles.barcodeStripe, { backgroundColor: theme.secondary, height: '100%', opacity: 0.02, width: (i % 3 === 0) ? 6 : 2 }]} />
+                  <View key={i} style={[styles.barcodeStripe, { backgroundColor: theme.secondary, height: '100%', opacity: fx.stripeOpacity, width: (i % 3 === 0) ? 6 : 2 }]} />
                 ))}
               </View>
-              <Text style={[styles.oryxenText, { color: theme.secondary }]}>ORYXEN.TECH</Text>
+              <Text style={[styles.oryxenText, { color: theme.secondary, opacity: fx.textOpacity }]}>ORYXEN.TECH</Text>
             </View>
 
             {/* Bottom branding watermark with barcode and version */}
-            <Animated.View style={[styles.brandingWatermark, glitchStyle, { opacity: 0.4 }]}>
+            <Animated.View style={[styles.brandingWatermark, glitchStyle, { opacity: fx.brandingOpacity }]}>
               <Animated.View style={[styles.brandingLaser, { backgroundColor: theme.secondary }, brandingScanStyle]} />
               <View style={styles.brandingBarcode}>
                 {Array.from({ length: 48 }).map((_, i) => (
-                  <AnimatedStripe key={i} index={i} theme={theme} baseHeight={14} width={(i % 5 === 0 || i % 9 === 0) ? 3 : 1} opacity={0.06} />
+                  <AnimatedStripe key={i} index={i} theme={theme} baseHeight={14} width={(i % 5 === 0 || i % 9 === 0) ? 3 : 1} opacity={fx.brandingStripeOpacity} />
                 ))}
               </View>
               <Text style={[styles.brandingText, { color: theme.secondary }]}>
@@ -459,7 +471,7 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
             {/* Data bars (enhanced original barcode effect) */}
             <View style={styles.barcodeField}>
               {Array.from({ length: 12 }).map((_, i) => (
-                <AnimatedStripe key={i} index={i} theme={theme} baseHeight={i % 3 === 0 ? 180 : 120} width={2} opacity={0.03} />
+                <AnimatedStripe key={i} index={i} theme={theme} baseHeight={i % 3 === 0 ? 180 : 120} width={2} opacity={fx.dataStripeOpacity} />
               ))}
             </View>
           </View>

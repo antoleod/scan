@@ -186,28 +186,13 @@ function MainApp() {
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const isCompactLayout = width < 390 || height < 780;
 
-  useEffect(() => {
-    if (Platform.OS === 'web' && 'serviceWorker' in navigator) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker
-          .register('/scan/sw.js', { scope: '/scan/' })
-          .then((reg) => {
-            console.log('[PWA] ServiceWorker registered with scope:', reg.scope);
-          })
-          .catch((err) => {
-            console.error('[PWA] ServiceWorker registration failed:', err);
-          });
-      });
-    }
-  }, []);
-
   const palette = useMemo(() => {
-    const themeName = (settings.theme || 'dark') as ThemeName;
-    const base = themes[themeName] || themes.dark;
+    const themeName = (settings.theme || 'noirGraphite') as ThemeName;
+    const base = themes[themeName] || themes.noirGraphite;
     const accent = settings.customAccent || base.accent;
     return { ...base, accent };
   }, [settings]);
-  const activeTheme = (settings.theme || 'dark') as ThemeName;
+  const activeTheme = (settings.theme || 'noirGraphite') as ThemeName;
   const isLightTheme = lightThemes.includes(activeTheme);
 
   const LASER_SPEEDS = useMemo(() => ({

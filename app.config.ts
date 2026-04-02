@@ -41,8 +41,8 @@ const config: ExpoConfig = {
     name: "Oryxen Scanner",
     shortName: "Oryxen",
     description: "Secure scanner workspace with offline-ready web support.",
-    themeColor: "#111E33",
-    backgroundColor: "#050B14",
+    themeColor: "#1A1A1A",
+    backgroundColor: "#111111",
   },
   experiments: {
     baseUrl,

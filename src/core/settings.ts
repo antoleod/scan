@@ -10,7 +10,7 @@ export const defaultSettings: AppSettings = {
   autoDetect: true,
   scanProfile: 'auto',
   serviceNowBaseUrl: '',
-  theme: 'dark',
+  theme: 'noirGraphite',
   customAccent: '',
   openUrls: true,
   barcodeOutputFormat: 'CODE128',
@@ -28,7 +28,7 @@ export async function loadSettings(): Promise<AppSettings> {
     const parsed = { ...defaultSettings, ...JSON.parse(raw) } as AppSettings;
     const allowedThemes: AppSettings['theme'][] = ['dark', 'light', 'eu_blue', 'custom', 'parliament', 'noirGraphite', 'midnightSteel', 'obsidianGold'];
     if (!allowedThemes.includes(parsed.theme)) {
-      parsed.theme = 'dark';
+      parsed.theme = 'noirGraphite';
     }
     return parsed;
   } catch {

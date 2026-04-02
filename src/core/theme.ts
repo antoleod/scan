@@ -187,7 +187,7 @@ const legacyThemeNameMap = {
   modern: 'midnightSteel',
 } as const satisfies Record<string, ThemeName>;
 
-export function normalizeThemeName(value: unknown, fallback: ThemeName = 'euBlue'): ThemeName {
+export function normalizeThemeName(value: unknown, fallback: ThemeName = 'noirGraphite'): ThemeName {
   if (typeof value !== 'string') return fallback;
   if (value in themeTokens) return value as ThemeName;
   if (value in legacyThemeNameMap) return legacyThemeNameMap[value as keyof typeof legacyThemeNameMap];
@@ -297,7 +297,7 @@ const THEME_STORAGE_KEY = 'activeTheme';
 
 export function ThemeProvider({
   children,
-  initialThemeName = 'euBlue',
+  initialThemeName = 'noirGraphite',
 }: {
   children: React.ReactNode;
   initialThemeName?: ThemeName;
