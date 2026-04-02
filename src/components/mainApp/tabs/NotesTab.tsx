@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Image, Linking, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
+import { Image, Linking, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import * as ImagePicker from 'expo-image-picker';
@@ -83,6 +83,26 @@ function chunk<T>(items: T[], columns: number): T[][] {
   return rows;
 }
 
+function mergeNotesByNewest(local: NoteItem[], incoming: NoteItem[]): NoteItem[] {
+  const map = new Map<string, NoteItem>();
+  for (const item of local) map.set(item.id, item);
+  for (const item of incoming) {
+    const prev = map.get(item.id);
+    if (!prev || item.updatedAt >= prev.updatedAt) map.set(item.id, item);
+  }
+  return Array.from(map.values()).sort((a, b) => (a.pinned === b.pinned ? b.updatedAt - a.updatedAt : a.pinned ? -1 : 1));
+}
+
+function mergeTemplatesByNewest(local: NoteTemplate[], incoming: NoteTemplate[]): NoteTemplate[] {
+  const map = new Map<string, NoteTemplate>();
+  for (const item of local) map.set(item.id, item);
+  for (const item of incoming) {
+    const prev = map.get(item.id);
+    if (!prev || item.updatedAt >= prev.updatedAt) map.set(item.id, item);
+  }
+  return Array.from(map.values()).sort((a, b) => b.updatedAt - a.updatedAt);
+}
+
 function parseFollowUpDate(value: string): Date | null {
   const text = String(value || '');
   const m = text.match(/\b(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2})(?::(\d{2}))?\b/);
@@ -123,6 +143,8 @@ export function NotesTab({ palette }: { palette: Palette }) {
   const [templateBody, setTemplateBody] = useState('');
   const [templateSearch, setTemplateSearch] = useState('');
   const [clipboardAvailable, setClipboardAvailable] = useState(true);
+  const [previewEntry, setPreviewEntry] = useState<ClipboardEntry | null>(null);
+  const [lastTap, setLastTap] = useState<{ id: string; ts: number } | null>(null);
 
   const autoCategory = useMemo(() => detectAutoCategory(draftText), [draftText]);
   const activeCategory = manualCategory || autoCategory;
@@ -137,8 +159,8 @@ export function NotesTab({ palette }: { palette: Palette }) {
     // Silent cloud pull on open for fast cross-device consistency.
     refreshNotesFromCloudSilently().then((result) => {
       if (!result) return;
-      setNotes(result.notes);
-      setTemplates(result.templates);
+      setNotes((current) => mergeNotesByNewest(current, result.notes));
+      setTemplates((current) => mergeTemplatesByNewest(current, result.templates));
     }).catch(() => undefined);
   }, []);
 
@@ -147,8 +169,8 @@ export function NotesTab({ palette }: { palette: Palette }) {
     const timer = setInterval(() => {
       refreshNotesFromCloudSilently().then((result) => {
         if (!result) return;
-        setNotes(result.notes);
-        setTemplates(result.templates);
+        setNotes((current) => mergeNotesByNewest(current, result.notes));
+        setTemplates((current) => mergeTemplatesByNewest(current, result.templates));
       }).catch(() => undefined);
     }, 10000);
 
@@ -283,6 +305,7 @@ export function NotesTab({ palette }: { palette: Palette }) {
     const result = await addRichNoteUnique(draftText, activeCategory, draftImages);
     setNotes(result.notes);
     if (result.inserted) {
+      setFilter('all');
       setDraftText('');
       setDraftImages([]);
       setManualCategory(null);
@@ -322,6 +345,27 @@ export function NotesTab({ palette }: { palette: Palette }) {
       return;
     }
     setDraftText((current) => current ? `${current}\n${entry.content}` : entry.content);
+  }
+
+  function handleClipboardCardPress(entry: ClipboardEntry) {
+    const now = Date.now();
+    if (lastTap && lastTap.id === entry.id && now - lastTap.ts < 320) {
+      setPreviewEntry(entry);
+      setLastTap(null);
+      return;
+    }
+    setLastTap({ id: entry.id, ts: now });
+  }
+
+  async function createNoteFromPreview() {
+    if (!previewEntry) return;
+    const category = detectAutoCategory(previewEntry.content || '');
+    const attachments = previewEntry.kind === 'image' && previewEntry.imageDataUri ? [previewEntry.imageDataUri] : [];
+    const text = previewEntry.kind === 'image' ? (previewEntry.content || 'Clipboard image') : previewEntry.content;
+    const result = await addRichNoteUnique(text, category, attachments);
+    setNotes(result.notes);
+    setWorkspaceTab('notes');
+    setPreviewEntry(null);
   }
 
   function sendClipboardToTemplate(entry: ClipboardEntry) {
@@ -398,7 +442,20 @@ export function NotesTab({ palette }: { palette: Palette }) {
                   <Text style={{ color: palette.accent, fontSize: 12, fontWeight: '700' }}>{ocrBusy ? 'Analyzing...' : 'Generate'}</Text>
                 </Pressable>
               </View>
-              <TextInput style={[mainAppStyles.input, styles.noteInput, { backgroundColor: palette.bg, color: palette.fg, borderColor: palette.border, marginTop: 8 }]} placeholder="Type here. Auto-save is always on." placeholderTextColor={palette.muted} multiline value={draftText} onChangeText={setDraftText} />
+              <TextInput
+                style={[mainAppStyles.input, styles.noteInput, { backgroundColor: palette.bg, color: palette.fg, borderColor: palette.border, marginTop: 8 }]}
+                placeholder="Type here. Auto-save is always on."
+                placeholderTextColor={palette.muted}
+                multiline
+                value={draftText}
+                onChangeText={setDraftText}
+                onKeyPress={(event) => {
+                  const e = event.nativeEvent as unknown as { key?: string; ctrlKey?: boolean; metaKey?: boolean; shiftKey?: boolean };
+                  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && !e.shiftKey) {
+                    void saveDraftAsNote();
+                  }
+                }}
+              />
 
               {draftImages.length ? <View style={styles.attachmentRow}>{draftImages.map((item) => <View key={item} style={[styles.attachmentChip, { borderColor: palette.border, backgroundColor: palette.bg }]}><Ionicons name="image-outline" size={12} color={palette.muted} /><Text style={{ color: palette.fg, fontSize: 11 }} numberOfLines={1}>Image</Text></View>)}</View> : null}
 
@@ -422,7 +479,55 @@ export function NotesTab({ palette }: { palette: Palette }) {
               <View style={styles.filterRow}>{(['all', 'work', 'pinned'] as NoteFilter[]).map((item) => <Pressable key={item} style={[styles.categoryChip, { borderColor: filter === item ? palette.accent : palette.border }]} onPress={() => setFilter(item)}><Text style={{ color: palette.fg, fontSize: 11, fontWeight: '700' }}>{item}</Text></Pressable>)}</View>
             </View>
 
-            <View style={styles.gridWrap}>{noteRows.map((row, rowIndex) => <View key={`row-${rowIndex}`} style={styles.gridRow}>{row.map((note) => { const expanded = expandedNoteId === note.id; const preview = note.text.trim() || `Image attachment (${note.attachments?.length || 0})`; return <Pressable key={note.id} onPress={() => setExpandedNoteId(expanded ? null : note.id)} style={({ pressed }) => [styles.compactCard, { flex: 1, borderColor: palette.border, backgroundColor: palette.card, opacity: pressed ? 0.9 : 1 }]}><View style={styles.cardHead}><Text style={{ color: palette.muted, fontSize: 10 }}>{new Date(note.updatedAt).toLocaleDateString()} {new Date(note.updatedAt).toLocaleTimeString()}</Text><Pressable onPress={() => togglePinned(note.id).then(setNotes)}><Ionicons name={note.pinned ? 'bookmark' : 'bookmark-outline'} size={16} color={palette.accent} /></Pressable></View>{editingNoteId === note.id ? <TextInput value={editingText} onChangeText={setEditingText} multiline style={[mainAppStyles.input, { marginTop: 6, backgroundColor: palette.bg, color: palette.fg, borderColor: palette.border }]} /> : <Text style={{ color: palette.fg, fontSize: 12, lineHeight: 17 }} numberOfLines={expanded ? 0 : 2}>{preview}</Text>}<View style={styles.cardFoot}><Text style={{ color: note.category === 'work' ? palette.accent : palette.muted, fontSize: 10, fontWeight: '800' }}>{note.category.toUpperCase()}</Text><View style={styles.editorActions}>{editingNoteId === note.id ? <Pressable onPress={() => updateNoteText(note.id, editingText).then((next) => { setNotes(next); setEditingNoteId(null); setEditingText(''); })}><Ionicons name="checkmark-outline" size={16} color={palette.accent} /></Pressable> : <Pressable onPress={() => { setEditingNoteId(note.id); setEditingText(note.text); }}><Ionicons name="create-outline" size={16} color={palette.fg} /></Pressable>}<Pressable onPress={() => removeNote(note.id).then(setNotes)}><Ionicons name="trash-outline" size={16} color="#ef4444" /></Pressable></View></View></Pressable>; })}{row.length < (isDesktop ? desktopColumns : 1) ? Array.from({ length: (isDesktop ? desktopColumns : 1) - row.length }).map((_, i) => <View key={`fill-${i}`} style={{ flex: 1 }} />) : null}</View>)}</View>
+            <View style={styles.gridWrap}>
+              {noteRows.map((row, rowIndex) => (
+                <View key={`row-${rowIndex}`} style={styles.gridRow}>
+                  {row.map((note) => {
+                    const expanded = expandedNoteId === note.id;
+                    const preview = note.text.trim() || `Image attachment (${note.attachments?.length || 0})`;
+                    const firstAttachment = note.attachments?.[0];
+                    return (
+                      <Pressable
+                        key={note.id}
+                        onPress={() => setExpandedNoteId(expanded ? null : note.id)}
+                        style={({ pressed }) => [styles.compactCard, { flex: 1, borderColor: palette.border, backgroundColor: palette.card, opacity: pressed ? 0.9 : 1 }]}
+                      >
+                        <View style={styles.cardHead}>
+                          <Text style={{ color: palette.muted, fontSize: 10 }}>{new Date(note.updatedAt).toLocaleDateString()} {new Date(note.updatedAt).toLocaleTimeString()}</Text>
+                          <Pressable onPress={() => togglePinned(note.id).then(setNotes)}>
+                            <Ionicons name={note.pinned ? 'bookmark' : 'bookmark-outline'} size={16} color={palette.accent} />
+                          </Pressable>
+                        </View>
+                        {firstAttachment ? <Image source={{ uri: firstAttachment }} style={styles.noteThumb} resizeMode="cover" /> : null}
+                        {editingNoteId === note.id ? (
+                          <TextInput value={editingText} onChangeText={setEditingText} multiline style={[mainAppStyles.input, { marginTop: 6, backgroundColor: palette.bg, color: palette.fg, borderColor: palette.border }]} />
+                        ) : (
+                          <Text style={{ color: palette.fg, fontSize: 12, lineHeight: 17 }} numberOfLines={expanded ? 0 : 2}>{preview}</Text>
+                        )}
+                        <View style={styles.cardFoot}>
+                          <Text style={{ color: note.category === 'work' ? palette.accent : palette.muted, fontSize: 10, fontWeight: '800' }}>{note.category.toUpperCase()}</Text>
+                          <View style={styles.editorActions}>
+                            {editingNoteId === note.id ? (
+                              <Pressable onPress={() => updateNoteText(note.id, editingText).then((next) => { setNotes(next); setEditingNoteId(null); setEditingText(''); })}>
+                                <Ionicons name="checkmark-outline" size={16} color={palette.accent} />
+                              </Pressable>
+                            ) : (
+                              <Pressable onPress={() => { setEditingNoteId(note.id); setEditingText(note.text); }}>
+                                <Ionicons name="create-outline" size={16} color={palette.fg} />
+                              </Pressable>
+                            )}
+                            <Pressable onPress={() => removeNote(note.id).then(setNotes)}>
+                              <Ionicons name="trash-outline" size={16} color="#ef4444" />
+                            </Pressable>
+                          </View>
+                        </View>
+                      </Pressable>
+                    );
+                  })}
+                  {row.length < (isDesktop ? desktopColumns : 1) ? Array.from({ length: (isDesktop ? desktopColumns : 1) - row.length }).map((_, i) => <View key={`fill-${i}`} style={{ flex: 1 }} />) : null}
+                </View>
+              ))}
+            </View>
           </>
         ) : null}
 
@@ -436,10 +541,67 @@ export function NotesTab({ palette }: { palette: Palette }) {
         {workspaceTab === 'clipboard' ? (
           <>
             <View style={[mainAppStyles.card, { backgroundColor: palette.card, borderColor: palette.border }]}><View style={styles.editorHeader}><Text style={{ color: palette.fg, fontWeight: '800' }}>Clipboard timeline</Text><View style={styles.editorActions}><Pressable style={[styles.iconOnlyAction, { borderColor: palette.border }]} onPress={() => importScreenshotToClipboard().catch(() => undefined)}><Ionicons name="image-outline" size={16} color={palette.fg} /></Pressable></View></View><Text style={{ color: palette.muted, fontSize: 11, marginTop: 4 }}>{clipboardAvailable ? 'Active capture (app focus required). Duplicates are ignored.' : 'Clipboard capture not available on this device.'}</Text></View>
-            <View style={styles.gridWrap}>{clipboardRows.map((row, rowIndex) => <View key={`clip-row-${rowIndex}`} style={styles.gridRow}>{row.map((entry) => { const eventDate = parseFollowUpDate(entry.content); return <View key={entry.id} style={[styles.compactCard, { flex: 1, borderColor: palette.border, backgroundColor: palette.card }]}><View style={styles.cardHead}><Text style={{ color: palette.muted, fontSize: 10 }}>{new Date(entry.capturedAt).toLocaleDateString()} {new Date(entry.capturedAt).toLocaleTimeString()}</Text><Text style={{ color: palette.accent, fontSize: 10, fontWeight: '800' }}>{entry.category.toUpperCase()}</Text></View>{entry.kind === 'image' && entry.imageDataUri ? <Image source={{ uri: entry.imageDataUri }} style={styles.clipThumb} resizeMode="cover" /> : null}<Text style={{ color: palette.fg, fontSize: 12 }} numberOfLines={2}>{entry.content}</Text><View style={styles.editorActions}><Pressable onPress={() => Clipboard.setStringAsync(entry.content)}><Ionicons name="copy-outline" size={16} color={palette.fg} /></Pressable><Pressable onPress={() => sendClipboardToNote(entry).catch(() => undefined)}><Ionicons name="document-text-outline" size={16} color={palette.fg} /></Pressable><Pressable onPress={() => sendClipboardToTemplate(entry)}><Ionicons name="layers-outline" size={16} color={palette.fg} /></Pressable>{eventDate ? <Pressable onPress={() => createOutlookEventFromContent(entry.content).catch(() => undefined)}><Ionicons name="calendar-outline" size={16} color={palette.fg} /></Pressable> : null}</View></View>; })}{row.length < (isDesktop ? desktopColumns : 1) ? Array.from({ length: (isDesktop ? desktopColumns : 1) - row.length }).map((_, i) => <View key={`clip-fill-${i}`} style={{ flex: 1 }} />) : null}</View>)}</View>
+            <View style={styles.gridWrap}>
+              {clipboardRows.map((row, rowIndex) => (
+                <View key={`clip-row-${rowIndex}`} style={styles.gridRow}>
+                  {row.map((entry) => {
+                    const eventDate = parseFollowUpDate(entry.content);
+                    return (
+                      <Pressable
+                        key={entry.id}
+                        onPress={() => handleClipboardCardPress(entry)}
+                        style={({ pressed }) => [styles.compactCard, { flex: 1, borderColor: palette.border, backgroundColor: palette.card, opacity: pressed ? 0.92 : 1 }]}
+                      >
+                        <View style={styles.cardHead}>
+                          <Text style={{ color: palette.muted, fontSize: 10 }}>{new Date(entry.capturedAt).toLocaleDateString()} {new Date(entry.capturedAt).toLocaleTimeString()}</Text>
+                          <Text style={{ color: palette.accent, fontSize: 10, fontWeight: '800' }}>{entry.category.toUpperCase()}</Text>
+                        </View>
+                        {entry.kind === 'image' && entry.imageDataUri ? <Image source={{ uri: entry.imageDataUri }} style={styles.clipThumb} resizeMode="cover" /> : null}
+                        <Text style={{ color: palette.fg, fontSize: 12 }} numberOfLines={2}>{entry.content}</Text>
+                        <Text style={{ color: palette.muted, fontSize: 10 }}>Double tap to preview</Text>
+                        <View style={styles.editorActions}>
+                          <Pressable onPress={() => Clipboard.setStringAsync(entry.content)}><Ionicons name="copy-outline" size={16} color={palette.fg} /></Pressable>
+                          <Pressable onPress={() => sendClipboardToNote(entry).catch(() => undefined)}><Ionicons name="document-text-outline" size={16} color={palette.fg} /></Pressable>
+                          <Pressable onPress={() => sendClipboardToTemplate(entry)}><Ionicons name="layers-outline" size={16} color={palette.fg} /></Pressable>
+                          {eventDate ? <Pressable onPress={() => createOutlookEventFromContent(entry.content).catch(() => undefined)}><Ionicons name="calendar-outline" size={16} color={palette.fg} /></Pressable> : null}
+                        </View>
+                      </Pressable>
+                    );
+                  })}
+                  {row.length < (isDesktop ? desktopColumns : 1) ? Array.from({ length: (isDesktop ? desktopColumns : 1) - row.length }).map((_, i) => <View key={`clip-fill-${i}`} style={{ flex: 1 }} />) : null}
+                </View>
+              ))}
+            </View>
           </>
         ) : null}
       </View>
+
+      <Modal animationType="fade" transparent visible={Boolean(previewEntry)} onRequestClose={() => setPreviewEntry(null)} statusBarTranslucent>
+        <Pressable style={mainAppStyles.modalBackdrop} onPress={() => setPreviewEntry(null)}>
+          <Pressable style={[mainAppStyles.modalForm, { backgroundColor: palette.card, borderColor: palette.border, maxWidth: 580 }]} onPress={() => null}>
+            <View style={mainAppStyles.modalHeader}>
+              <Text style={[mainAppStyles.sectionTitle, { color: palette.fg }]}>Clipboard Preview</Text>
+              <Pressable style={[mainAppStyles.modalCloseBtn, { borderColor: palette.border }]} onPress={() => setPreviewEntry(null)}>
+                <Ionicons name="close" size={18} color={palette.fg} />
+              </Pressable>
+            </View>
+            {previewEntry?.kind === 'image' && previewEntry.imageDataUri ? (
+              <Image source={{ uri: previewEntry.imageDataUri }} style={styles.previewImage} resizeMode="contain" />
+            ) : (
+              <Text style={{ color: palette.fg, fontSize: 13, lineHeight: 20 }}>{previewEntry?.content || ''}</Text>
+            )}
+            <Text style={{ color: palette.muted, fontSize: 11, marginTop: 8 }}>Would you like to create a note with this item?</Text>
+            <View style={styles.previewActions}>
+              <Pressable style={[styles.previewBtn, { borderColor: palette.border }]} onPress={() => setPreviewEntry(null)}>
+                <Text style={{ color: palette.fg, fontSize: 12, fontWeight: '700' }}>Cancel</Text>
+              </Pressable>
+              <Pressable style={[styles.previewBtn, { backgroundColor: palette.accent, borderColor: palette.accent }]} onPress={() => createNoteFromPreview().catch(() => undefined)}>
+                <Text style={{ color: '#fff', fontSize: 12, fontWeight: '800' }}>Create note</Text>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </ScrollView>
   );
 }
@@ -464,7 +626,11 @@ const styles = StyleSheet.create({
   gridWrap: { gap: 8 },
   gridRow: { flexDirection: 'row', gap: 8 },
   compactCard: { borderWidth: 1, borderRadius: 10, padding: 9, gap: 8 },
+  noteThumb: { width: '100%', height: 112, borderRadius: 8, backgroundColor: '#111' },
   clipThumb: { width: '100%', height: 96, borderRadius: 8, backgroundColor: '#111' },
   cardHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
   cardFoot: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  previewImage: { width: '100%', height: 260, borderRadius: 10, backgroundColor: '#000' },
+  previewActions: { marginTop: 14, flexDirection: 'row', gap: 10 },
+  previewBtn: { flex: 1, minHeight: 40, borderRadius: 10, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
 });

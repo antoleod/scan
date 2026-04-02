@@ -388,6 +388,14 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
     enterAsGuest();
   };
 
+  const handleSubmitShortcut = (event: unknown) => {
+    const e = (event as { nativeEvent?: { key?: string; ctrlKey?: boolean; metaKey?: boolean; shiftKey?: boolean } })?.nativeEvent;
+    if (!e) return;
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && !e.shiftKey) {
+      void handleSignIn();
+    }
+  };
+
   return (
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={[styles.container, { backgroundColor: theme.background }]}>
       <View style={[styles.background, palette.watermark ? styles.watermarkShell : null]}>
@@ -572,6 +580,7 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
                 autoFocus // change 2: open keyboard immediately on mount
                 returnKeyType="next"
                 blurOnSubmit={false}
+                onKeyPress={handleSubmitShortcut}
               />
               {errors.username ? <Text style={[styles.error, { color: theme.error }]}>{errors.username}</Text> : null}
               {username ? <Text style={[styles.helper, { color: theme.textSecondary }]}>Login id: <Text style={styles.helperStrong}>{normalizedUsername}</Text></Text> : null}
@@ -605,6 +614,7 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
                 onSubmitEditing={() => {
                   void handleSignIn();
                 }}
+                onKeyPress={handleSubmitShortcut}
               />
               {errors.pin ? <Text style={[styles.error, { color: theme.error }]}>{errors.pin}</Text> : null}
               <Text style={[styles.note, { color: theme.textSecondary }]}>Use your workspace password.</Text>

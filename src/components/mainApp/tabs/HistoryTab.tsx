@@ -63,6 +63,7 @@ export function HistoryTab({
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [moreVisible, setMoreVisible] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<ScanRecord | null>(null);
   const editLockRef = useRef(false);
   const columns = width >= 1500 ? 3 : width >= 980 ? 2 : 1;
   const showActionLabels = width >= 1200;
@@ -87,13 +88,7 @@ export function HistoryTab({
   }
 
   function confirmDelete(item: ScanRecord) {
-    const message = 'Are you sure you want to delete this item from history?';
-    if (Platform.OS === 'web') {
-      const ok = typeof window === 'undefined' ? true : window.confirm(message);
-      if (ok) void onDeleteItem(item);
-      return;
-    }
-    Alert.alert('Delete item?', message, [{ text: 'Cancel', style: 'cancel' }, { text: 'Delete', style: 'destructive', onPress: () => onDeleteItem(item) }]);
+    setDeleteTarget(item);
   }
 
   return (
@@ -285,6 +280,51 @@ export function HistoryTab({
                 </Pressable>
               ))}
             </ScrollView>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <Modal
+        animationType="fade"
+        transparent
+        visible={Boolean(deleteTarget)}
+        onRequestClose={() => setDeleteTarget(null)}
+        statusBarTranslucent
+      >
+        <Pressable style={mainAppStyles.modalBackdrop} onPress={() => setDeleteTarget(null)}>
+          <Pressable
+            style={[mainAppStyles.modalForm, { backgroundColor: palette.card, borderColor: palette.border, maxWidth: 520 }]}
+            onPress={() => null}
+          >
+            <View style={mainAppStyles.modalHeader}>
+              <Text style={[mainAppStyles.sectionTitle, { color: palette.fg }]}>Delete item</Text>
+              <Pressable style={[mainAppStyles.modalCloseBtn, { borderColor: palette.border }]} onPress={() => setDeleteTarget(null)}>
+                <Ionicons name="close" size={18} color={palette.fg} />
+              </Pressable>
+            </View>
+            <Text style={{ color: palette.muted, fontSize: 13, lineHeight: 20 }}>
+              This action will remove the item from history.
+            </Text>
+            <Text style={{ color: palette.fg, fontSize: 12, marginTop: 8 }} numberOfLines={2}>
+              {deleteTarget?.codeValue || deleteTarget?.codeNormalized || '-'}
+            </Text>
+            <View style={{ flexDirection: 'row', gap: 10, marginTop: 14 }}>
+              <Pressable
+                style={({ pressed }) => [{ flex: 1, borderWidth: 1, borderColor: palette.border, borderRadius: 10, minHeight: 40, alignItems: 'center', justifyContent: 'center', opacity: pressed ? 0.8 : 1 }]}
+                onPress={() => setDeleteTarget(null)}
+              >
+                <Text style={{ color: palette.fg, fontSize: 12, fontWeight: '700' }}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                style={({ pressed }) => [{ flex: 1, borderRadius: 10, minHeight: 40, alignItems: 'center', justifyContent: 'center', backgroundColor: '#b91c1c', opacity: pressed ? 0.82 : 1 }]}
+                onPress={() => {
+                  if (deleteTarget) void onDeleteItem(deleteTarget);
+                  setDeleteTarget(null);
+                }}
+              >
+                <Text style={{ color: '#fff', fontSize: 12, fontWeight: '800' }}>Delete</Text>
+              </Pressable>
+            </View>
           </Pressable>
         </Pressable>
       </Modal>

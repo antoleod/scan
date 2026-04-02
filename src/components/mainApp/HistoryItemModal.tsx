@@ -52,6 +52,13 @@ export function HistoryItemModal({
 }) {
   const [notesHeight, setNotesHeight] = React.useState(84);
   const isAdd = mode === 'add';
+  const handleSaveShortcut = (event: unknown) => {
+    const e = (event as { nativeEvent?: { key?: string; ctrlKey?: boolean; metaKey?: boolean; shiftKey?: boolean } })?.nativeEvent;
+    if (!e) return;
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && !e.shiftKey) {
+      onSave();
+    }
+  };
 
   return (
     <Modal animationType="slide" transparent visible={visible} onRequestClose={onClose}>
@@ -84,6 +91,7 @@ export function HistoryItemModal({
                 placeholderTextColor={palette.muted}
                 autoCapitalize="characters"
                 autoCorrect={false}
+                onKeyPress={handleSaveShortcut}
                 style={[
                   mainAppStyles.input,
                   mainAppStyles.formField,
@@ -101,6 +109,7 @@ export function HistoryItemModal({
                 placeholderTextColor={palette.muted}
                 autoCapitalize="words"
                 autoCorrect={false}
+                onKeyPress={handleSaveShortcut}
                 style={[
                   mainAppStyles.input,
                   mainAppStyles.formField,
@@ -118,6 +127,7 @@ export function HistoryItemModal({
                 placeholderTextColor={palette.muted}
                 autoCapitalize="characters"
                 autoCorrect={false}
+                onKeyPress={handleSaveShortcut}
                 style={[
                   mainAppStyles.input,
                   mainAppStyles.formField,
@@ -142,6 +152,7 @@ export function HistoryItemModal({
                 placeholderTextColor={palette.muted}
                 autoCapitalize="characters"
                 autoCorrect={false}
+                onKeyPress={handleSaveShortcut}
                 style={[
                   mainAppStyles.input,
                   mainAppStyles.formField,
@@ -160,6 +171,7 @@ export function HistoryItemModal({
                 autoCapitalize="sentences"
                 autoCorrect
                 multiline
+                onKeyPress={handleSaveShortcut}
                 onContentSizeChange={(event) => {
                   const nextHeight = Math.max(84, Math.min(220, Math.round(event.nativeEvent.contentSize.height) + 24));
                   setNotesHeight(nextHeight);
