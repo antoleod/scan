@@ -140,7 +140,7 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
         logoMarkHeight: 1,
         subtitle: 'Warehouse scanner terminal for quick access.',
         primaryText: 'SIGN IN',
-        watermark: false,
+        watermark: isWeb,
       };
     }
 
@@ -152,9 +152,9 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
       logoMarkWidth: 28,
       logoMarkHeight: 2,
       primaryText: 'SIGN IN',
-      watermark: themeName === 'obsidianGold',
+      watermark: isWeb || themeName === 'obsidianGold' || themeName === 'noirGraphite',
     };
-  }, [themeName]);
+  }, [isWeb, themeName]);
 
   const normalizedUsername = username.trim().toLowerCase();
   const firebaseApiKey = process.env.EXPO_PUBLIC_FIREBASE_API_KEY;

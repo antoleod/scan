@@ -186,11 +186,34 @@ export function SettingsTab({
 
         {!isInstalled && Platform.OS === 'web' ? (
           <SectionCard title="PWA" subtitle="Install when available." accent={palette.accent} subtitleColor={palette.muted} cardBackground={palette.card} cardBorder={palette.border}>
-            {pwaInstallAvailable ? (
-              <Pressable disabled={installBusy} onPress={async () => { setInstallBusy(true); try { await triggerPwaInstall(); } finally { setInstallBusy(false); } }} style={[styles.bulkButton, { backgroundColor: activeAccent, opacity: installBusy ? 0.6 : 1 }]}>
-                <Text style={[styles.bulkButtonText, { color: '#111' }]}>{installBusy ? 'Opening...' : 'Install Web App'}</Text>
-              </Pressable>
-            ) : null}
+            <Pressable
+              disabled={installBusy}
+              onPress={async () => {
+                if (pwaInstallAvailable) {
+                  setInstallBusy(true);
+                  try {
+                    await triggerPwaInstall();
+                  } finally {
+                    setInstallBusy(false);
+                  }
+                  return;
+                }
+                Alert.alert(
+                  'Install app',
+                  'Install is not yet available in this tab. In Chrome/Edge use menu > Install app, then reload this page.'
+                );
+              }}
+              style={[styles.bulkButton, { backgroundColor: activeAccent, opacity: installBusy ? 0.6 : 1 }]}
+            >
+              <Text style={[styles.bulkButtonText, { color: '#111' }]}>
+                {installBusy ? 'Opening...' : pwaInstallAvailable ? 'Install Web App' : 'Install (Manual)'}
+              </Text>
+            </Pressable>
+            <Text style={[styles.helperLine, { color: palette.muted }]}>
+              {pwaInstallAvailable
+                ? 'Installer ready in this browser session.'
+                : 'If the installer does not appear, open browser menu and choose Install app.'}
+            </Text>
           </SectionCard>
         ) : null}
 
