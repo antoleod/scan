@@ -176,7 +176,7 @@ export function NotesTab({ palette }: { palette: Palette }) {
       }
     };
 
-    const timer = setInterval(() => { tick().catch(() => undefined); }, 1400);
+    const timer = setInterval(() => { tick().catch(() => undefined); }, 900);
     tick().catch(() => undefined);
 
     return () => {
@@ -237,6 +237,10 @@ export function NotesTab({ palette }: { palette: Palette }) {
 
   async function sendClipboardToNote(entry: ClipboardEntry) {
     setWorkspaceTab('notes');
+    if (entry.kind === 'image' && entry.imageDataUri) {
+      setDraftImages((current) => Array.from(new Set([entry.imageDataUri as string, ...current])).slice(0, 6));
+      return;
+    }
     setDraftText((current) => current ? `${current}\n${entry.content}` : entry.content);
   }
 
@@ -271,7 +275,17 @@ export function NotesTab({ palette }: { palette: Palette }) {
     }
   }
 
-  const workspaceWidth = isDesktop ? Math.min(Math.floor(width * 0.8), 1320) : width - 24;
+  async function importScreenshotToClipboard() {
+    const picked = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.9, base64: true });
+    if (picked.canceled || !picked.assets?.length) return;
+    const asset = picked.assets[0];
+    if (!asset.base64) return;
+    const dataUri = `data:image/png;base64,${asset.base64}`;
+    const result = await addClipboardImageUnique(dataUri);
+    if (result.inserted) setClipboardItems(result.entries);
+  }
+
+  const workspaceWidth = '100%';
 
   return (
     <ScrollView style={mainAppStyles.screen} contentContainerStyle={[styles.content, { alignItems: 'center' }]} keyboardShouldPersistTaps="handled">
@@ -341,7 +355,7 @@ export function NotesTab({ palette }: { palette: Palette }) {
 
         {workspaceTab === 'clipboard' ? (
           <>
-            <View style={[mainAppStyles.card, { backgroundColor: palette.card, borderColor: palette.border }]}><Text style={{ color: palette.fg, fontWeight: '800' }}>Clipboard timeline</Text><Text style={{ color: palette.muted, fontSize: 11, marginTop: 4 }}>{clipboardAvailable ? 'Active capture. Duplicates are ignored.' : 'Clipboard capture not available on this device.'}</Text></View>
+            <View style={[mainAppStyles.card, { backgroundColor: palette.card, borderColor: palette.border }]}><View style={styles.editorHeader}><Text style={{ color: palette.fg, fontWeight: '800' }}>Clipboard timeline</Text><View style={styles.editorActions}><Pressable style={[styles.iconOnlyAction, { borderColor: palette.border }]} onPress={() => importScreenshotToClipboard().catch(() => undefined)}><Ionicons name="image-outline" size={16} color={palette.fg} /></Pressable></View></View><Text style={{ color: palette.muted, fontSize: 11, marginTop: 4 }}>{clipboardAvailable ? 'Active capture (app focus required). Duplicates are ignored.' : 'Clipboard capture not available on this device.'}</Text></View>
             <View style={styles.gridWrap}>{clipboardRows.map((row, rowIndex) => <View key={`clip-row-${rowIndex}`} style={styles.gridRow}>{row.map((entry) => { const eventDate = parseFollowUpDate(entry.content); return <View key={entry.id} style={[styles.compactCard, { flex: 1, borderColor: palette.border, backgroundColor: palette.card }]}><View style={styles.cardHead}><Text style={{ color: palette.muted, fontSize: 10 }}>{new Date(entry.capturedAt).toLocaleDateString()} {new Date(entry.capturedAt).toLocaleTimeString()}</Text><Text style={{ color: palette.accent, fontSize: 10, fontWeight: '800' }}>{entry.category.toUpperCase()}</Text></View>{entry.kind === 'image' && entry.imageDataUri ? <Image source={{ uri: entry.imageDataUri }} style={styles.clipThumb} resizeMode="cover" /> : null}<Text style={{ color: palette.fg, fontSize: 12 }} numberOfLines={2}>{entry.content}</Text><View style={styles.editorActions}><Pressable onPress={() => Clipboard.setStringAsync(entry.content)}><Ionicons name="copy-outline" size={16} color={palette.fg} /></Pressable><Pressable onPress={() => sendClipboardToNote(entry).catch(() => undefined)}><Ionicons name="document-text-outline" size={16} color={palette.fg} /></Pressable><Pressable onPress={() => sendClipboardToTemplate(entry)}><Ionicons name="layers-outline" size={16} color={palette.fg} /></Pressable>{eventDate ? <Pressable onPress={() => createOutlookEventFromContent(entry.content).catch(() => undefined)}><Ionicons name="calendar-outline" size={16} color={palette.fg} /></Pressable> : null}</View></View>; })}{row.length < (isDesktop ? desktopColumns : 1) ? Array.from({ length: (isDesktop ? desktopColumns : 1) - row.length }).map((_, i) => <View key={`clip-fill-${i}`} style={{ flex: 1 }} />) : null}</View>)}</View>
           </>
         ) : null}

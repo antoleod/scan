@@ -724,4 +724,5 @@ const styles = StyleSheet.create({
   footerTrack: { width: 72, height: 12, alignItems: 'center', justifyContent: 'center' },
   footerLine: { width: 44, height: 1, borderRadius: 999 },
   footerSignalDot: { position: 'absolute', width: 4, height: 4, borderRadius: 999, right: 12 },
-  version: { fon
+  version: { fontSize: 9, fontWeight: '700', letterSpacing: 2, textTransform: 'uppercase', opacity: 0.4 },
+});

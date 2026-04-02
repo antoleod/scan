@@ -48,6 +48,7 @@ import { filterAndSortHistory, HistorySort } from '../core/smartSearch';
 import { playSuccessfulScanFeedback } from '../core/feedback';
 import { useAuth } from '../auth/useAuth';
 import { AppHeader } from '../components/mainApp/AppHeader';
+import { AppLayout } from '../components/mainApp/AppLayout';
 import { BarcodeModal } from '../components/mainApp/BarcodeModal';
 import { BottomTabs } from '../components/mainApp/BottomTabs';
 import { BackupImportModal } from '../components/mainApp/BackupImportModal';
@@ -1274,20 +1275,21 @@ function MainApp() {
   const content = (
     <SafeAreaView style={[styles.safe, { backgroundColor: palette.bg }]}>
       <StatusBar barStyle={isLightTheme ? 'dark-content' : 'light-content'} />
-      <AppHeader
-        palette={palette}
-        statusChip={statusChip}
-        autoDetectLabel={settings.autoDetect ? 'AUTO' : settings.scanProfile.toUpperCase()}
-        compact={isCompactLayout}
-        themeName={activeTheme}
-      />
+      <AppLayout>
+        <AppHeader
+          palette={palette}
+          statusChip={statusChip}
+          autoDetectLabel={settings.autoDetect ? 'AUTO' : settings.scanProfile.toUpperCase()}
+          compact={isCompactLayout}
+          themeName={activeTheme}
+        />
 
-      <KeyboardAvoidingView
-        style={styles.content}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={isCompactLayout ? 6 : 0}
-      >
-        <View style={styles.tabViewport} {...webPanHandlers}>
+        <KeyboardAvoidingView
+          style={styles.content}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          keyboardVerticalOffset={isCompactLayout ? 6 : 0}
+        >
+          <View style={styles.tabViewport} {...webPanHandlers}>
           {bootStatus !== 'ready' ? (
             <View style={styles.center}><Text style={{ color: palette.fg }}>{bootStatus === 'booting' ? 'Loading...' : 'Boot error'}</Text></View>
           ) : activeTab === 'scan' ? (
@@ -1368,8 +1370,8 @@ function MainApp() {
               barcodeOutputFormat={settings.barcodeOutputFormat}
             />
           )}
-        </View>
-      </KeyboardAvoidingView>
+          </View>
+        </KeyboardAvoidingView>
 
       <BarcodeModal
         visible={barcodeModalVisible}
@@ -1437,19 +1439,20 @@ function MainApp() {
         onImport={runBackupImport}
         onClose={() => setBackupImportVisible(false)}
       />
-      <SelectionFooter
-        count={selection.size}
-        palette={{ accent: palette.accent, card: palette.card, border: palette.border, fg: palette.fg }}
-        onClear={() => setSelection(new Set())}
-        onMarkUsed={markSelectedUsed}
-        onShare={handleShare}
-      />
-      <BottomTabs
-        activeTab={activeTab}
-        palette={{ accent: palette.accent, muted: palette.muted, card: palette.card, border: palette.border }}
-        onChangeTab={setActiveTab}
-        onAddPress={openManualEntryModal}
-      />
+        <SelectionFooter
+          count={selection.size}
+          palette={{ accent: palette.accent, card: palette.card, border: palette.border, fg: palette.fg }}
+          onClear={() => setSelection(new Set())}
+          onMarkUsed={markSelectedUsed}
+          onShare={handleShare}
+        />
+        <BottomTabs
+          activeTab={activeTab}
+          palette={{ accent: palette.accent, muted: palette.muted, card: palette.card, border: palette.border }}
+          onChangeTab={setActiveTab}
+          onAddPress={openManualEntryModal}
+        />
+      </AppLayout>
     </SafeAreaView>
   );
 
