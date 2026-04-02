@@ -983,33 +983,44 @@ function MainApp() {
   }, [user?.uid, persistenceMode]);
 
   async function clearAllHistory() {
+    let remoteCleared = true;
+    try {
+      await clearScansInFirebase();
+    } catch {
+      remoteCleared = false;
+    }
+
     await clearHistory();
     await saveHistory([]);
     setHistory([]);
     setSelection(new Set());
-    try {
-      await clearScansInFirebase();
-    } catch {
-      // silent fallback; local cache is already cleared
-    }
     await diag.info('history.cleared');
+    Alert.alert(
+      'History',
+      remoteCleared
+        ? 'Hard delete complete. History was deleted from local cache and cloud.'
+        : 'Local history deleted. Cloud delete failed, check sync/permissions.',
+    );
   }
 
   async function hardDeleteNotesNow() {
     await hardDeleteAllNotes();
     await syncNow(false).catch(() => undefined);
     await diag.info('notes.hard_delete');
+    Alert.alert('Notes', 'Hard delete complete. Notes were deleted.');
   }
 
   async function hardDeleteClipboardNow() {
     await clearClipboardEntries();
     await diag.info('clipboard.hard_delete');
+    Alert.alert('Clipboard', 'Hard delete complete. Clipboard memory was deleted.');
   }
 
   async function hardDeleteTemplatesNow() {
     await hardDeleteAllTemplates();
     await syncNow(false).catch(() => undefined);
     await diag.info('templates.hard_delete');
+    Alert.alert('Templates', 'Hard delete complete. Templates were deleted.');
   }
 
   function resetEntryModal() {
