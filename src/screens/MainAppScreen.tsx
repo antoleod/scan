@@ -31,7 +31,7 @@ import { AppSettings, BootStatus, PersistenceMode, ScanRecord, ScanState, Templa
 import { defaultSettings, loadSettings, saveSettings } from '../core/settings';
 import { addHistoryUnique, clearHistory, loadHistory, saveHistory, historyKey, normalizeHistoryType, createHistoryId } from '../core/history';
 import { loadTemplates, saveTemplate, saveTemplates } from '../core/templates';
-import { addPendingCapture, loadPendingCaptures, removePendingCapture, updatePendingCapture, type PendingCaptureRecord } from '../core/captures';
+import { addPendingCapture, clearPendingCaptures, loadPendingCaptures, removePendingCapture, updatePendingCapture, type PendingCaptureRecord } from '../core/captures';
 import { diag } from '../core/diagnostics';
 import { lightThemes, themes, ThemeName } from '../theme/theme';
 import { SCAN_BARCODE_TYPES, type CodeType, normalizeCodeValue } from '../core/codeStrategy';
@@ -1010,6 +1010,28 @@ function MainApp() {
     Alert.alert('Notes', 'Hard delete complete. Notes were deleted.');
   }
 
+  async function hardDeleteHistoryNow() {
+    let remoteCleared = true;
+    try {
+      await clearScansInFirebase();
+    } catch {
+      remoteCleared = false;
+    }
+    await clearHistory();
+    await saveHistory([]);
+    await clearPendingCaptures();
+    setHistory([]);
+    setPendingCaptures([]);
+    setSelection(new Set());
+    await diag.info('history.hard_delete');
+    Alert.alert(
+      'History',
+      remoteCleared
+        ? 'Hard delete complete. History was deleted.'
+        : 'Hard delete local complete. Cloud delete failed, check rules/network.',
+    );
+  }
+
   async function hardDeleteClipboardNow() {
     await clearClipboardEntries();
     await diag.info('clipboard.hard_delete');
@@ -1395,6 +1417,7 @@ function MainApp() {
               onRecheckFirebase={recheckFirebase}
               onSyncNow={syncNow}
               onLogout={logout}
+              onHardDeleteHistory={hardDeleteHistoryNow}
               onHardDeleteNotes={hardDeleteNotesNow}
               onHardDeleteClipboard={hardDeleteClipboardNow}
               onHardDeleteTemplates={hardDeleteTemplatesNow}
