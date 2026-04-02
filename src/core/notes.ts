@@ -14,6 +14,7 @@ export interface NoteItem {
   text: string;
   imageBase64?: string;
   imageMimeType?: string;
+  attachments?: string[];
   pinned: boolean;
   createdAt: number;
   updatedAt: number;
@@ -63,6 +64,7 @@ export async function loadNotes(): Promise<NoteItem[]> {
           text: String(item?.text || ''),
           imageBase64: typeof item?.imageBase64 === 'string' ? item.imageBase64 : undefined,
           imageMimeType: typeof item?.imageMimeType === 'string' ? item.imageMimeType : undefined,
+          attachments: Array.isArray(item?.attachments) ? item.attachments.map((v: unknown) => String(v || '')).filter(Boolean).slice(0, 8) : undefined,
           pinned: Boolean(item?.pinned),
           createdAt: Number(item?.createdAt || Date.now()),
           updatedAt: Number(item?.updatedAt || Date.now()),
@@ -126,6 +128,40 @@ export async function addNoteUnique(
     },
     ...current,
   ];
+  await saveNotes(next);
+  await syncNotesStateIfAuthenticated(normalizeNotes(next));
+  return { notes: normalizeNotes(next), inserted: true };
+}
+
+export async function addRichNoteUnique(
+  text: string,
+  category: NoteCategory = 'general',
+  attachments: string[] = [],
+): Promise<{ notes: NoteItem[]; inserted: boolean }> {
+  const trimmed = text.trim();
+  const normalizedAttachments = attachments.map((item) => String(item || '').trim()).filter(Boolean).slice(0, 8);
+  if (!trimmed && normalizedAttachments.length === 0) return { notes: await loadNotes(), inserted: false };
+
+  const current = await loadNotes();
+  if (trimmed && isDuplicateText(current, trimmed)) {
+    return { notes: current, inserted: false };
+  }
+
+  const now = Date.now();
+  const next: NoteItem[] = [
+    {
+      id: makeId('note'),
+      kind: 'text',
+      category,
+      text: trimmed || 'Attachment note',
+      attachments: normalizedAttachments.length ? normalizedAttachments : undefined,
+      pinned: false,
+      createdAt: now,
+      updatedAt: now,
+    },
+    ...current,
+  ];
+
   await saveNotes(next);
   await syncNotesStateIfAuthenticated(normalizeNotes(next));
   return { notes: normalizeNotes(next), inserted: true };
