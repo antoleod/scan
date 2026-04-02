@@ -351,3 +351,31 @@ export async function fetchNotesFromFirebase() {
 
   return { serverNotes, serverTemplates };
 }
+
+export async function deleteNoteFromFirebase(noteId: string): Promise<void> {
+  const rt = await initFirebaseRuntime();
+  if (!rt.enabled || !rt.auth || !rt.db) return;
+  const user = rt.auth.currentUser;
+  if (!user) return;
+  await deleteDoc(doc(rt.db, 'users', user.uid, 'notes', noteId));
+}
+
+export async function deleteTemplateFromFirebase(templateId: string): Promise<void> {
+  const rt = await initFirebaseRuntime();
+  if (!rt.enabled || !rt.auth || !rt.db) return;
+  const user = rt.auth.currentUser;
+  if (!user) return;
+  await deleteDoc(doc(rt.db, 'users', user.uid, 'noteTemplates', templateId));
+}
+
+export async function clearScansInFirebase(): Promise<void> {
+  const rt = await initFirebaseRuntime();
+  if (!rt.enabled || !rt.auth || !rt.db) return;
+  const user = rt.auth.currentUser;
+  if (!user) return;
+  const scansRef = collection(rt.db, 'users', user.uid, 'scans');
+  const snap = await getDocs(query(scansRef));
+  for (const item of snap.docs) {
+    await deleteDoc(doc(scansRef, item.id));
+  }
+}

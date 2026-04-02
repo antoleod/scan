@@ -36,6 +36,7 @@ import { diag } from '../core/diagnostics';
 import { lightThemes, themes, ThemeName } from '../theme/theme';
 import { SCAN_BARCODE_TYPES, type CodeType, normalizeCodeValue } from '../core/codeStrategy';
 import {
+  clearScansInFirebase,
   initFirebaseRuntime,
   recheckFirebaseRuntime,
   syncNotesWithFirebase,
@@ -981,18 +982,16 @@ function MainApp() {
   }, [user?.uid, persistenceMode]);
 
   async function clearAllHistory() {
-    Alert.alert('Confirm', 'Clear local history?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Clear',
-        style: 'destructive',
-        onPress: async () => {
-          await clearHistory();
-          setHistory([]);
-          await diag.info('history.cleared');
-        },
-      },
-    ]);
+    await clearHistory();
+    await saveHistory([]);
+    setHistory([]);
+    setSelection(new Set());
+    try {
+      await clearScansInFirebase();
+    } catch {
+      // silent fallback; local cache is already cleared
+    }
+    await diag.info('history.cleared');
   }
 
   function resetEntryModal() {

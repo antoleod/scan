@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { fetchNotesFromFirebase, syncNotesWithFirebase } from './firebase';
+import { deleteNoteFromFirebase, deleteTemplateFromFirebase, fetchNotesFromFirebase, syncNotesWithFirebase } from './firebase';
 
 const NOTES_KEY = '@barra_notes_v1';
 const TEMPLATES_KEY = '@barra_note_templates_v1';
@@ -203,9 +203,14 @@ export async function addImageNoteUnique(dataUri: string, title = 'Screenshot ca
 export async function removeNote(id: string): Promise<NoteItem[]> {
   const current = await loadNotes();
   const next = current.filter((item) => item.id !== id);
-  await saveNotes(next);
-  await syncNotesStateIfAuthenticated(normalizeNotes(next));
-  return normalizeNotes(next);
+  const normalized = normalizeNotes(next);
+  await saveNotes(normalized);
+  try {
+    await deleteNoteFromFirebase(id);
+  } catch {
+    await syncNotesStateIfAuthenticated(normalized);
+  }
+  return normalized;
 }
 
 export async function updateNoteText(id: string, text: string): Promise<NoteItem[]> {
@@ -372,8 +377,12 @@ export async function ensureWorkNotesAndEmailTemplates(): Promise<{
 export async function removeTemplate(id: string): Promise<NoteTemplate[]> {
   const current = await loadTemplates();
   const next = current.filter((item) => item.id !== id);
-  await saveTemplates(next);
-  await syncNotesStateIfAuthenticated(undefined, next);
+  await AsyncStorage.setItem(TEMPLATES_KEY, JSON.stringify(next.slice(0, 300)));
+  try {
+    await deleteTemplateFromFirebase(id);
+  } catch {
+    await syncNotesStateIfAuthenticated(undefined, next);
+  }
   return next;
 }
 
