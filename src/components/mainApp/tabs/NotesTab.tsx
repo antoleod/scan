@@ -8,9 +8,8 @@ import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 
 import {
-  createSharedNoteGroup,
   fetchSharedGroupsForCurrentUser,
-  joinSharedNoteGroup,
+  upsertSharedGroupNote,
   type SharedNoteGroup,
 } from '../../../core/firebase';
 import {
@@ -153,10 +152,10 @@ export function NotesTab({ palette }: { palette: Palette }) {
   const [clipboardAvailable, setClipboardAvailable] = useState(true);
   const [groups, setGroups] = useState<SharedNoteGroup[]>([]);
   const [activeGroupId, setActiveGroupId] = useState<string>('personal');
-  const [groupNameDraft, setGroupNameDraft] = useState('');
-  const [inviteCodeDraft, setInviteCodeDraft] = useState('');
   const [previewEntry, setPreviewEntry] = useState<ClipboardEntry | null>(null);
   const [previewNoteImageUri, setPreviewNoteImageUri] = useState<string | null>(null);
+  const [shareNote, setShareNote] = useState<NoteItem | null>(null);
+  const [lastNoteTap, setLastNoteTap] = useState<{ id: string; ts: number } | null>(null);
   const [lastTap, setLastTap] = useState<{ id: string; ts: number } | null>(null);
 
   const autoCategory = useMemo(() => detectAutoCategory(draftText), [draftText]);
@@ -531,58 +530,6 @@ export function NotesTab({ palette }: { palette: Palette }) {
                 </View>
               </View>
             </View>
-            <View style={[mainAppStyles.card, { backgroundColor: palette.card, borderColor: palette.border }]}>
-              <Text style={{ color: palette.fg, fontWeight: '800', marginBottom: 8 }}>Shared groups</Text>
-              <View style={styles.groupActions}>
-                <TextInput
-                  style={[mainAppStyles.input, styles.groupInput, { backgroundColor: palette.bg, color: palette.fg, borderColor: palette.border, marginTop: 0 }]}
-                  placeholder="New group name"
-                  placeholderTextColor={palette.muted}
-                  value={groupNameDraft}
-                  onChangeText={setGroupNameDraft}
-                />
-                <Pressable
-                  style={[styles.groupBtn, { backgroundColor: palette.accent }]}
-                  onPress={() => createSharedNoteGroup(groupNameDraft).then((g) => {
-                    setGroups((current) => [g, ...current]);
-                    setGroupNameDraft('');
-                    setActiveGroupId(g.id);
-                  }).catch(() => undefined)}
-                >
-                  <Text style={{ color: '#fff', fontSize: 11, fontWeight: '800' }}>Create</Text>
-                </Pressable>
-              </View>
-              <View style={styles.groupActions}>
-                <TextInput
-                  style={[mainAppStyles.input, styles.groupInput, { backgroundColor: palette.bg, color: palette.fg, borderColor: palette.border, marginTop: 0 }]}
-                  placeholder="Invite code"
-                  placeholderTextColor={palette.muted}
-                  value={inviteCodeDraft}
-                  onChangeText={setInviteCodeDraft}
-                  autoCapitalize="characters"
-                />
-                <Pressable
-                  style={[styles.groupBtn, { borderColor: palette.border, borderWidth: 1 }]}
-                  onPress={() => joinSharedNoteGroup(inviteCodeDraft).then((g) => {
-                    if (!g) return;
-                    setGroups((current) => current.some((x) => x.id === g.id) ? current : [g, ...current]);
-                    setInviteCodeDraft('');
-                    setActiveGroupId(g.id);
-                  }).catch(() => undefined)}
-                >
-                  <Text style={{ color: palette.fg, fontSize: 11, fontWeight: '800' }}>Join</Text>
-                </Pressable>
-              </View>
-              {groups.length ? (
-                <View style={{ marginTop: 8, gap: 6 }}>
-                  {groups.map((g) => (
-                    <Text key={g.id} style={{ color: palette.muted, fontSize: 11 }}>
-                      {g.name} · code: {g.inviteCode} · members: {g.members?.length || 0}
-                    </Text>
-                  ))}
-                </View>
-              ) : null}
-            </View>
 
             {smartResult ? <View style={[mainAppStyles.card, { backgroundColor: palette.card, borderColor: palette.border }]}><Text style={{ color: palette.fg, fontWeight: '800', marginBottom: 6 }}>Generated structure</Text><Text style={{ color: palette.fg, fontSize: 12, lineHeight: 18 }}>{smartResult.summary}</Text><View style={styles.editorActions}><Pressable style={[styles.iconOnlyAction, { borderColor: palette.border }]} onPress={() => saveDraftAsNote().catch(() => undefined)}><Ionicons name="document-text-outline" size={16} color={palette.fg} /></Pressable><Pressable style={[styles.iconOnlyAction, { borderColor: palette.border }]} onPress={() => { setWorkspaceTab('templates'); setTemplateName(smartResult.ticketNumber || 'Generated template'); setTemplateSubject(`Follow-up ${smartResult.ticketNumber || ''}`.trim()); setTemplateBody(smartResult.summary); }}><Ionicons name="layers-outline" size={16} color={palette.fg} /></Pressable><Pressable style={[styles.iconOnlyAction, { borderColor: palette.border }]} onPress={() => createOutlookEventFromContent(smartResult.summary).catch(() => undefined)}><Ionicons name="calendar-outline" size={16} color={palette.fg} /></Pressable></View></View> : null}
 
@@ -598,10 +545,21 @@ export function NotesTab({ palette }: { palette: Palette }) {
                     const expanded = expandedNoteId === note.id;
                     const preview = note.text.trim() || `Image attachment (${note.attachments?.length || 0})`;
                     const firstAttachment = note.attachments?.[0];
+                    const handleNotePress = () => {
+                      const now = Date.now();
+                      if (lastNoteTap && lastNoteTap.id === note.id && now - lastNoteTap.ts < 320) {
+                        setEditingNoteId(note.id);
+                        setEditingText(note.text);
+                        setLastNoteTap(null);
+                        return;
+                      }
+                      setLastNoteTap({ id: note.id, ts: now });
+                      setExpandedNoteId(expanded ? null : note.id);
+                    };
                     return (
                       <Pressable
                         key={note.id}
-                        onPress={() => setExpandedNoteId(expanded ? null : note.id)}
+                        onPress={handleNotePress}
                         style={({ pressed }) => [
                           styles.compactCard,
                           {
@@ -661,6 +619,9 @@ export function NotesTab({ palette }: { palette: Palette }) {
                             )}
                             <Pressable onPress={() => toggleArchived(note.id).then(setNotes)}>
                               <Ionicons name={note.archived ? 'archive-outline' : 'archive'} size={16} color={palette.fg} />
+                            </Pressable>
+                            <Pressable onPress={() => setShareNote(note)}>
+                              <Ionicons name="share-social-outline" size={16} color={palette.fg} />
                             </Pressable>
                             <Pressable onPress={() => createQuickReminderFromNote(note).catch(() => undefined)}>
                               <Ionicons name="alarm-outline" size={16} color={palette.fg} />
@@ -784,6 +745,51 @@ export function NotesTab({ palette }: { palette: Palette }) {
           </Pressable>
         </Pressable>
       </Modal>
+
+      <Modal animationType="fade" transparent visible={Boolean(shareNote)} onRequestClose={() => setShareNote(null)} statusBarTranslucent>
+        <Pressable style={mainAppStyles.modalBackdrop} onPress={() => setShareNote(null)}>
+          <Pressable style={[mainAppStyles.modalForm, { backgroundColor: palette.card, borderColor: palette.border, maxWidth: 560 }]} onPress={() => null}>
+            <View style={mainAppStyles.modalHeader}>
+              <Text style={[mainAppStyles.sectionTitle, { color: palette.fg }]}>Share note</Text>
+              <Pressable style={[mainAppStyles.modalCloseBtn, { borderColor: palette.border }]} onPress={() => setShareNote(null)}>
+                <Ionicons name="close" size={18} color={palette.fg} />
+              </Pressable>
+            </View>
+            <Text style={{ color: palette.muted, fontSize: 11, marginBottom: 10 }}>
+              Choose WhatsApp, email, or internal group share.
+            </Text>
+            <View style={styles.shareRow}>
+              <Pressable style={[styles.previewBtn, { borderColor: palette.border }]} onPress={() => { if (!shareNote) return; void Linking.openURL(`https://wa.me/?text=${encodeURIComponent(shareNote.text)}`); }}>
+                <Text style={{ color: palette.fg, fontSize: 12, fontWeight: '700' }}>WhatsApp</Text>
+              </Pressable>
+              <Pressable style={[styles.previewBtn, { borderColor: palette.border }]} onPress={() => { if (!shareNote) return; void Linking.openURL(`mailto:?subject=${encodeURIComponent('Shared note')}&body=${encodeURIComponent(shareNote.text)}`); }}>
+                <Text style={{ color: palette.fg, fontSize: 12, fontWeight: '700' }}>Email</Text>
+              </Pressable>
+            </View>
+            {groups.length ? (
+              <View style={{ marginTop: 10, gap: 8 }}>
+                {groups.map((g) => (
+                  <Pressable
+                    key={g.id}
+                    style={[styles.previewBtn, { borderColor: palette.border }]}
+                    onPress={() => {
+                      if (!shareNote) return;
+                      void upsertSharedGroupNote(g.id, { ...shareNote, groupId: g.id });
+                      setShareNote(null);
+                    }}
+                  >
+                    <Text style={{ color: palette.fg, fontSize: 12, fontWeight: '700' }}>Share to {g.name}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            ) : (
+              <Text style={{ color: palette.muted, fontSize: 11, marginTop: 8 }}>
+                No groups found. Go to Settings {'>'} Shared groups to create or join one, then return here.
+              </Text>
+            )}
+          </Pressable>
+        </Pressable>
+      </Modal>
     </ScrollView>
   );
 }
@@ -796,9 +802,7 @@ const styles = StyleSheet.create({
   resumeCard: { paddingVertical: 10 },
   editorHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   groupSelectorRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
-  groupActions: { flexDirection: 'row', gap: 8, alignItems: 'center', marginTop: 6 },
-  groupInput: { flex: 1 },
-  groupBtn: { minHeight: 40, borderRadius: 10, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12 },
+  shareRow: { flexDirection: 'row', gap: 10 },
   iconAction: { borderWidth: 1, borderRadius: 999, minHeight: 30, paddingHorizontal: 10, flexDirection: 'row', alignItems: 'center', gap: 6 },
   noteInput: { minHeight: 96, textAlignVertical: 'top' },
   attachmentRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 },

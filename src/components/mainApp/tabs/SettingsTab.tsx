@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { AppSettings, type PersistenceMode } from '../../../types';
 import { BARCODE_FORMAT_OPTIONS, type BarcodeFormat } from '../../../core/barcode';
 import { canInstallPwa, getPwaInstallDiagnostics, subscribePwaInstallAvailability, triggerPwaInstall } from '../../../core/pwa';
+import { createSharedNoteGroup, fetchSharedGroupsForCurrentUser, joinSharedNoteGroup, type SharedNoteGroup } from '../../../core/firebase';
 import { useAppTheme } from '../../../constants/theme';
 
 type Palette = { bg: string; fg: string; accent: string; muted: string; card: string; border: string };
@@ -110,6 +111,9 @@ export function SettingsTab({
   const [pwaInstallAvailable, setPwaInstallAvailable] = useState(canInstallPwa());
   const [isInstalled, setIsInstalled] = useState(false);
   const [pwaDiag, setPwaDiag] = useState(getPwaInstallDiagnostics());
+  const [groups, setGroups] = useState<SharedNoteGroup[]>([]);
+  const [groupNameDraft, setGroupNameDraft] = useState('');
+  const [inviteCodeDraft, setInviteCodeDraft] = useState('');
 
   useEffect(() => subscribePwaInstallAvailability(setPwaInstallAvailable), []);
   useEffect(() => {
@@ -124,6 +128,9 @@ export function SettingsTab({
     const onInstall = () => setIsInstalled(true);
     window.addEventListener('appinstalled', onInstall);
     return () => window.removeEventListener('appinstalled', onInstall);
+  }, []);
+  useEffect(() => {
+    fetchSharedGroupsForCurrentUser().then(setGroups).catch(() => undefined);
   }, []);
 
   const themeOptions = useMemo<ThemeOption[]>(() => [
@@ -189,6 +196,45 @@ export function SettingsTab({
           <View style={styles.toggleRow}><Text style={[styles.toggleLabel, { color: palette.fg }]}>Auto detect</Text><Switch value={settings.autoDetect} onValueChange={(value) => onPatchSettings({ autoDetect: value, scanProfile: value ? 'auto' : settings.scanProfile })} /></View>
           <View style={styles.toggleRow}><Text style={[styles.toggleLabel, { color: palette.fg }]}>Open URL</Text><Switch value={settings.openUrls ?? true} onValueChange={(value) => onPatchSettings({ openUrls: value })} /></View>
           <View style={styles.toggleRow}><Text style={[styles.toggleLabel, { color: palette.fg }]}>OCR correction</Text><Switch value={settings.ocrCorrection} onValueChange={(value) => onPatchSettings({ ocrCorrection: value })} /></View>
+        </SectionCard>
+
+        <SectionCard title="Shared groups" subtitle="Create/join note groups." accent={palette.accent} subtitleColor={palette.muted} cardBackground={palette.card} cardBorder={palette.border}>
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <TextInput
+              style={[styles.input, { flex: 1, borderColor: palette.border, color: palette.fg, backgroundColor: palette.card }]}
+              placeholder="New group name"
+              placeholderTextColor={palette.muted}
+              value={groupNameDraft}
+              onChangeText={setGroupNameDraft}
+            />
+            <Pressable
+              style={[styles.bulkButton, { backgroundColor: activeAccent, minWidth: 100 }]}
+              onPress={() => createSharedNoteGroup(groupNameDraft).then((g) => { setGroups((current) => [g, ...current]); setGroupNameDraft(''); }).catch(() => undefined)}
+            >
+              <Text style={[styles.bulkButtonText, { color: '#111' }]}>Create</Text>
+            </Pressable>
+          </View>
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <TextInput
+              style={[styles.input, { flex: 1, borderColor: palette.border, color: palette.fg, backgroundColor: palette.card }]}
+              placeholder="Invite code"
+              placeholderTextColor={palette.muted}
+              value={inviteCodeDraft}
+              onChangeText={setInviteCodeDraft}
+              autoCapitalize="characters"
+            />
+            <Pressable
+              style={[styles.bulkButton, { borderWidth: 1, borderColor: palette.border, minWidth: 100 }]}
+              onPress={() => joinSharedNoteGroup(inviteCodeDraft).then((g) => { if (!g) return; setGroups((current) => current.some((x) => x.id === g.id) ? current : [g, ...current]); setInviteCodeDraft(''); }).catch(() => undefined)}
+            >
+              <Text style={[styles.bulkButtonText, { color: palette.fg }]}>Join</Text>
+            </Pressable>
+          </View>
+          {groups.length ? groups.map((g) => (
+            <Text key={g.id} style={[styles.helperLine, { color: palette.muted }]}>
+              {g.name} · code: {g.inviteCode} · members: {g.members?.length || 0}
+            </Text>
+          )) : <Text style={[styles.helperLine, { color: palette.muted }]}>No groups yet.</Text>}
         </SectionCard>
 
         {Platform.OS === 'web' ? (
