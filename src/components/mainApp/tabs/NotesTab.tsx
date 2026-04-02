@@ -35,6 +35,8 @@ type SmartResult = {
   configurationItem: string;
   followUp: string;
   summary: string;
+  timeWorked: string;
+  rawText?: string;
 };
 
 const DRAFT_KEY = '@oryxen_notes_draft_v2';
@@ -53,11 +55,12 @@ function extractField(text: string, pattern: RegExp): string {
 
 function analyzeSmartContent(text: string, imageRefs: string[]): SmartResult {
   const merged = `${text}\n${imageRefs.join('\n')}`;
-  const ticketNumber = extractField(merged, /\b(RITM\d+|INC\d+|REQ\d+|SCTASK\d+)\b/i);
-  const userName = extractField(merged, /(?:requested\s*for|user|name)\s*[:\-]\s*([A-Za-z][A-Za-z .'-]{2,})/i);
-  const location = extractField(merged, /(?:location|site|office)\s*[:\-]\s*([^\n]+)/i);
-  const configurationItem = extractField(merged, /(?:configuration\s*item|ci|asset)\s*[:\-]\s*([^\n]+)/i);
-  const followUp = extractField(merged, /(?:follow\s*up|next\s*action|date|time)\s*[:\-]\s*([^\n]+)/i);
+  const ticketNumber = extractField(merged, /\b(RITM\d+|INC\d+|REQ\d+|SCTASK\d+)\b/i) || extractField(merged, /request\s*item\s*[:\-]?\s*([A-Z0-9]+)/i);
+  const userName = extractField(merged, /(?:requested\s*for|user|name)\s*[:\-]?\s*([A-Za-z][A-Za-z .'-]{2,})/i);
+  const location = extractField(merged, /(?:location|site|office)\s*[:\-]?\s*([^\n]+)/i);
+  const configurationItem = extractField(merged, /(?:configuration\s*item|ci|asset)\s*[:\-]?\s*([^\n]+)/i);
+  const followUp = extractField(merged, /(?:follow\s*up|next\s*action)\s*(?:\(.*?\))?\s*[:\-]?\s*([^\n]+)/i) || extractField(merged, /\b(\d{2}\/\d{2}\/\d{4}\s+\d{2}:\d{2}(?::\d{2})?)\b/i);
+  const timeWorked = extractField(merged, /time\s*worked\s*[:\-]?\s*([^\n]+)/i);
 
   const summary = [
     `Ticket: ${ticketNumber || '-'}`,
@@ -65,10 +68,11 @@ function analyzeSmartContent(text: string, imageRefs: string[]): SmartResult {
     `Location: ${location || '-'}`,
     `Configuration item: ${configurationItem || '-'}`,
     `Follow-up: ${followUp || '-'}`,
+    `Time worked: ${timeWorked || '-'}`,
     imageRefs.length ? `Images: ${imageRefs.length}` : '',
   ].filter(Boolean).join('\n');
 
-  return { ticketNumber, userName, location, configurationItem, followUp, summary };
+  return { ticketNumber, userName, location, configurationItem, followUp, summary, timeWorked };
 }
 
 function chunk<T>(items: T[], columns: number): T[][] {
@@ -111,6 +115,7 @@ export function NotesTab({ palette }: { palette: Palette }) {
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [editingText, setEditingText] = useState('');
   const [smartResult, setSmartResult] = useState<SmartResult | null>(null);
+  const [ocrBusy, setOcrBusy] = useState(false);
 
   const [templateName, setTemplateName] = useState('');
   const [templateSubject, setTemplateSubject] = useState('');
@@ -142,6 +147,41 @@ export function NotesTab({ palette }: { palette: Palette }) {
   useEffect(() => {
     AsyncStorage.setItem(DRAFT_KEY, JSON.stringify({ text: draftText, images: draftImages, category: manualCategory, updatedAt: Date.now() })).catch(() => undefined);
   }, [draftText, draftImages, manualCategory, workspaceTab]);
+
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+    const onPaste = (event: ClipboardEvent) => {
+      const data = event.clipboardData;
+      if (!data) return;
+
+      const text = data.getData('text');
+      if (text && text.trim()) {
+        addClipboardEntryUnique(text.trim()).then((result) => {
+          if (result.inserted) setClipboardItems(result.entries);
+        }).catch(() => undefined);
+      }
+
+      const items = Array.from(data.items || []);
+      const imageItem = items.find((item) => item.type.startsWith('image/'));
+      if (!imageItem) return;
+
+      const file = imageItem.getAsFile();
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        const dataUri = String(reader.result || '');
+        if (!dataUri.startsWith('data:image/')) return;
+        addClipboardImageUnique(dataUri).then((result) => {
+          if (result.inserted) setClipboardItems(result.entries);
+        }).catch(() => undefined);
+        setDraftImages((current) => Array.from(new Set([dataUri, ...current])).slice(0, 6));
+      };
+      reader.readAsDataURL(file);
+    };
+
+    window.addEventListener('paste', onPaste);
+    return () => window.removeEventListener('paste', onPaste);
+  }, []);
 
   useEffect(() => {
     if (!clipboardAvailable) return;
@@ -235,6 +275,25 @@ export function NotesTab({ palette }: { palette: Palette }) {
     setSmartResult(analyzeSmartContent(draftText, draftImages));
   }
 
+  async function runSmartGenerateWithOcr() {
+    if (!draftText.trim() && draftImages.length === 0) return;
+    setOcrBusy(true);
+    try {
+      let ocrText = '';
+      const firstImage = draftImages[0];
+      const maybeTesseract = (globalThis as unknown as { Tesseract?: { recognize: (img: string, lang: string) => Promise<{ data?: { text?: string } }> } }).Tesseract;
+      if (firstImage && maybeTesseract?.recognize) {
+        const result = await maybeTesseract.recognize(firstImage, 'eng');
+        ocrText = String(result?.data?.text || '').trim();
+      }
+      const merged = [draftText.trim(), ocrText].filter(Boolean).join('\n');
+      const parsed = analyzeSmartContent(merged, draftImages);
+      setSmartResult({ ...parsed, rawText: ocrText || undefined });
+    } finally {
+      setOcrBusy(false);
+    }
+  }
+
   async function sendClipboardToNote(entry: ClipboardEntry) {
     setWorkspaceTab('notes');
     if (entry.kind === 'image' && entry.imageDataUri) {
@@ -313,9 +372,9 @@ export function NotesTab({ palette }: { palette: Palette }) {
             <View style={[mainAppStyles.card, { backgroundColor: palette.card, borderColor: palette.border }]}> 
               <View style={styles.editorHeader}>
                 <Text style={{ color: palette.fg, fontWeight: '800' }}>Intelligent note</Text>
-                <Pressable onPress={runSmartGenerate} style={({ pressed }) => [styles.iconAction, { borderColor: palette.border, backgroundColor: palette.bg, opacity: pressed ? 0.8 : 1 }]}>
+                <Pressable onPress={() => runSmartGenerateWithOcr().catch(() => undefined)} style={({ pressed }) => [styles.iconAction, { borderColor: palette.border, backgroundColor: palette.bg, opacity: pressed ? 0.8 : 1 }]}>
                   <Ionicons name="sparkles-outline" size={16} color={palette.accent} />
-                  <Text style={{ color: palette.accent, fontSize: 12, fontWeight: '700' }}>Generate</Text>
+                  <Text style={{ color: palette.accent, fontSize: 12, fontWeight: '700' }}>{ocrBusy ? 'Analyzing...' : 'Generate'}</Text>
                 </Pressable>
               </View>
               <TextInput style={[mainAppStyles.input, styles.noteInput, { backgroundColor: palette.bg, color: palette.fg, borderColor: palette.border, marginTop: 8 }]} placeholder="Type here. Auto-save is always on." placeholderTextColor={palette.muted} multiline value={draftText} onChangeText={setDraftText} />
@@ -335,7 +394,7 @@ export function NotesTab({ palette }: { palette: Palette }) {
               </View>
             </View>
 
-            {smartResult ? <View style={[mainAppStyles.card, { backgroundColor: palette.card, borderColor: palette.border }]}><Text style={{ color: palette.fg, fontWeight: '800', marginBottom: 6 }}>Generated structure</Text><Text style={{ color: palette.fg, fontSize: 12, lineHeight: 18 }}>{smartResult.summary}</Text><View style={styles.editorActions}><Pressable style={[styles.iconOnlyAction, { borderColor: palette.border }]} onPress={() => { setWorkspaceTab('templates'); setTemplateName(smartResult.ticketNumber || 'Generated template'); setTemplateSubject(`Follow-up ${smartResult.ticketNumber || ''}`.trim()); setTemplateBody(smartResult.summary); }}><Ionicons name="layers-outline" size={16} color={palette.fg} /></Pressable><Pressable style={[styles.iconOnlyAction, { borderColor: palette.border }]} onPress={() => { const text = encodeURIComponent(smartResult.ticketNumber || 'Follow up'); void Linking.openURL(`https://calendar.google.com/calendar/render?action=TEMPLATE&text=${text}`); }}><Ionicons name="calendar-outline" size={16} color={palette.fg} /></Pressable></View></View> : null}
+            {smartResult ? <View style={[mainAppStyles.card, { backgroundColor: palette.card, borderColor: palette.border }]}><Text style={{ color: palette.fg, fontWeight: '800', marginBottom: 6 }}>Generated structure</Text><Text style={{ color: palette.fg, fontSize: 12, lineHeight: 18 }}>{smartResult.summary}</Text><View style={styles.editorActions}><Pressable style={[styles.iconOnlyAction, { borderColor: palette.border }]} onPress={() => saveDraftAsNote().catch(() => undefined)}><Ionicons name="document-text-outline" size={16} color={palette.fg} /></Pressable><Pressable style={[styles.iconOnlyAction, { borderColor: palette.border }]} onPress={() => { setWorkspaceTab('templates'); setTemplateName(smartResult.ticketNumber || 'Generated template'); setTemplateSubject(`Follow-up ${smartResult.ticketNumber || ''}`.trim()); setTemplateBody(smartResult.summary); }}><Ionicons name="layers-outline" size={16} color={palette.fg} /></Pressable><Pressable style={[styles.iconOnlyAction, { borderColor: palette.border }]} onPress={() => createOutlookEventFromContent(smartResult.summary).catch(() => undefined)}><Ionicons name="calendar-outline" size={16} color={palette.fg} /></Pressable></View></View> : null}
 
             <View style={[mainAppStyles.card, { backgroundColor: palette.card, borderColor: palette.border }]}>
               <TextInput style={[mainAppStyles.input, { backgroundColor: palette.bg, color: palette.fg, borderColor: palette.border, marginTop: 0 }]} placeholder="Search notes" placeholderTextColor={palette.muted} value={search} onChangeText={setSearch} />
