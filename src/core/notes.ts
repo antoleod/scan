@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { deleteNoteFromFirebase, deleteTemplateFromFirebase, fetchNotesFromFirebase, syncNotesWithFirebase } from './firebase';
+import { clearNotesInFirebase, clearTemplatesInFirebase, deleteNoteFromFirebase, deleteTemplateFromFirebase, fetchNotesFromFirebase, syncNotesWithFirebase } from './firebase';
 
 const NOTES_KEY = '@barra_notes_v1';
 const TEMPLATES_KEY = '@barra_note_templates_v1';
@@ -242,6 +242,16 @@ export async function clearNotes(): Promise<void> {
   await syncNotesStateIfAuthenticated([], undefined);
 }
 
+export async function hardDeleteAllNotes(): Promise<void> {
+  await AsyncStorage.setItem(NOTES_KEY, JSON.stringify([]));
+  await AsyncStorage.setItem(NOTES_SEEDED_KEY, '1');
+  try {
+    await clearNotesInFirebase();
+  } catch {
+    // local cache already cleared
+  }
+}
+
 export async function loadTemplates(): Promise<NoteTemplate[]> {
   const raw = await AsyncStorage.getItem(TEMPLATES_KEY);
   if (!raw) return [];
@@ -384,6 +394,15 @@ export async function removeTemplate(id: string): Promise<NoteTemplate[]> {
     await syncNotesStateIfAuthenticated(undefined, next);
   }
   return next;
+}
+
+export async function hardDeleteAllTemplates(): Promise<void> {
+  await AsyncStorage.setItem(TEMPLATES_KEY, JSON.stringify([]));
+  try {
+    await clearTemplatesInFirebase();
+  } catch {
+    // local cache already cleared
+  }
 }
 
 export async function refreshNotesFromCloudSilently(): Promise<{ notes: NoteItem[]; templates: NoteTemplate[] } | null> {

@@ -62,6 +62,9 @@ export function SettingsTab({
   onPatchSettings,
   onExportCsv,
   onClearHistory,
+  onHardDeleteNotes,
+  onHardDeleteClipboard,
+  onHardDeleteTemplates,
   onExportBackup,
   onOpenBackupImport,
   onRecheckFirebase,
@@ -80,6 +83,9 @@ export function SettingsTab({
   onPatchSettings: (next: Partial<AppSettings>) => void;
   onExportCsv: () => void;
   onClearHistory: () => void;
+  onHardDeleteNotes: () => void;
+  onHardDeleteClipboard: () => void;
+  onHardDeleteTemplates: () => void;
   onExportBackup: () => void;
   onOpenBackupImport: () => void;
   onRecheckFirebase: () => void;
@@ -207,6 +213,9 @@ export function SettingsTab({
             <Pressable onPress={onRecheckFirebase} style={[styles.bulkButton, { backgroundColor: activeAccent }]}><Text style={[styles.bulkButtonText, { color: '#111' }]}>Recheck Firebase</Text></Pressable>
             <Pressable disabled={syncBusy} onPress={onSyncNow} style={[styles.bulkButton, { backgroundColor: activeAccent, opacity: syncBusy ? 0.6 : 1 }]}><Text style={[styles.bulkButtonText, { color: '#111' }]}>{syncBusy ? 'Syncing' : 'Sync now'}</Text></Pressable>
             <Pressable onPress={() => Alert.alert('Clear history', 'Are you sure you want to clear all history?', [{ text: 'Cancel', style: 'cancel' }, { text: 'Clear', style: 'destructive', onPress: onClearHistory }])} style={[styles.bulkButton, { backgroundColor: '#ef4444' }]}><Text style={[styles.bulkButtonText, { color: '#fff' }]}>Clear history</Text></Pressable>
+            <Pressable onPress={() => Alert.alert('Hard delete notes', 'Delete all notes locally and in cloud?', [{ text: 'Cancel', style: 'cancel' }, { text: 'Delete', style: 'destructive', onPress: onHardDeleteNotes }])} style={[styles.bulkButton, { backgroundColor: '#b91c1c' }]}><Text style={[styles.bulkButtonText, { color: '#fff' }]}>Hard delete notes</Text></Pressable>
+            <Pressable onPress={() => Alert.alert('Hard delete clipboard', 'Delete all clipboard memory locally?', [{ text: 'Cancel', style: 'cancel' }, { text: 'Delete', style: 'destructive', onPress: onHardDeleteClipboard }])} style={[styles.bulkButton, { backgroundColor: '#b91c1c' }]}><Text style={[styles.bulkButtonText, { color: '#fff' }]}>Hard delete clipboard</Text></Pressable>
+            <Pressable onPress={() => Alert.alert('Hard delete templates', 'Delete all templates locally and in cloud?', [{ text: 'Cancel', style: 'cancel' }, { text: 'Delete', style: 'destructive', onPress: onHardDeleteTemplates }])} style={[styles.bulkButton, { backgroundColor: '#b91c1c' }]}><Text style={[styles.bulkButtonText, { color: '#fff' }]}>Hard delete templates</Text></Pressable>
           </View>
           <Text style={{ color: palette.muted, marginTop: 6 }}>Mode: {isGuest ? 'Guest' : 'Authenticated'} | Persistence: {persistenceMode === 'firebase' ? 'Firebase' : 'Local'}</Text>
           {userEmail ? <Text style={{ color: palette.fg, marginTop: 2 }}>{userEmail}</Text> : null}

@@ -379,3 +379,27 @@ export async function clearScansInFirebase(): Promise<void> {
     await deleteDoc(doc(scansRef, item.id));
   }
 }
+
+export async function clearNotesInFirebase(): Promise<void> {
+  const rt = await initFirebaseRuntime();
+  if (!rt.enabled || !rt.auth || !rt.db) return;
+  const user = rt.auth.currentUser;
+  if (!user) return;
+  const notesRef = collection(rt.db, 'users', user.uid, 'notes');
+  const snap = await getDocs(query(notesRef));
+  for (const item of snap.docs) {
+    await deleteDoc(doc(notesRef, item.id));
+  }
+}
+
+export async function clearTemplatesInFirebase(): Promise<void> {
+  const rt = await initFirebaseRuntime();
+  if (!rt.enabled || !rt.auth || !rt.db) return;
+  const user = rt.auth.currentUser;
+  if (!user) return;
+  const templatesRef = collection(rt.db, 'users', user.uid, 'noteTemplates');
+  const snap = await getDocs(query(templatesRef));
+  for (const item of snap.docs) {
+    await deleteDoc(doc(templatesRef, item.id));
+  }
+}

@@ -103,3 +103,7 @@ export async function addClipboardImageUnique(imageDataUri: string): Promise<{ e
   await saveClipboardEntries(next);
   return { entries: next, inserted: true };
 }
+
+export async function clearClipboardEntries(): Promise<void> {
+  await AsyncStorage.removeItem(CLIPBOARD_KEY);
+}

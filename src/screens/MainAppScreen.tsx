@@ -62,7 +62,8 @@ import { QrModal } from '../components/mainApp/QrModal';
 import { ScanTab } from '../components/mainApp/tabs/ScanTab';
 import { SelectionFooter } from '../components/mainApp/SelectionFooter';
 import { SettingsTab } from '../components/mainApp/tabs/SettingsTab';
-import { loadNotes as loadWorkNotes, loadTemplates as loadNoteTemplates, saveNotes as saveWorkNotes, saveTemplates as saveNoteTemplates } from '../core/notes';
+import { hardDeleteAllNotes, hardDeleteAllTemplates, loadNotes as loadWorkNotes, loadTemplates as loadNoteTemplates, saveNotes as saveWorkNotes, saveTemplates as saveNoteTemplates } from '../core/notes';
+import { clearClipboardEntries } from '../core/clipboard';
 
 type Tab = 'scan' | 'history' | 'notes' | 'settings';
 type DateFilter = 'ALL' | 'TODAY' | 'WEEK' | 'MONTH';
@@ -994,6 +995,23 @@ function MainApp() {
     await diag.info('history.cleared');
   }
 
+  async function hardDeleteNotesNow() {
+    await hardDeleteAllNotes();
+    await syncNow(false).catch(() => undefined);
+    await diag.info('notes.hard_delete');
+  }
+
+  async function hardDeleteClipboardNow() {
+    await clearClipboardEntries();
+    await diag.info('clipboard.hard_delete');
+  }
+
+  async function hardDeleteTemplatesNow() {
+    await hardDeleteAllTemplates();
+    await syncNow(false).catch(() => undefined);
+    await diag.info('templates.hard_delete');
+  }
+
   function resetEntryModal() {
     setEntryModalVisible(false);
     setEntryMode('add');
@@ -1366,6 +1384,9 @@ function MainApp() {
               onRecheckFirebase={recheckFirebase}
               onSyncNow={syncNow}
               onLogout={logout}
+              onHardDeleteNotes={hardDeleteNotesNow}
+              onHardDeleteClipboard={hardDeleteClipboardNow}
+              onHardDeleteTemplates={hardDeleteTemplatesNow}
               syncBusy={syncBusy}
               userEmail={user?.email || null}
               userUidPrefix={user ? user.uid.substring(0, 8) : null}
