@@ -140,7 +140,7 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
       logoMarkWidth: 28,
       logoMarkHeight: 2,
       primaryText: 'SIGN IN',
-      watermark: themeName === 'euBlue' || themeName === 'obsidianGold',
+      watermark: themeName === 'obsidianGold',
     };
   }, [themeName]);
 
