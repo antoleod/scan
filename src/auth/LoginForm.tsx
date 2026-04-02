@@ -91,7 +91,22 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
   const { theme, themeName } = useAppTheme();
   const { height } = useWindowDimensions();
   const scanProgress = useSharedValue(0);
+
   const palette = useMemo(() => {
+    if (themeName === 'euBlue') {
+      return {
+        logoFamily: Platform.select({ web: 'Courier New, monospace', default: 'monospace' }),
+        logoWeight: '900' as const,
+        logoStyle: 'normal' as const,
+        logoLetterSpacing: 1,
+        logoMarkWidth: 60,
+        logoMarkHeight: 1,
+        subtitle: 'SYSTEM ACCESS :: CORE-TERMINAL',
+        primaryText: 'EXECUTE LOGIN',
+        watermark: true,
+      };
+    }
+
     if (themeName === 'midnightSteel') {
       return {
         logoFamily: Platform.select({ web: 'Arial Black, Arial, sans-serif', default: 'sans-serif' }),
@@ -123,7 +138,11 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
   const firebaseEmail = normalizeIdentifier(username);
 
   useEffect(() => {
-    scanProgress.value = withRepeat(withTiming(1, { duration: 1800 }), -1, true);
+    scanProgress.value = withRepeat(
+      withTiming(1, {
+        duration: 2400,
+        easing: Easing.bezier(0.45, 0, 0.55, 1)
+      }), -1, true);
   }, [scanProgress]);
 
   const scanLineStyle = useAnimatedStyle(() => ({
@@ -145,21 +164,21 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
   const footerPulse = useSharedValue(0);
 
   const chromaticRedStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: interpolate(glitchValue.value, [0, 1], [0, -4]) }],
-    opacity: interpolate(glitchValue.value, [0, 1], [0, 0.35]),
+    transform: [{ translateX: interpolate(glitchValue.value, [0, 1], [0, -6]) }],
+    opacity: interpolate(glitchValue.value, [0, 1], [0, 0.45]),
   }));
 
   const chromaticBlueStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: interpolate(glitchValue.value, [0, 1], [0, 4]) }],
-    opacity: interpolate(glitchValue.value, [0, 1], [0, 0.35]),
+    transform: [{ translateX: interpolate(glitchValue.value, [0, 1], [0, 6]) }],
+    opacity: interpolate(glitchValue.value, [0, 1], [0, 0.45]),
   }));
   useEffect(() => {
     const triggerGlitch = () => {
       glitchValue.value = withSequence(
-        withTiming(1, { duration: 60 }),
-        withTiming(0, { duration: 60 }),
-        withTiming(1, { duration: 60 }),
-        withTiming(0, { duration: 60 })
+        withTiming(1, { duration: 50 }),
+        withTiming(0.3, { duration: 40 }),
+        withTiming(0.7, { duration: 40 }),
+        withTiming(0, { duration: 50 })
       );
       // Disparar glitch aleatoriamente cada 4-9 segundos
       setTimeout(triggerGlitch, 4000 + Math.random() * 5000);
@@ -177,11 +196,12 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
 
   const glitchStyle = useAnimatedStyle(() => ({
     transform: [
-      { translateX: interpolate(glitchValue.value, [0, 1], [0, 8]) },
-      { skewX: `${glitchValue.value * 0.1}rad` },
+      { translateX: interpolate(glitchValue.value, [0, 0.2, 0.5, 0.8, 1], [0, -5, 8, -3, 0]) },
+      { skewX: `${glitchValue.value * 0.05}rad` },
+      { scale: interpolate(glitchValue.value, [0, 1], [1, 1.015]) },
       { translateY: interpolate(scanProgress.value, [0, 0.5, 1], [0, -6, 0]) }, // Efecto de flotaciÃ³n tÃ©cnica
     ],
-    opacity: interpolate(glitchValue.value, [0, 1], [1, 0.7]),
+    opacity: interpolate(glitchValue.value, [0, 1], [1, 0.85]),
   }));
   const pulseStyle = useAnimatedStyle(() => {
     // Efecto de distorsiÃ³n sutil: jitter horizontal y skew diagonal
@@ -210,8 +230,11 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
   }));
 
   const starsStyle = useAnimatedStyle(() => ({
-    opacity: interpolate(scanProgress.value, [0, 0.5, 1], [0.4, 1, 0.4]),
-    transform: [{ rotate: `${interpolate(scanProgress.value, [0, 1], [0, 15])}deg` }],
+    opacity: interpolate(scanProgress.value, [0, 0.2, 0.5, 0.8, 1], [0.3, 0.6, 1, 0.6, 0.3]),
+    transform: [
+      { rotate: `${interpolate(scanProgress.value, [0, 1], [0, 20])}deg` },
+      { scale: interpolate(scanProgress.value, [0, 0.5, 1], [0.96, 1.06, 0.96]) }
+    ],
   }));
 
 
@@ -701,5 +724,4 @@ const styles = StyleSheet.create({
   footerTrack: { width: 72, height: 12, alignItems: 'center', justifyContent: 'center' },
   footerLine: { width: 44, height: 1, borderRadius: 999 },
   footerSignalDot: { position: 'absolute', width: 4, height: 4, borderRadius: 999, right: 12 },
-  version: { fontSize: 9, fontWeight: '700', letterSpacing: 2, textTransform: 'uppercase', opacity: 0.4 },
-});
+  version: { fon

@@ -52,20 +52,20 @@ export type AppTheme = ThemeTokens & {
 
 export const themeTokens = {
   euBlue: {
-    background: '#020617', // Midnight Navy Pro
-    surface: '#0F172A',
-    surfaceAlt: '#020612',
-    card: '#1E293B',
-    inputBg: '#0B1222',
-    text: '#F8FAFC',
-    textSecondary: '#64748B',
-    primary: '#1E40AF',
-    secondary: '#FDE047', // Technical Gold
-    border: '#1E293B',
-    success: '#10B981',
+    background: '#000500', // Matrix Void
+    surface: '#001100',
+    surfaceAlt: '#000800',
+    card: '#000A00',
+    inputBg: '#000500',
+    text: '#00FF41', // Bright Matrix Green
+    textSecondary: '#008F11', // Medium Console Green
+    primary: '#003B00', // Deep Forest Structure
+    secondary: '#00FF41',
+    border: '#003B00',
+    success: '#00FF41',
     warning: '#F59E0B',
-    error: '#EF4444',
-    icon: '#94A3B8',
+    error: '#FF0000',
+    icon: '#008F11',
   },
   dark: {
     background: '#020202', // Pitch Black

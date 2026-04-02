@@ -7,17 +7,19 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  useWindowDimensions,
   View,
 } from 'react-native';
 
+import { Easing } from 'react-native-reanimated';
 import ForgotPasswordForm from './ForgotPasswordForm';
 import LoginForm from './LoginForm';
 import RegisterForm from './RegisterForm';
 import { AuthView } from './authTypes';
 import { useAuth } from './useAuth';
+import { useAppTheme } from '../constants/theme';
 
 function AuthBackgroundEffects() {
+  const { theme } = useAppTheme();
   const pulse = React.useRef(new Animated.Value(0)).current;
   const drift = React.useRef(new Animated.Value(0)).current;
   const useNativeDriver = Platform.OS !== 'web';
@@ -25,14 +27,14 @@ function AuthBackgroundEffects() {
   React.useEffect(() => {
     const pulseLoop = Animated.loop(
       Animated.sequence([
-        Animated.timing(pulse, { toValue: 1, duration: 2600, useNativeDriver }),
-        Animated.timing(pulse, { toValue: 0, duration: 2600, useNativeDriver }),
+        Animated.timing(pulse, { toValue: 1, duration: 3200, easing: Easing.inOut(Easing.quad), useNativeDriver }),
+        Animated.timing(pulse, { toValue: 0, duration: 3200, easing: Easing.inOut(Easing.quad), useNativeDriver }),
       ])
     );
     const driftLoop = Animated.loop(
       Animated.sequence([
-        Animated.timing(drift, { toValue: 1, duration: 4200, useNativeDriver }),
-        Animated.timing(drift, { toValue: 0, duration: 4200, useNativeDriver }),
+        Animated.timing(drift, { toValue: 1, duration: 6000, easing: Easing.inOut(Easing.sin), useNativeDriver }),
+        Animated.timing(drift, { toValue: 0, duration: 6000, easing: Easing.inOut(Easing.sin), useNativeDriver }),
       ])
     );
     pulseLoop.start();
@@ -56,20 +58,20 @@ function AuthBackgroundEffects() {
     <View pointerEvents="none" style={styles.fxWrap}>
       <Animated.View style={[styles.fxHalo, haloStyle]} />
       <View style={styles.fxGrid}>
-        <View style={[styles.fxGridV, { left: '20%' }]} />
-        <View style={[styles.fxGridV, { left: '40%' }]} />
-        <View style={[styles.fxGridV, { left: '60%' }]} />
-        <View style={[styles.fxGridV, { left: '80%' }]} />
-        <View style={[styles.fxGridH, { top: '30%' }]} />
-        <View style={[styles.fxGridH, { top: '55%' }]} />
-        <View style={[styles.fxGridH, { top: '80%' }]} />
+        <View style={[styles.fxGridV, { left: '20%', backgroundColor: theme.primary, opacity: 0.15 }]} />
+        <View style={[styles.fxGridV, { left: '40%', backgroundColor: theme.primary, opacity: 0.15 }]} />
+        <View style={[styles.fxGridV, { left: '60%', backgroundColor: theme.primary, opacity: 0.15 }]} />
+        <View style={[styles.fxGridV, { left: '80%', backgroundColor: theme.primary, opacity: 0.15 }]} />
+        <View style={[styles.fxGridH, { top: '30%', backgroundColor: theme.primary, opacity: 0.1 }]} />
+        <View style={[styles.fxGridH, { top: '55%', backgroundColor: theme.primary, opacity: 0.1 }]} />
+        <View style={[styles.fxGridH, { top: '80%', backgroundColor: theme.primary, opacity: 0.1 }]} />
       </View>
       <Animated.View style={[styles.fxStars, starsStyle]}>
-        <View style={[styles.fxStar, { top: '10%', left: '12%' }]} />
-        <View style={[styles.fxStar, { top: '18%', right: '18%' }]} />
-        <View style={[styles.fxStar, { top: '32%', left: '68%' }]} />
-        <View style={[styles.fxStar, { top: '62%', left: '22%' }]} />
-        <View style={[styles.fxStar, { top: '72%', right: '30%' }]} />
+        <View style={[styles.fxStar, { top: '10%', left: '12%', backgroundColor: theme.secondary }]} />
+        <View style={[styles.fxStar, { top: '18%', right: '18%', backgroundColor: theme.secondary }]} />
+        <View style={[styles.fxStar, { top: '32%', left: '68%', backgroundColor: theme.secondary }]} />
+        <View style={[styles.fxStar, { top: '62%', left: '22%', backgroundColor: theme.secondary }]} />
+        <View style={[styles.fxStar, { top: '72%', right: '30%', backgroundColor: theme.secondary }]} />
       </Animated.View>
       <View style={styles.fxReadability} />
     </View>
@@ -94,7 +96,6 @@ function FirebaseGuardCard() {
 export default function AuthScreen() {
   const { enterAsGuest } = useAuth();
   const [view, setView] = useState<AuthView>('login');
-  const { height } = useWindowDimensions();
 
   if (view === 'login') {
     return (
@@ -111,7 +112,7 @@ export default function AuthScreen() {
       style={styles.container}
     >
       <AuthBackgroundEffects />
-      <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={[styles.content, { minHeight: height }]}>
+      <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content}>
         <View style={styles.brandArea}>
           <Text style={styles.kicker}>ORYXEN TECH</Text>
           <Text style={styles.title}>ORYXEN SCANNER</Text>
