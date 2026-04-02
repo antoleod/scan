@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+﻿import React, { useEffect, useMemo, useState } from 'react';
 import { Platform, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 
 import { AppSettings, type PersistenceMode } from '../../../types';
@@ -140,18 +140,23 @@ export function SettingsTab({
   const [passPhrase, setPassPhrase] = useState('');
   const [installBusy, setInstallBusy] = useState(false);
   const [pwaInstallAvailable, setPwaInstallAvailable] = useState(canInstallPwa());
+  const [isInstalled, setIsInstalled] = useState(false);
   const [webOnline, setWebOnline] = useState(Platform.OS !== 'web' ? true : (typeof navigator !== 'undefined' ? navigator.onLine : true));
 
   useEffect(() => subscribePwaInstallAvailability(setPwaInstallAvailable), []);
   useEffect(() => {
     if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+    setIsInstalled(window.matchMedia('(display-mode: standalone)').matches);
     const onOnline = () => setWebOnline(true);
     const onOffline = () => setWebOnline(false);
+    const onInstall = () => setIsInstalled(true);
     window.addEventListener('online', onOnline);
     window.addEventListener('offline', onOffline);
+    window.addEventListener('appinstalled', onInstall);
     return () => {
       window.removeEventListener('online', onOnline);
       window.removeEventListener('offline', onOffline);
+      window.removeEventListener('appinstalled', onInstall);
     };
   }, []);
 
@@ -159,7 +164,7 @@ export function SettingsTab({
     () => [
       { key: 'dark', label: 'Enterprise', background: '#0A1740', text: '#FFFFFF', border: 'rgba(255,216,77,0.15)', accent: '#FFD84D', supported: true },
       { key: 'light', label: 'Light', background: '#FFFFFF', text: '#111111', border: '#D0D8E8', accent: '#0052CC', supported: true },
-      { key: 'eu_blue', label: 'EU Blue', background: '#0052CC', text: '#FFCC00', border: '#FFCC00', accent: '#FFCC00', supported: true },
+      { key: 'eu_blue', label: 'Matrix', background: '#040f08', text: '#9df8b1', border: '#1a4a2b', accent: '#31ff65', supported: true },
       { key: 'custom', label: 'Custom', background: '#112244', text: '#00D4FF', border: '#00AACC', accent: '#00D4FF', supported: true },
       { key: 'parliament', label: 'Parliament', background: '#2A1245', text: '#FFCC00', border: '#6B3FB5', accent: '#FFCC00', supported: true },
       { key: 'noirGraphite', label: 'Noir', background: '#1A1A1A', text: '#FFFFFF', border: '#333333', accent: '#FF6B00', supported: true },
@@ -282,7 +287,7 @@ export function SettingsTab({
           <View style={styles.toggleRow}><Text style={[styles.toggleLabel, { color: palette.fg }]}>Save password (encrypted)</Text><Switch value={settings.savePasswordEncrypted ?? false} onValueChange={(value) => onPatchSettings({ savePasswordEncrypted: value })} /></View>
         </SectionCard>
 
-        <SectionCard title="Web App (PWA)" subtitle="Install this app in your browser." accent={palette.accent} subtitleColor={palette.muted} cardBackground={palette.card} cardBorder={palette.border}>
+        {!isInstalled ? <SectionCard title="Web App (PWA)" subtitle="Install this app in your browser." accent={palette.accent} subtitleColor={palette.muted} cardBackground={palette.card} cardBorder={palette.border}>
           <Text style={{ color: palette.muted }}>
             {Platform.OS === 'web'
               ? pwaInstallAvailable
@@ -306,7 +311,7 @@ export function SettingsTab({
               <Text style={[styles.bulkButtonText, { color: '#111' }]}>{installBusy ? 'Opening...' : 'Install Web App'}</Text>
             </Pressable>
           </View>
-        </SectionCard>
+        </SectionCard> : null}
 
         <SectionCard title="Bulk import" subtitle="Paste list (one per line, comma or tab)." accent={palette.accent} subtitleColor={palette.muted} cardBackground={palette.card} cardBorder={palette.border}>
           <TextInput
@@ -323,7 +328,7 @@ export function SettingsTab({
           {bulkPreview.length ? (
             <View style={[styles.bulkPreview, { borderColor: palette.border, backgroundColor: palette.card }]}>
               <Text style={[styles.bulkPreviewLabel, { color: palette.muted }]}>Preview ({bulkPreview.length})</Text>
-              <Text style={[styles.bulkPreviewText, { color: palette.fg }]} numberOfLines={3}>{bulkPreview.slice(0, 8).join(' � ')}{bulkPreview.length > 8 ? ' ...' : ''}</Text>
+              <Text style={[styles.bulkPreviewText, { color: palette.fg }]} numberOfLines={3}>{bulkPreview.slice(0, 8).join(' · ')}{bulkPreview.length > 8 ? ' ...' : ''}</Text>
             </View>
           ) : null}
         </SectionCard>
@@ -460,6 +465,7 @@ const styles = StyleSheet.create({
   fieldLabel: { fontSize: 10, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 2, fontFamily: 'monospace' },
   input: { minHeight: 42, borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 13 },
 });
+
 
 
 

@@ -63,11 +63,9 @@ import { SettingsTab } from '../components/mainApp/tabs/SettingsTab';
 import { loadNotes as loadWorkNotes, loadTemplates as loadNoteTemplates, saveNotes as saveWorkNotes, saveTemplates as saveNoteTemplates } from '../core/notes';
 
 type Tab = 'scan' | 'history' | 'notes' | 'settings';
-type ManualItemType = 'PI' | 'OFFICE' | 'OTHER';
 type DateFilter = 'ALL' | 'TODAY' | 'WEEK' | 'MONTH';
 type EntryDraftSnapshot = {
   mode: 'add' | 'edit';
-  type: ManualItemType;
   value: string;
   label: string;
   ticket: string;
@@ -145,7 +143,6 @@ function MainApp() {
   const [dateModalVisible, setDateModalVisible] = useState(false);
   const [entryModalVisible, setEntryModalVisible] = useState(false);
   const [entryMode, setEntryMode] = useState<'add' | 'edit'>('add');
-  const [entryType, setEntryType] = useState<ManualItemType>('PI');
   const [entryValue, setEntryValue] = useState('');
   const [entryLabel, setEntryLabel] = useState('');
   const [entryTicket, setEntryTicket] = useState('');
@@ -994,7 +991,6 @@ function MainApp() {
   function resetEntryModal() {
     setEntryModalVisible(false);
     setEntryMode('add');
-    setEntryType('PI');
     setEntryValue('');
     setEntryLabel('');
     setEntryTicket('');
@@ -1004,10 +1000,9 @@ function MainApp() {
     entryDraftRef.current = null;
   }
 
-  function buildEntrySnapshot(nextMode: 'add' | 'edit', nextType: ManualItemType, nextValue: string, nextLabel: string, nextTicket: string, nextNotes: string, nextOffice: string, nextEditId: string | null): EntryDraftSnapshot {
+  function buildEntrySnapshot(nextMode: 'add' | 'edit', nextValue: string, nextLabel: string, nextTicket: string, nextNotes: string, nextOffice: string, nextEditId: string | null): EntryDraftSnapshot {
     return {
       mode: nextMode,
-      type: nextType,
       value: nextValue.trim(),
       label: nextLabel.trim(),
       ticket: nextTicket.trim(),
@@ -1021,10 +1016,9 @@ function MainApp() {
     if (!entryModalVisible) return false;
     const baseline = entryDraftRef.current;
     if (!baseline) return false;
-    const current = buildEntrySnapshot(entryMode, entryType, entryValue, entryLabel, entryTicket, entryNotes, entryOffice, entryEditId);
+    const current = buildEntrySnapshot(entryMode, entryValue, entryLabel, entryTicket, entryNotes, entryOffice, entryEditId);
     return (
       baseline.mode !== current.mode ||
-      baseline.type !== current.type ||
       baseline.value !== current.value ||
       baseline.label !== current.label ||
       baseline.ticket !== current.ticket ||
@@ -1043,20 +1037,19 @@ function MainApp() {
     Alert.alert('Unsaved changes', 'Do you want to save before closing?', [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Discard', style: 'destructive', onPress: () => resetEntryModal() },
-      { text: 'Save', onPress: () => { saveEntryRecord('none').catch(() => undefined); } },
+      { text: 'Save', onPress: () => { saveEntryRecord().catch(() => undefined); } },
     ]);
   }
 
   function openManualEntryModal() {
     setEntryMode('add');
-    setEntryType('PI');
     setEntryValue('');
     setEntryLabel('');
     setEntryTicket('');
     setEntryNotes('');
     setEntryOffice('');
     setEntryEditId(null);
-    entryDraftRef.current = buildEntrySnapshot('add', 'PI', '', '', '', '', '', null);
+    entryDraftRef.current = buildEntrySnapshot('add', '', '', '', '', '', null);
     setEntryModalVisible(true);
   }
 
@@ -1071,16 +1064,8 @@ function MainApp() {
       ...item,
       structuredFields: { ...(item.structuredFields || {}) },
     };
-    const visibleType = visibleScanType(item.type);
-    const inferredType: ManualItemType =
-      selected.codeType === 'office' || visibleType === 'OFFICE'
-        ? 'OFFICE'
-        : selected.codeType === 'pi' || visibleType === 'PI'
-          ? 'PI'
-          : 'OTHER';
     setEntryModalVisible(false);
     setEntryMode('edit');
-    setEntryType(inferredType);
     setEntryValue(selected.codeNormalized);
     setEntryLabel(selected.label || selected.customLabel || '');
     setEntryTicket(selected.ticketNumber || '');
@@ -1089,7 +1074,6 @@ function MainApp() {
     setEntryEditId(selected.id);
     entryDraftRef.current = buildEntrySnapshot(
       'edit',
-      inferredType,
       selected.codeNormalized,
       selected.label || selected.customLabel || '',
       selected.ticketNumber || '',
@@ -1100,11 +1084,12 @@ function MainApp() {
     setTimeout(() => setEntryModalVisible(true), 0);
   }
 
-  function buildManualHistoryRecord(value: string, type: ManualItemType): ScanRecord {
+  function buildManualHistoryRecord(value: string): ScanRecord {
     const now = new Date().toISOString();
-    const normalizedType = type === 'PI' ? 'PI' : type === 'OFFICE' ? 'OFFICE' : 'OTHER';
     const codeValue = normalizeCodeValue(value);
-    const officeCode = entryOffice.trim() || (type === 'OFFICE' ? codeValue : '');
+    const officeCode = entryOffice.trim();
+    const isPi = /^02PI/i.test(codeValue) || /^PI/i.test(codeValue);
+    const normalizedType = officeCode ? 'OFFICE' : isPi ? 'PI' : 'OTHER';
     return {
       id: createHistoryId('manual'),
       codeOriginal: value,
@@ -1112,13 +1097,13 @@ function MainApp() {
       type: normalizedType,
       codeValue,
       codeFormat: 'code128',
-      codeType: type === 'PI' ? 'pi' : type === 'OFFICE' ? 'office' : 'other',
+      codeType: officeCode ? 'office' : isPi ? 'pi' : 'other',
       label: entryLabel.trim() || undefined,
       notes: entryNotes.trim() || undefined,
       customLabel: entryLabel.trim() || undefined,
       ticketNumber: entryTicket.trim() || undefined,
       officeCode: officeCode || undefined,
-      hasQr: type === 'OFFICE',
+      hasQr: Boolean(officeCode),
       profileId: 'manual',
       piMode: 'N/A',
       source: 'manual',
@@ -1152,7 +1137,7 @@ function MainApp() {
     setQrModalVisible(true);
   }
 
-  async function saveEntryRecord(afterSave: 'none' | 'barcode' | 'qr' = 'none') {
+  async function saveEntryRecord() {
     const value = entryValue.trim();
     if (!value) {
       Alert.alert('Item', 'Value is required.');
@@ -1160,7 +1145,7 @@ function MainApp() {
     }
 
     if (entryMode === 'add') {
-      const record = buildManualHistoryRecord(value, entryType);
+      const record = buildManualHistoryRecord(value);
       const result = await addHistoryUnique(record);
       if (!result.inserted) {
         Alert.alert('Item', 'This item already exists in history.');
@@ -1168,31 +1153,26 @@ function MainApp() {
       }
       setHistory(result.history);
       await diag.info('history.manual.added', { type: record.type, source: record.source });
-      if (afterSave === 'barcode') {
-        openBarcodePreview(record.codeNormalized, record.codeType || 'other');
-      } else if (afterSave === 'qr') {
-        if (record.codeType === 'office') {
-          openBarcodePreview(record.codeNormalized, 'office');
-        } else {
-          openQrPreview(record.codeNormalized);
-        }
-      }
     } else if (entryEditId) {
+      const normalized = normalizeCodeValue(value);
+      const officeCode = entryOffice.trim();
+      const isPi = /^02PI/i.test(normalized) || /^PI/i.test(normalized);
       const next: ScanRecord[] = history.map((item) =>
         item.id === entryEditId
           ? {
             ...item,
             codeOriginal: value,
-            codeNormalized: normalizeCodeValue(value),
-            codeValue: normalizeCodeValue(value),
+            codeNormalized: normalized,
+            codeValue: normalized,
             codeFormat: 'code128' as const,
-            codeType: entryType === 'PI' ? 'pi' : entryType === 'OFFICE' ? 'office' : 'other',
+            type: officeCode ? 'OFFICE' : isPi ? 'PI' : 'OTHER',
+            codeType: officeCode ? 'office' : isPi ? 'pi' : 'other',
             label: entryLabel.trim() || undefined,
             notes: entryNotes.trim() || undefined,
             customLabel: entryLabel.trim() || undefined,
             ticketNumber: entryTicket.trim() || undefined,
-            officeCode: (entryOffice.trim() || (entryType === 'OFFICE' ? value : '')) || undefined,
-            hasQr: entryType === 'OFFICE',
+            officeCode: officeCode || undefined,
+            hasQr: Boolean(officeCode),
             updatedAt: new Date().toISOString(),
             date: new Date().toISOString(),
           }
@@ -1424,7 +1404,6 @@ function MainApp() {
         visible={entryModalVisible}
         mode={entryMode}
         value={entryValue}
-        type={entryType}
         customLabel={entryLabel}
         ticketNumber={entryTicket}
         officeCode={entryOffice}
@@ -1432,15 +1411,12 @@ function MainApp() {
         palette={{ bg: palette.bg, card: palette.card, fg: palette.fg, muted: palette.muted, border: palette.border, accent: palette.accent }}
         onClose={requestCloseEntryModal}
         onChangeValue={setEntryValue}
-        onChangeType={setEntryType}
         onChangeLabel={setEntryLabel}
         onChangeTicket={setEntryTicket}
         onChangeOffice={setEntryOffice}
         onChangeNotes={setEntryNotes}
         onScanOffice={openOfficeScan}
-        onSave={() => saveEntryRecord('none')}
-        onSaveBarcode={entryMode === 'add' ? () => saveEntryRecord('barcode') : undefined}
-        onSaveQr={entryMode === 'add' ? () => saveEntryRecord('qr') : undefined}
+        onSave={() => saveEntryRecord()}
       />
       <OfficeScanModal
         visible={officeScanVisible}

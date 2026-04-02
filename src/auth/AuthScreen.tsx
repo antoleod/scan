@@ -7,6 +7,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  useWindowDimensions,
   View,
 } from 'react-native';
 
@@ -93,6 +94,7 @@ function FirebaseGuardCard() {
 export default function AuthScreen() {
   const { enterAsGuest } = useAuth();
   const [view, setView] = useState<AuthView>('login');
+  const { height } = useWindowDimensions();
 
   if (view === 'login') {
     return (
@@ -109,7 +111,7 @@ export default function AuthScreen() {
       style={styles.container}
     >
       <AuthBackgroundEffects />
-      <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content}>
+      <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={[styles.content, { minHeight: height }]}>
         <View style={styles.brandArea}>
           <Text style={styles.kicker}>ORYXEN TECH</Text>
           <Text style={styles.title}>ORYXEN SCANNER</Text>

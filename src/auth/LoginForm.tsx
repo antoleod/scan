@@ -10,6 +10,7 @@ import {
   Pressable,
   Text,
   TextInput,
+  useWindowDimensions,
   View
 } from 'react-native';
 import Animated, {
@@ -88,6 +89,7 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
 
 
   const { theme, themeName } = useAppTheme();
+  const { height } = useWindowDimensions();
   const scanProgress = useSharedValue(0);
   const palette = useMemo(() => {
     if (themeName === 'midnightSteel') {
@@ -427,7 +429,7 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
         <View pointerEvents="none" style={styles.readabilityVeil} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+      <ScrollView contentContainerStyle={[styles.scrollContent, { minHeight: height }]} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         <Animated.View entering={FadeIn.duration(450)} style={styles.shell}>
           <Animated.View entering={FadeInDown.delay(0).duration(450)} style={styles.badgeRow}>
 
@@ -564,7 +566,7 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
               disabled={isLoading || !firebase.enabled}
             >
               {({ pressed }) => (
-                <View style={[styles.primaryButtonInner, pressed && { opacity: 0.8 }]}>
+                <View style={[styles.primaryButtonInner, pressed && { opacity: 0.86, transform: [{ scale: 0.99 }] }]}>
                   {isLoading ? (
                     <ActivityIndicator color={theme.primary} />
                   ) : (
@@ -679,9 +681,9 @@ const styles = StyleSheet.create({
   label: { fontSize: 10, fontWeight: '800', letterSpacing: 1.2, textTransform: 'uppercase' },
   input: { height: 48, borderRadius: 10, borderWidth: 1, paddingHorizontal: 14, fontSize: 15, shadowOffset: { width: 0, height: 0 }, shadowRadius: 8 },
   error: { fontSize: 11, fontWeight: '600' },
-  helper: { fontSize: 11 },
+  helper: { fontSize: 10 },
   helperStrong: { fontWeight: '700' },
-  note: { fontSize: 11, lineHeight: 16 },
+  note: { fontSize: 10, lineHeight: 15 },
   primaryButton: { borderRadius: 10, overflow: 'hidden' },
   primaryDisabled: { opacity: 0.6 },
   primaryButtonInner: { height: 48, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },

@@ -86,10 +86,10 @@ export default function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
           autoCapitalize="none"
           autoCorrect={false}
         />
-        <Text style={{ color: theme.textSecondary, fontSize: 12, marginTop: 6 }}>
+        <Text style={{ color: theme.textSecondary, fontSize: 11, marginTop: 6 }}>
           Email generated: {normalizedUsername ? normalizedEmail : '@oryxen.tech'}
         </Text>
-        <Text style={{ color: theme.textSecondary, fontSize: 12, marginTop: 2 }}>Create account will be sent to Firebase Auth.</Text>
+        <Text style={{ color: theme.textSecondary, fontSize: 11, marginTop: 2 }}>Create account will be sent to Firebase Auth.</Text>
       </View>
 
       <View style={styles.inputGroup}>
@@ -129,7 +129,9 @@ export default function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
         disabled={submitDisabled}
         style={[styles.primaryButton, { backgroundColor: theme.secondary }, submitDisabled ? styles.primaryButtonDisabled : null]}
       >
-        {loading ? <ActivityIndicator color={theme.primary} /> : <Text style={[styles.primaryButtonText, { color: theme.primary }]}>Create account</Text>}
+        {({ pressed }) =>
+          loading ? <ActivityIndicator color={theme.primary} /> : <Text style={[styles.primaryButtonText, { color: theme.primary, opacity: pressed ? 0.85 : 1 }]}>Create account</Text>
+        }
       </Pressable>
 
       <View style={styles.linksBlock}>
@@ -160,13 +162,13 @@ const styles = StyleSheet.create({
   },
   input: {
     borderWidth: 1,
-    borderColor: '#cbd5e1',
+    borderColor: '#9fb2cf',
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 11,
     fontSize: 15,
-    color: '#111827',
-    backgroundColor: '#ffffff',
+    color: '#0b1322',
+    backgroundColor: '#f6f9ff',
   },
   primaryButton: {
     backgroundColor: '#0f82f8',

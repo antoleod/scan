@@ -24,7 +24,7 @@ export default function ForgotPasswordForm({ onSwitchToLogin }: ForgotPasswordFo
   const [success, setSuccess] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const submitDisabled = loading;
+  const submitDisabled = loading || !email.trim();
 
   const handleSubmit = async () => {
     setError(null);
@@ -77,7 +77,9 @@ export default function ForgotPasswordForm({ onSwitchToLogin }: ForgotPasswordFo
         disabled={submitDisabled}
         style={[styles.primaryButton, { backgroundColor: theme.secondary }, submitDisabled ? styles.primaryButtonDisabled : null]}
       >
-        {loading ? <ActivityIndicator color={theme.primary} /> : <Text style={[styles.primaryButtonText, { color: theme.primary }]}>Send reset link</Text>}
+        {({ pressed }) =>
+          loading ? <ActivityIndicator color={theme.primary} /> : <Text style={[styles.primaryButtonText, { color: theme.primary, opacity: pressed ? 0.85 : 1 }]}>Send reset link</Text>
+        }
       </Pressable>
 
       <View style={styles.linksBlock}>
@@ -114,13 +116,13 @@ const styles = StyleSheet.create({
   },
   input: {
     borderWidth: 1,
-    borderColor: '#cbd5e1',
+    borderColor: '#9fb2cf',
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 11,
     fontSize: 15,
-    color: '#111827',
-    backgroundColor: '#ffffff',
+    color: '#0b1322',
+    backgroundColor: '#f6f9ff',
   },
   primaryButton: {
     backgroundColor: '#0f82f8',

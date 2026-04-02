@@ -24,13 +24,21 @@ export function ScanViewfinder({
   onToggleTorch: () => void;
 }) {
   const lineProgress = useSharedValue(0);
+  const pulse = useSharedValue(0);
 
   React.useEffect(() => {
-    lineProgress.value = withRepeat(withTiming(1, { duration: 2000 }), -1, true);
-  }, [lineProgress]);
+    lineProgress.value = withRepeat(withTiming(1, { duration: 1850 }), -1, true);
+    pulse.value = withRepeat(withTiming(1, { duration: 1600 }), -1, true);
+  }, [lineProgress, pulse]);
 
   const lineStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: interpolate(lineProgress.value, [0, 1], [VIEW_H * 0.1, VIEW_H * 0.85]) }],
+    transform: [{ translateY: interpolate(lineProgress.value, [0, 1], [VIEW_H * 0.08, VIEW_H * 0.88]) }],
+    opacity: interpolate(lineProgress.value, [0, 0.1, 0.5, 0.9, 1], [0.2, 1, 1, 1, 0.2]),
+  }));
+
+  const pulseStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: interpolate(pulse.value, [0, 1], [0.98, 1.02]) }],
+    opacity: interpolate(pulse.value, [0, 1], [0.8, 1]),
   }));
 
   return (
@@ -38,13 +46,13 @@ export function ScanViewfinder({
       <View style={styles.overlayTop} pointerEvents="none" />
       <View style={styles.middle} pointerEvents="none">
         <View style={styles.overlaySide} />
-        <View style={styles.viewfinder}>
+        <Animated.View style={[styles.viewfinder, pulseStyle]}>
           <View style={[styles.corner, styles.tl]} />
           <View style={[styles.corner, styles.tr]} />
           <View style={[styles.corner, styles.bl]} />
           <View style={[styles.corner, styles.br]} />
           <Animated.View style={[styles.scanLine, lineStyle]} />
-        </View>
+        </Animated.View>
         <View style={styles.overlaySide} />
       </View>
       <View style={styles.overlayBottom} pointerEvents="none" />
@@ -150,4 +158,3 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
 });
-

@@ -124,6 +124,13 @@ export function ScanTab({
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false} bounces>
       <ScanFeedbackBanner feedback={scanFeedback} palette={{ accent: C.accent }} />
+      <Animated.View style={[styles.toastTop, toastStyle]}>
+        <Text style={styles.toastTitle}>Scanning is taking longer than expected</Text>
+        <Text style={styles.toastSubtitle}>Capture a photo to extract the code quickly.</Text>
+        <Pressable style={styles.toastBtn} onPress={onTakePicture} disabled={manualCaptureBusy}>
+          {manualCaptureBusy ? <ActivityIndicator size="small" color={C.accent} /> : <Text style={styles.toastBtnText}>Take photo</Text>}
+        </Pressable>
+      </Animated.View>
       {!cameraPermissionGranted ? (
         <View style={styles.permissionBox}>
           <Text style={styles.permissionText}>Camera permission required</Text>
@@ -153,14 +160,18 @@ export function ScanTab({
       )}
 
       <View style={styles.bottomPanel}>
+        <View style={styles.scanStatusRow}>
+          <View style={[styles.scanDot, { backgroundColor: cameraActive ? '#22c55e' : C.muted }]} />
+          <Text style={styles.scanStatusText}>{cameraActive ? (scanState === 'scanning' || scanState === 'detecting' ? 'Scanning active' : 'Scanner ready') : 'Scanner paused'}</Text>
+        </View>
         <View style={styles.modeRow}>
           <Pressable style={[styles.modeBtn, styles.modeBtnActive]}>
             <Ionicons name="barcode-outline" size={14} color="#fff" />
             <Text style={[styles.modeText, styles.modeTextActive]}>Barcode</Text>
           </Pressable>
           <Pressable style={styles.modeBtn} onPress={onScanFromImage}>
-            <Ionicons name="images-outline" size={14} color={C.muted} />
-            <Text style={styles.modeText}>Image scan</Text>
+            <Ionicons name="image-outline" size={14} color={C.muted} />
+            <Text style={styles.modeText}>Image Scan</Text>
           </Pressable>
           <Pressable style={styles.modeBtn} onPress={onScanFromNfc} disabled={nfcBusy}>
             <MaterialCommunityIcons name="nfc-variant" size={14} color={C.tertiary} />
@@ -183,13 +194,6 @@ export function ScanTab({
           </View>
         ) : null}
 
-        <Animated.View style={[styles.toast, toastStyle]}>
-          <Text style={styles.toastTitle}>Scanning is taking too long</Text>
-          <Text style={styles.toastSubtitle}>You can capture the code with a photo and process it now.</Text>
-          <Pressable style={styles.toastBtn} onPress={onTakePicture} disabled={manualCaptureBusy}>
-            {manualCaptureBusy ? <ActivityIndicator size="small" color={C.accent} /> : <Text style={styles.toastBtnText}>Take photo</Text>}
-          </Pressable>
-        </Animated.View>
       </View>
     </ScrollView>
   );
@@ -244,6 +248,34 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     paddingBottom: 14,
   },
+  scanStatusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginHorizontal: 16,
+    marginBottom: 10,
+  },
+  scanDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 99,
+  },
+  scanStatusText: {
+    color: C.text,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  toastTop: {
+    marginHorizontal: 16,
+    marginTop: 12,
+    marginBottom: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: C.toastBorder,
+    backgroundColor: C.toast,
+    padding: 12,
+    gap: 8,
+  },
   modeRow: {
     flexDirection: 'row',
     gap: 8,
@@ -276,15 +308,6 @@ const styles = StyleSheet.create({
   },
   modeTextTertiary: {
     color: C.tertiary,
-  },
-  toast: {
-    marginHorizontal: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: C.toastBorder,
-    backgroundColor: C.toast,
-    padding: 12,
-    gap: 8,
   },
   previewCard: {
     marginHorizontal: 16,
