@@ -1,9 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Linking, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
+import { Image, Linking, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as FileSystem from 'expo-file-system/legacy';
+import * as Sharing from 'expo-sharing';
 
 import {
   NoteCategory,
@@ -16,9 +18,10 @@ import {
   removeTemplate,
   togglePinned,
   updateNoteText,
+  buildAppointmentIcs,
 } from '../../../core/notes';
 import { ClipboardEntry } from '../../../core/clipboard.types';
-import { addClipboardEntryUnique, loadClipboardEntries } from '../../../core/clipboard';
+import { addClipboardEntryUnique, addClipboardImageUnique, loadClipboardEntries } from '../../../core/clipboard';
 import { mainAppStyles } from '../styles';
 
 type Palette = { bg: string; fg: string; accent: string; muted: string; card: string; border: string };
@@ -73,6 +76,20 @@ function chunk<T>(items: T[], columns: number): T[][] {
   const rows: T[][] = [];
   for (let i = 0; i < items.length; i += columns) rows.push(items.slice(i, i + columns));
   return rows;
+}
+
+function parseFollowUpDate(value: string): Date | null {
+  const text = String(value || '');
+  const m = text.match(/\b(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2})(?::(\d{2}))?\b/);
+  if (!m) return null;
+  const day = Number(m[1]);
+  const month = Number(m[2]) - 1;
+  const year = Number(m[3]);
+  const hour = Number(m[4]);
+  const minute = Number(m[5]);
+  const second = Number(m[6] || '0');
+  const date = new Date(year, month, day, hour, minute, second, 0);
+  return Number.isNaN(date.getTime()) ? null : date;
 }
 
 export function NotesTab({ palette }: { palette: Palette }) {
@@ -130,6 +147,7 @@ export function NotesTab({ palette }: { palette: Palette }) {
     if (!clipboardAvailable) return;
     let mounted = true;
     let lastSeen = '';
+    let lastImageSig = '';
 
     const tick = async () => {
       try {
@@ -139,6 +157,20 @@ export function NotesTab({ palette }: { palette: Palette }) {
         lastSeen = value;
         const result = await addClipboardEntryUnique(value);
         if (result.inserted) setClipboardItems(result.entries);
+
+        const getImageAsync = (Clipboard as unknown as { getImageAsync?: () => Promise<{ data: string } | null> }).getImageAsync;
+        if (getImageAsync) {
+          const image = await getImageAsync();
+          if (image?.data) {
+            const signature = image.data.slice(0, 64);
+            if (signature && signature !== lastImageSig) {
+              lastImageSig = signature;
+              const dataUri = `data:image/png;base64,${image.data}`;
+              const imageResult = await addClipboardImageUnique(dataUri);
+              if (imageResult.inserted) setClipboardItems(imageResult.entries);
+            }
+          }
+        }
       } catch {
         setClipboardAvailable(false);
       }
@@ -177,6 +209,15 @@ export function NotesTab({ palette }: { palette: Palette }) {
     setDraftImages((current) => Array.from(new Set([uri, ...current])).slice(0, 6));
   }
 
+  async function pasteImageFromClipboardToDraft() {
+    const getImageAsync = (Clipboard as unknown as { getImageAsync?: () => Promise<{ data: string } | null> }).getImageAsync;
+    if (!getImageAsync) return;
+    const image = await getImageAsync();
+    if (!image?.data) return;
+    const dataUri = `data:image/png;base64,${image.data}`;
+    setDraftImages((current) => Array.from(new Set([dataUri, ...current])).slice(0, 6));
+  }
+
   async function saveDraftAsNote() {
     const result = await addRichNoteUnique(draftText, activeCategory, draftImages);
     setNotes(result.notes);
@@ -202,6 +243,32 @@ export function NotesTab({ palette }: { palette: Palette }) {
   function sendClipboardToTemplate(entry: ClipboardEntry) {
     setWorkspaceTab('templates');
     setTemplateBody((current) => current ? `${current}\n${entry.content}` : entry.content);
+  }
+
+  async function createOutlookEventFromContent(raw: string) {
+    const dt = parseFollowUpDate(raw);
+    if (!dt) return;
+
+    const ticketMatch = raw.match(/\b(RITM\d+|INC\d+|REQ\d+|SCTASK\d+)\b/i);
+    const title = ticketMatch ? `Follow up ${ticketMatch[1].toUpperCase()}` : 'Follow up';
+    const ics = buildAppointmentIcs(title, raw, '', dt, 30);
+
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      const blob = new Blob([ics], { type: 'text/calendar;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = `${title.replace(/\s+/g, '_')}.ics`;
+      anchor.click();
+      URL.revokeObjectURL(url);
+      return;
+    }
+
+    const path = `${FileSystem.cacheDirectory}followup_${Date.now()}.ics`;
+    await FileSystem.writeAsStringAsync(path, ics, { encoding: FileSystem.EncodingType.UTF8 });
+    if (await Sharing.isAvailableAsync()) {
+      await Sharing.shareAsync(path, { mimeType: 'text/calendar' });
+    }
   }
 
   const workspaceWidth = isDesktop ? Math.min(Math.floor(width * 0.8), 1320) : width - 24;
@@ -248,6 +315,7 @@ export function NotesTab({ palette }: { palette: Palette }) {
                 </View>
                 <View style={styles.editorActions}>
                   <Pressable style={[styles.iconOnlyAction, { borderColor: palette.border }]} onPress={() => addImageToDraft().catch(() => undefined)}><Ionicons name="images-outline" size={16} color={palette.fg} /></Pressable>
+                  <Pressable style={[styles.iconOnlyAction, { borderColor: palette.border }]} onPress={() => pasteImageFromClipboardToDraft().catch(() => undefined)}><Ionicons name="clipboard-outline" size={16} color={palette.fg} /></Pressable>
                   <Pressable style={[styles.iconOnlyAction, { borderColor: palette.border }]} onPress={() => saveDraftAsNote().catch(() => undefined)}><Ionicons name="save-outline" size={16} color={palette.fg} /></Pressable>
                 </View>
               </View>
@@ -274,7 +342,7 @@ export function NotesTab({ palette }: { palette: Palette }) {
         {workspaceTab === 'clipboard' ? (
           <>
             <View style={[mainAppStyles.card, { backgroundColor: palette.card, borderColor: palette.border }]}><Text style={{ color: palette.fg, fontWeight: '800' }}>Clipboard timeline</Text><Text style={{ color: palette.muted, fontSize: 11, marginTop: 4 }}>{clipboardAvailable ? 'Active capture. Duplicates are ignored.' : 'Clipboard capture not available on this device.'}</Text></View>
-            <View style={styles.gridWrap}>{clipboardRows.map((row, rowIndex) => <View key={`clip-row-${rowIndex}`} style={styles.gridRow}>{row.map((entry) => <View key={entry.id} style={[styles.compactCard, { flex: 1, borderColor: palette.border, backgroundColor: palette.card }]}><View style={styles.cardHead}><Text style={{ color: palette.muted, fontSize: 10 }}>{new Date(entry.capturedAt).toLocaleDateString()} {new Date(entry.capturedAt).toLocaleTimeString()}</Text><Text style={{ color: palette.accent, fontSize: 10, fontWeight: '800' }}>{entry.category.toUpperCase()}</Text></View><Text style={{ color: palette.fg, fontSize: 12 }} numberOfLines={2}>{entry.content}</Text><View style={styles.editorActions}><Pressable onPress={() => Clipboard.setStringAsync(entry.content)}><Ionicons name="copy-outline" size={16} color={palette.fg} /></Pressable><Pressable onPress={() => sendClipboardToNote(entry).catch(() => undefined)}><Ionicons name="document-text-outline" size={16} color={palette.fg} /></Pressable><Pressable onPress={() => sendClipboardToTemplate(entry)}><Ionicons name="layers-outline" size={16} color={palette.fg} /></Pressable></View></View>)}{row.length < (isDesktop ? desktopColumns : 1) ? Array.from({ length: (isDesktop ? desktopColumns : 1) - row.length }).map((_, i) => <View key={`clip-fill-${i}`} style={{ flex: 1 }} />) : null}</View>)}</View>
+            <View style={styles.gridWrap}>{clipboardRows.map((row, rowIndex) => <View key={`clip-row-${rowIndex}`} style={styles.gridRow}>{row.map((entry) => { const eventDate = parseFollowUpDate(entry.content); return <View key={entry.id} style={[styles.compactCard, { flex: 1, borderColor: palette.border, backgroundColor: palette.card }]}><View style={styles.cardHead}><Text style={{ color: palette.muted, fontSize: 10 }}>{new Date(entry.capturedAt).toLocaleDateString()} {new Date(entry.capturedAt).toLocaleTimeString()}</Text><Text style={{ color: palette.accent, fontSize: 10, fontWeight: '800' }}>{entry.category.toUpperCase()}</Text></View>{entry.kind === 'image' && entry.imageDataUri ? <Image source={{ uri: entry.imageDataUri }} style={styles.clipThumb} resizeMode="cover" /> : null}<Text style={{ color: palette.fg, fontSize: 12 }} numberOfLines={2}>{entry.content}</Text><View style={styles.editorActions}><Pressable onPress={() => Clipboard.setStringAsync(entry.content)}><Ionicons name="copy-outline" size={16} color={palette.fg} /></Pressable><Pressable onPress={() => sendClipboardToNote(entry).catch(() => undefined)}><Ionicons name="document-text-outline" size={16} color={palette.fg} /></Pressable><Pressable onPress={() => sendClipboardToTemplate(entry)}><Ionicons name="layers-outline" size={16} color={palette.fg} /></Pressable>{eventDate ? <Pressable onPress={() => createOutlookEventFromContent(entry.content).catch(() => undefined)}><Ionicons name="calendar-outline" size={16} color={palette.fg} /></Pressable> : null}</View></View>; })}{row.length < (isDesktop ? desktopColumns : 1) ? Array.from({ length: (isDesktop ? desktopColumns : 1) - row.length }).map((_, i) => <View key={`clip-fill-${i}`} style={{ flex: 1 }} />) : null}</View>)}</View>
           </>
         ) : null}
       </View>
@@ -302,6 +370,7 @@ const styles = StyleSheet.create({
   gridWrap: { gap: 8 },
   gridRow: { flexDirection: 'row', gap: 8 },
   compactCard: { borderWidth: 1, borderRadius: 10, padding: 9, gap: 8 },
+  clipThumb: { width: '100%', height: 96, borderRadius: 8, backgroundColor: '#111' },
   cardHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
   cardFoot: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
 });
