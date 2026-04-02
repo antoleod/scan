@@ -455,6 +455,43 @@ export function NotesTab({ palette }: { palette: Palette }) {
     if (result.inserted) setClipboardItems(result.entries);
   }
 
+  async function forceCopyToClipboard(text: string) {
+    const value = String(text || '');
+    if (!value) return;
+
+    try {
+      await Clipboard.setStringAsync(value);
+    } catch {
+      // continue with web fallbacks
+    }
+
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      try {
+        if (navigator?.clipboard?.writeText) {
+          await navigator.clipboard.writeText(value);
+          return;
+        }
+      } catch {
+        // continue with execCommand fallback
+      }
+
+      try {
+        const ta = document.createElement('textarea');
+        ta.value = value;
+        ta.setAttribute('readonly', 'true');
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        ta.style.left = '-9999px';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+      } catch {
+        // final fallback already attempted
+      }
+    }
+  }
+
   const workspaceWidth = '100%';
 
   return (
@@ -689,7 +726,7 @@ export function NotesTab({ palette }: { palette: Palette }) {
                         <Text style={{ color: palette.fg, fontSize: 12 }} numberOfLines={2}>{entry.content}</Text>
                         <Text style={{ color: palette.muted, fontSize: 10 }}>Double tap to preview</Text>
                         <View style={styles.editorActions}>
-                          <Pressable onPress={() => Clipboard.setStringAsync(entry.content)}><Ionicons name="copy-outline" size={16} color={palette.fg} /></Pressable>
+                          <Pressable onPress={() => forceCopyToClipboard(entry.content).catch(() => undefined)}><Ionicons name="copy-outline" size={16} color={palette.fg} /></Pressable>
                           <Pressable onPress={() => sendClipboardToNote(entry).catch(() => undefined)}><Ionicons name="document-text-outline" size={16} color={palette.fg} /></Pressable>
                           <Pressable onPress={() => sendClipboardToTemplate(entry)}><Ionicons name="layers-outline" size={16} color={palette.fg} /></Pressable>
                           {eventDate ? <Pressable onPress={() => createOutlookEventFromContent(entry.content).catch(() => undefined)}><Ionicons name="calendar-outline" size={16} color={palette.fg} /></Pressable> : null}
