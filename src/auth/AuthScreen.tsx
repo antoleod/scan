@@ -57,15 +57,18 @@ function AuthBackgroundEffects() {
   return (
     <View pointerEvents="none" style={styles.fxWrap}>
       <Animated.View style={[styles.fxHalo, haloStyle]} />
-      <View style={styles.fxGrid}>
+      <Animated.View style={[styles.fxGrid, { opacity: pulse.interpolate({ inputRange: [0, 1], outputRange: [0.15, 0.4] }) }]}>
         <View style={[styles.fxGridV, { left: '20%', backgroundColor: theme.primary, opacity: 0.15 }]} />
         <View style={[styles.fxGridV, { left: '40%', backgroundColor: theme.primary, opacity: 0.15 }]} />
         <View style={[styles.fxGridV, { left: '60%', backgroundColor: theme.primary, opacity: 0.15 }]} />
         <View style={[styles.fxGridV, { left: '80%', backgroundColor: theme.primary, opacity: 0.15 }]} />
         <View style={[styles.fxGridH, { top: '30%', backgroundColor: theme.primary, opacity: 0.1 }]} />
+        <View style={[styles.fxGridH, { top: '42%', backgroundColor: theme.primary, opacity: 0.05 }]} />
         <View style={[styles.fxGridH, { top: '55%', backgroundColor: theme.primary, opacity: 0.1 }]} />
+        <View style={[styles.fxGridH, { top: '68%', backgroundColor: theme.primary, opacity: 0.05 }]} />
         <View style={[styles.fxGridH, { top: '80%', backgroundColor: theme.primary, opacity: 0.1 }]} />
-      </View>
+      </Animated.View>
+
       <Animated.View style={[styles.fxStars, starsStyle]}>
         <View style={[styles.fxStar, { top: '10%', left: '12%', backgroundColor: theme.secondary }]} />
         <View style={[styles.fxStar, { top: '18%', right: '18%', backgroundColor: theme.secondary }]} />

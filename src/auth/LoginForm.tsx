@@ -77,6 +77,17 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
 
   const [displayedBrandingText, setDisplayedBrandingText] = useState('');
 
+  const cursorOpacity = useSharedValue(0);
+  useEffect(() => {
+    cursorOpacity.value = withRepeat(
+      withSequence(
+        withTiming(1, { duration: 400 }),
+        withTiming(0, { duration: 400 })
+      ),
+      -1
+    );
+  }, [cursorOpacity]);
+
   useEffect(() => {
     let i = 0;
     const interval = setInterval(() => {
@@ -129,7 +140,7 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
       logoMarkWidth: 28,
       logoMarkHeight: 2,
       primaryText: 'SIGN IN',
-      watermark: true,
+      watermark: themeName === 'euBlue' || themeName === 'obsidianGold',
     };
   }, [themeName]);
 
@@ -148,6 +159,10 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
   const scanLineStyle = useAnimatedStyle(() => ({
     opacity: interpolate(scanProgress.value, [0, 0.2, 0.5, 0.8, 1], [0, 0.75, 1, 0.75, 0]),
     transform: [{ translateY: interpolate(scanProgress.value, [0, 1], [-26, 26]) }],
+  }));
+
+  const cursorStyle = useAnimatedStyle(() => ({
+    opacity: cursorOpacity.value,
   }));
 
   const iconScanLineStyle = useAnimatedStyle(() => ({
@@ -196,15 +211,15 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
 
   const glitchStyle = useAnimatedStyle(() => ({
     transform: [
-      { translateX: interpolate(glitchValue.value, [0, 0.2, 0.5, 0.8, 1], [0, -5, 8, -3, 0]) },
+      { translateX: interpolate(glitchValue.value, [0, 0.2, 0.5, 0.8, 1], [0, -4, 6, -2, 0]) },
       { skewX: `${glitchValue.value * 0.05}rad` },
-      { scale: interpolate(glitchValue.value, [0, 1], [1, 1.015]) },
-      { translateY: interpolate(scanProgress.value, [0, 0.5, 1], [0, -6, 0]) }, // Efecto de flotaciÃ³n tÃ©cnica
+      { scale: interpolate(glitchValue.value, [0, 1], [1, 1.012]) },
+      { translateY: interpolate(scanProgress.value, [0, 0.5, 1], [0, -4, 0]) },
     ],
-    opacity: interpolate(glitchValue.value, [0, 1], [1, 0.85]),
+    opacity: interpolate(glitchValue.value, [0, 0.5, 1], [1, 0.92, 1]),
   }));
   const pulseStyle = useAnimatedStyle(() => {
-    // Efecto de distorsiÃ³n sutil: jitter horizontal y skew diagonal
+    // Efecto de distorsión sutil: jitter horizontal y skew diagonal
     // Se intensifica cerca del centro (0.5) del progreso de escaneo
     const jitter = interpolate(scanProgress.value, [0, 0.45, 0.5, 0.55, 1], [0, 0, 2.5, -2.5, 0]);
     const skew = interpolate(scanProgress.value, [0, 0.45, 0.5, 0.55, 1], [0, 0, 0.04, -0.04, 0]);
@@ -242,14 +257,14 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
   // SincronizaciÃ³n del pulso hÃ¡ptico â€” evita useAnimatedReaction/runOnJS en web
   useEffect(() => {
     if (Platform.OS === 'web') return;
-    let prev: number | null = null;
+    let prevVal: number | null = null;
     let rafId: number;
     const poll = () => {
       const now = scanProgress.value;
-      if (prev !== null && ((prev < 0.5 && now >= 0.5) || (prev > 0.5 && now <= 0.5))) {
+      if (prevVal !== null && ((prevVal < 0.5 && now >= 0.5) || (prevVal > 0.5 && now <= 0.5))) {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => { });
       }
-      prev = now;
+      prevVal = now;
       rafId = requestAnimationFrame(poll);
     };
     rafId = requestAnimationFrame(poll);
@@ -366,7 +381,7 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
       <View style={[styles.background, palette.watermark ? styles.watermarkShell : null]}>
         {palette.watermark && (
           <View style={[styles.watermarkContainer, styles.watermarkVisible]} pointerEvents="none">
-            {/* Capa de AberraciÃ³n: Rojo (Shift Left) */}
+            {/* Capa de Aberración: Rojo (Shift Left) */}
             <Animated.View style={[StyleSheet.absoluteFill, chromaticRedStyle]} pointerEvents="none">
               <View style={[styles.gridLineV, { left: '20%', backgroundColor: theme.error }]} />
               <View style={[styles.gridLineV, { left: '40%', backgroundColor: theme.error }]} />
@@ -379,7 +394,7 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
               <View style={[styles.techCircle, { bottom: -100, left: -60, width: 300, height: 300, borderColor: theme.error, opacity: 0.03 }]} />
             </Animated.View>
 
-            {/* Capa de AberraciÃ³n: Azul (Shift Right) */}
+            {/* Capa de Aberración: Azul (Shift Right) */}
             <Animated.View style={[StyleSheet.absoluteFill, chromaticBlueStyle]} pointerEvents="none">
               <View style={[styles.gridLineV, { left: '20%', backgroundColor: theme.primary }]} />
               <View style={[styles.gridLineV, { left: '40%', backgroundColor: theme.primary }]} />
@@ -393,7 +408,7 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
             </Animated.View>
 
 
-            {/* Rejilla TÃ©cnica */}
+            {/* Rejilla Técnica */}
             <View style={[styles.gridLineV, { left: '20%', backgroundColor: theme.secondary }]} />
             <View style={[styles.gridLineV, { left: '40%', backgroundColor: theme.secondary }]} />
             <View style={[styles.gridLineV, { left: '60%', backgroundColor: theme.secondary }]} />
@@ -402,7 +417,7 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
             <View style={[styles.gridLineH, { top: '50%', backgroundColor: theme.secondary }]} />
             <View style={[styles.gridLineH, { top: '75%', backgroundColor: theme.secondary }]} />
 
-            {/* CÃ­rculos de Radar */}
+            {/* Círculos de Radar */}
             <View style={[styles.techCircle, { top: -50, right: -50, width: 200, height: 200, borderColor: theme.secondary }]} />
             <View style={[styles.techCircle, { bottom: -100, left: -60, width: 300, height: 300, borderColor: theme.secondary, opacity: 0.03 }]} />
 
@@ -437,7 +452,7 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
               </View>
               <Text style={[styles.brandingText, { color: theme.secondary }]}>
                 {displayedBrandingText}
-                <Text style={{ opacity: Math.sin(Date.now() / 200) > 0 ? 1 : 0 }}>_</Text>
+                <Animated.Text style={cursorStyle}>_</Animated.Text>
               </Text>
             </Animated.View>
 
@@ -482,7 +497,7 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
           <Animated.View entering={FadeInDown.delay(160).duration(450)} style={styles.iconRow}>
             <Animated.View style={pulseStyle}>
               <View style={styles.iconShell}>
-                {/* CÃ­rculo de Estrellas Europeas */}
+                {/* Círculo de Estrellas Europeas */}
                 <Animated.View style={[styles.starsContainer, starsStyle]}>
                   {Array.from({ length: 12 }).map((_, i) => {
                     const angle = (i * 30) * (Math.PI / 180);
