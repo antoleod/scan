@@ -321,3 +321,33 @@ export async function syncNotesWithFirebase(localNotes: NoteItem[], localTemplat
 
   return { pushedNotes, pushedTemplates, serverNotes, serverTemplates };
 }
+
+export async function fetchNotesFromFirebase() {
+  const rt = await initFirebaseRuntime();
+  if (!rt.enabled || !rt.auth || !rt.db) {
+    throw new Error(buildFirebaseDisabledErrorMessage(rt));
+  }
+
+  const user = rt.auth.currentUser;
+  if (!user) throw new Error('No authenticated session to fetch notes.');
+
+  const uid = user.uid;
+  const notesRef = collection(rt.db, 'users', uid, 'notes');
+  const templatesRef = collection(rt.db, 'users', uid, 'noteTemplates');
+
+  const notesSnap = await getDocs(query(notesRef));
+  const serverNotes: NoteItem[] = [];
+  notesSnap.forEach((d) => {
+    const x = d.data() as NoteItem;
+    serverNotes.push({ ...x, id: x.id || d.id });
+  });
+
+  const templatesSnap = await getDocs(query(templatesRef));
+  const serverTemplates: NoteTemplate[] = [];
+  templatesSnap.forEach((d) => {
+    const x = d.data() as NoteTemplate;
+    serverTemplates.push({ ...x, id: x.id || d.id });
+  });
+
+  return { serverNotes, serverTemplates };
+}

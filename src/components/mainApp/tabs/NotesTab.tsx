@@ -19,6 +19,7 @@ import {
   togglePinned,
   updateNoteText,
   buildAppointmentIcs,
+  refreshNotesFromCloudSilently,
 } from '../../../core/notes';
 import { ClipboardEntry } from '../../../core/clipboard.types';
 import { addClipboardEntryUnique, addClipboardImageUnique, loadClipboardEntries } from '../../../core/clipboard';
@@ -132,6 +133,26 @@ export function NotesTab({ palette }: { palette: Palette }) {
       setTemplates(t);
     }).catch(() => undefined);
     loadClipboardEntries().then(setClipboardItems).catch(() => undefined);
+
+    // Silent cloud pull on open for fast cross-device consistency.
+    refreshNotesFromCloudSilently().then((result) => {
+      if (!result) return;
+      setNotes(result.notes);
+      setTemplates(result.templates);
+    }).catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    // Silent periodic refresh without any user-facing messages.
+    const timer = setInterval(() => {
+      refreshNotesFromCloudSilently().then((result) => {
+        if (!result) return;
+        setNotes(result.notes);
+        setTemplates(result.templates);
+      }).catch(() => undefined);
+    }, 10000);
+
+    return () => clearInterval(timer);
   }, []);
 
   useEffect(() => {

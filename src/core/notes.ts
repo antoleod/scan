@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { syncNotesWithFirebase } from './firebase';
+import { fetchNotesFromFirebase, syncNotesWithFirebase } from './firebase';
 
 const NOTES_KEY = '@barra_notes_v1';
 const TEMPLATES_KEY = '@barra_note_templates_v1';
@@ -375,6 +375,19 @@ export async function removeTemplate(id: string): Promise<NoteTemplate[]> {
   await saveTemplates(next);
   await syncNotesStateIfAuthenticated(undefined, next);
   return next;
+}
+
+export async function refreshNotesFromCloudSilently(): Promise<{ notes: NoteItem[]; templates: NoteTemplate[] } | null> {
+  try {
+    const result = await fetchNotesFromFirebase();
+    const notes = normalizeNotes(result.serverNotes).slice(0, 3000);
+    const templates = result.serverTemplates.slice(0, 300);
+    await AsyncStorage.setItem(NOTES_KEY, JSON.stringify(notes));
+    await AsyncStorage.setItem(TEMPLATES_KEY, JSON.stringify(templates));
+    return { notes, templates };
+  } catch {
+    return null;
+  }
 }
 
 function toIcsDate(date: Date): string {
