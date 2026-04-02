@@ -69,7 +69,7 @@ export function AppHeader({
         </View>
       </View>
       <View style={mainAppStyles.headerActions}>
-        {Platform.OS === 'web' && !isInstalled ? (
+        {Platform.OS === 'web' ? (
           <Pressable
             style={({ pressed }) => [
               mainAppStyles.badge,
@@ -84,7 +84,7 @@ export function AppHeader({
               Alert.alert('Install app', 'Use browser menu (three dots) and choose "Install app".');
             }}
           >
-            <Text style={[mainAppStyles.badgeText, { color: palette.fg }]}>{pwaInstallAvailable ? 'INSTALL APP' : 'HOW TO INSTALL'}</Text>
+            <Text style={[mainAppStyles.badgeText, { color: palette.fg }]}>{isInstalled ? 'PWA INSTALLED' : (pwaInstallAvailable ? 'INSTALL APP' : 'HOW TO INSTALL')}</Text>
           </Pressable>
         ) : null}
         <View style={[mainAppStyles.badge, { backgroundColor: palette.accent + '33', borderColor: palette.accent }]}>

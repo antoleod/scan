@@ -90,7 +90,7 @@ export function BottomTabs({
         </Pressable>
       </Animated.View>
       <Animated.View style={[addAnim, { flex: 1 }]}>
-        <Pressable onPress={onAdd} style={[mainAppStyles.footerAddBtn, { backgroundColor: palette.accent, borderColor: palette.accent + 'cc' }]}>
+        <Pressable onPress={onAdd} hitSlop={8} style={[mainAppStyles.footerAddBtn, { backgroundColor: palette.accent, borderColor: palette.accent + 'cc', transform: [{ translateY: -1 }] }]}>
           <View style={mainAppStyles.footerBtnInner}>
             <Ionicons name="add" size={22} color="#fff" />
             <Text style={{ color: '#fff', fontSize: 9, fontWeight: '800', letterSpacing: 0.6 }}>ADD</Text>

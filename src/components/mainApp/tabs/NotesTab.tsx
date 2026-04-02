@@ -6,6 +6,7 @@ import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
+import DateTimePicker from '@react-native-community/datetimepicker';
 
 import {
   fetchSharedGroupsForCurrentUser,
@@ -29,7 +30,7 @@ import {
   refreshNotesFromCloudSilently,
 } from '../../../core/notes';
 import { ClipboardEntry } from '../../../core/clipboard.types';
-import { addClipboardEntryUnique, addClipboardImageUnique, loadClipboardEntries, updateClipboardEntryCategory } from '../../../core/clipboard';
+import { addClipboardEntryUnique, addClipboardImageUnique, loadClipboardEntries, removeClipboardEntriesByDay, removeClipboardEntriesByIds, updateClipboardEntryCategory } from '../../../core/clipboard';
 import { mainAppStyles } from '../styles';
 
 type Palette = { bg: string; fg: string; accent: string; muted: string; card: string; border: string };
@@ -158,6 +159,8 @@ export function NotesTab({ palette }: { palette: Palette }) {
   const [searchText, setSearchText] = useState('');
   const [searchCategory, setSearchCategory] = useState<'all' | string>('all');
   const [searchDate, setSearchDate] = useState('');
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [selectedClipboardIds, setSelectedClipboardIds] = useState<Set<string>>(new Set());
   const [lastNoteTap, setLastNoteTap] = useState<{ id: string; ts: number } | null>(null);
   const [lastTap, setLastTap] = useState<{ id: string; ts: number } | null>(null);
 
@@ -303,7 +306,7 @@ export function NotesTab({ palette }: { palette: Palette }) {
           }
         }
       } catch {
-        setClipboardAvailable(false);
+        // Keep retrying; web clipboard can temporarily reject while tab focus changes.
       }
     };
 
@@ -549,6 +552,28 @@ export function NotesTab({ palette }: { palette: Palette }) {
     }
   }
 
+  function toggleClipboardSelection(id: string) {
+    setSelectedClipboardIds((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  async function deleteSelectedClipboard() {
+    if (!selectedClipboardIds.size) return;
+    const next = await removeClipboardEntriesByIds(Array.from(selectedClipboardIds));
+    setClipboardItems(next);
+    setSelectedClipboardIds(new Set());
+  }
+
+  async function deleteClipboardDay(day: string) {
+    const next = await removeClipboardEntriesByDay(day);
+    setClipboardItems(next);
+    setSelectedClipboardIds(new Set());
+  }
+
   const workspaceWidth = '100%';
 
   return (
@@ -762,11 +787,36 @@ export function NotesTab({ palette }: { palette: Palette }) {
 
         {workspaceTab === 'clipboard' ? (
           <>
-            <View style={[mainAppStyles.card, { backgroundColor: palette.card, borderColor: palette.border }]}><View style={styles.editorHeader}><Text style={{ color: palette.fg, fontWeight: '800' }}>Clipboard timeline</Text><View style={styles.editorActions}><Pressable style={[styles.iconOnlyAction, { borderColor: palette.border }]} onPress={() => importScreenshotToClipboard().catch(() => undefined)}><Ionicons name="image-outline" size={16} color={palette.fg} /></Pressable></View></View><Text style={{ color: palette.muted, fontSize: 11, marginTop: 4 }}>{clipboardAvailable ? 'Active capture (app focus required). Duplicates are ignored.' : 'Clipboard capture not available on this device.'}</Text></View>
+            <View style={[mainAppStyles.card, { backgroundColor: palette.card, borderColor: palette.border }]}>
+              <View style={styles.editorHeader}>
+                <Text style={{ color: palette.fg, fontWeight: '800' }}>Clipboard timeline</Text>
+                <View style={styles.editorActions}>
+                  <Pressable style={[styles.iconOnlyAction, { borderColor: palette.border }]} onPress={() => importScreenshotToClipboard().catch(() => undefined)}>
+                    <Ionicons name="image-outline" size={16} color={palette.fg} />
+                  </Pressable>
+                </View>
+              </View>
+              <Text style={{ color: palette.muted, fontSize: 11, marginTop: 4 }}>
+                Live capture enabled. Long-press entries to select and bulk delete.
+              </Text>
+              {selectedClipboardIds.size ? (
+                <View style={{ marginTop: 8, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Text style={{ color: palette.muted, fontSize: 11 }}>{selectedClipboardIds.size} selected</Text>
+                  <Pressable onPress={() => deleteSelectedClipboard().catch(() => undefined)} style={[styles.categoryChip, { borderColor: palette.border, paddingVertical: 4 }]}>
+                    <Text style={{ color: '#ef4444', fontSize: 10, fontWeight: '800' }}>Delete selected</Text>
+                  </Pressable>
+                </View>
+              ) : null}
+            </View>
             <View style={styles.gridWrap}>
               {groupedClipboard.map(([day, entries]) => (
                 <View key={day} style={{ gap: 8 }}>
-                  <Text style={{ color: palette.muted, fontSize: 11, fontWeight: '800' }}>{day}</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <Text style={{ color: palette.muted, fontSize: 11, fontWeight: '800' }}>{day} ({entries.length})</Text>
+                    <Pressable onPress={() => deleteClipboardDay(day).catch(() => undefined)} style={[styles.categoryChip, { borderColor: palette.border, paddingVertical: 4 }]}>
+                      <Text style={{ color: '#ef4444', fontSize: 10, fontWeight: '800' }}>Delete day</Text>
+                    </Pressable>
+                  </View>
                   {chunk(entries, isDesktop ? desktopColumns : 1).map((row, rowIndex) => (
                     <View key={`clip-row-${day}-${rowIndex}`} style={styles.gridRow}>
                       {row.map((entry) => {
@@ -775,7 +825,8 @@ export function NotesTab({ palette }: { palette: Palette }) {
                       <Pressable
                         key={entry.id}
                         onPress={() => handleClipboardCardPress(entry)}
-                        style={({ pressed }) => [styles.compactCard, { flex: 1, borderColor: palette.border, backgroundColor: palette.card, opacity: pressed ? 0.92 : 1 }]}
+                        onLongPress={() => toggleClipboardSelection(entry.id)}
+                        style={({ pressed }) => [styles.compactCard, { flex: 1, borderColor: selectedClipboardIds.has(entry.id) ? palette.accent : palette.border, backgroundColor: palette.card, opacity: pressed ? 0.92 : 1 }]}
                       >
                         <View style={styles.cardHead}>
                           <Text style={{ color: palette.muted, fontSize: 10 }}>{new Date(entry.capturedAt).toLocaleDateString()} {new Date(entry.capturedAt).toLocaleTimeString()}</Text>
@@ -785,10 +836,17 @@ export function NotesTab({ palette }: { palette: Palette }) {
                         <Text style={{ color: palette.fg, fontSize: 12 }} numberOfLines={2}>{entry.content}</Text>
                         <Text style={{ color: palette.muted, fontSize: 10 }}>Double tap to preview</Text>
                         <View style={styles.editorActions}>
-                          <Pressable onPress={() => updateClipboardEntryCategory(entry.id, 'general').then(setClipboardItems)}><Text style={{ color: palette.muted, fontSize: 10 }}>G</Text></Pressable>
-                          <Pressable onPress={() => updateClipboardEntryCategory(entry.id, 'code').then(setClipboardItems)}><Text style={{ color: palette.muted, fontSize: 10 }}>C</Text></Pressable>
-                          <Pressable onPress={() => updateClipboardEntryCategory(entry.id, 'servicenow').then(setClipboardItems)}><Text style={{ color: palette.muted, fontSize: 10 }}>S</Text></Pressable>
-                          <Pressable onPress={() => updateClipboardEntryCategory(entry.id, 'link').then(setClipboardItems)}><Text style={{ color: palette.muted, fontSize: 10 }}>L</Text></Pressable>
+                          <Pressable
+                            onPress={() => {
+                              const order: Array<'general' | 'code' | 'servicenow' | 'link'> = ['general', 'code', 'servicenow', 'link'];
+                              const idx = order.indexOf(entry.category as 'general' | 'code' | 'servicenow' | 'link');
+                              const nextCategory = order[(idx + 1) % order.length];
+                              void updateClipboardEntryCategory(entry.id, nextCategory).then(setClipboardItems);
+                            }}
+                            style={[styles.categoryChip, { borderColor: palette.border, paddingVertical: 4, paddingHorizontal: 8 }]}
+                          >
+                            <Text style={{ color: palette.fg, fontSize: 10, fontWeight: '700' }}>{entry.category}</Text>
+                          </Pressable>
                           <Pressable onPress={() => forceCopyToClipboard(entry.content).catch(() => undefined)}><Ionicons name="copy-outline" size={16} color={palette.fg} /></Pressable>
                           <Pressable onPress={() => sendClipboardToNote(entry).catch(() => undefined)}><Ionicons name="document-text-outline" size={16} color={palette.fg} /></Pressable>
                           <Pressable onPress={() => sendClipboardToTemplate(entry)}><Ionicons name="layers-outline" size={16} color={palette.fg} /></Pressable>
@@ -823,7 +881,27 @@ export function NotesTab({ palette }: { palette: Palette }) {
               </Pressable>
             </View>
             <TextInput style={[mainAppStyles.input, { backgroundColor: palette.bg, color: palette.fg, borderColor: palette.border, marginTop: 0 }]} placeholder="Search text..." placeholderTextColor={palette.muted} value={searchText} onChangeText={setSearchText} />
-            <TextInput style={[mainAppStyles.input, { backgroundColor: palette.bg, color: palette.fg, borderColor: palette.border }]} placeholder="Date (YYYY-MM-DD)" placeholderTextColor={palette.muted} value={searchDate} onChangeText={setSearchDate} />
+            <Pressable
+              style={[mainAppStyles.input, { backgroundColor: palette.bg, borderColor: palette.border, marginTop: 10 }]}
+              onPress={() => setShowDatePicker(true)}
+            >
+              <Text style={{ color: searchDate ? palette.fg : palette.muted, fontSize: 13 }}>
+                {searchDate || 'Pick date'}
+              </Text>
+            </Pressable>
+            {showDatePicker ? (
+              <DateTimePicker
+                value={searchDate ? new Date(`${searchDate}T00:00:00`) : new Date()}
+                mode="date"
+                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                onChange={(_, date) => {
+                  setShowDatePicker(false);
+                  if (!date) return;
+                  const iso = new Date(date).toISOString().slice(0, 10);
+                  setSearchDate(iso);
+                }}
+              />
+            ) : null}
             <View style={styles.filterRow}>
               <Pressable style={[styles.categoryChip, { borderColor: searchCategory === 'all' ? palette.accent : palette.border }]} onPress={() => setSearchCategory('all')}><Text style={{ color: palette.fg, fontSize: 11, fontWeight: '700' }}>all</Text></Pressable>
               {(workspaceTab === 'notes' ? noteCategories : clipboardCategories).map((c) => (

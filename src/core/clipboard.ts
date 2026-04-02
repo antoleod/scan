@@ -108,6 +108,23 @@ export async function clearClipboardEntries(): Promise<void> {
   await AsyncStorage.removeItem(CLIPBOARD_KEY);
 }
 
+export async function removeClipboardEntriesByIds(ids: string[]): Promise<ClipboardEntry[]> {
+  const remove = new Set(ids);
+  const current = await loadClipboardEntries();
+  const next = current.filter((entry) => !remove.has(entry.id));
+  await saveClipboardEntries(next);
+  return next;
+}
+
+export async function removeClipboardEntriesByDay(dayIso: string): Promise<ClipboardEntry[]> {
+  const value = String(dayIso || '').trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return loadClipboardEntries();
+  const current = await loadClipboardEntries();
+  const next = current.filter((entry) => new Date(entry.capturedAt).toISOString().slice(0, 10) !== value);
+  await saveClipboardEntries(next);
+  return next;
+}
+
 export async function updateClipboardEntryCategory(id: string, category: ClipboardCategory): Promise<ClipboardEntry[]> {
   const current = await loadClipboardEntries();
   const next = current.map((entry) => (entry.id === id ? { ...entry, category } : entry));
