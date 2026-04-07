@@ -179,6 +179,7 @@ function MainApp() {
   });
   const feedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autoSyncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const realtimeSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const syncBusyRef = useRef(false);
   const cameraRef = useRef<CameraView>(null);
   const laserAnim = useRef(new Animated.Value(0)).current;
@@ -320,6 +321,9 @@ function MainApp() {
       }
       if (autoSyncTimerRef.current) {
         clearTimeout(autoSyncTimerRef.current);
+      }
+      if (realtimeSaveTimerRef.current) {
+        clearTimeout(realtimeSaveTimerRef.current);
       }
     };
   }, []);
@@ -982,7 +986,10 @@ function MainApp() {
           ...current.map((x) => (x.status === 'pending' ? { ...x, status: 'sent' as const } : x)),
           ...newFromServer,
         ];
-        saveHistory(merged).catch(() => undefined);
+        if (realtimeSaveTimerRef.current) clearTimeout(realtimeSaveTimerRef.current);
+        realtimeSaveTimerRef.current = setTimeout(() => {
+          saveHistory(merged).catch(() => undefined);
+        }, 300);
         return merged;
       });
     }).then((u) => {
@@ -992,6 +999,7 @@ function MainApp() {
 
     return () => {
       cancelled = true;
+      if (realtimeSaveTimerRef.current) clearTimeout(realtimeSaveTimerRef.current);
       cleanupFn?.();
     };
   }, [user?.uid, persistenceMode]);

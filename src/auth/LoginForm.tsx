@@ -275,6 +275,7 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
 
   const { theme, themeName } = useAppTheme();
   const isWeb = Platform.OS === 'web';
+  const isIOS = Platform.OS === 'ios';
   const { height } = useWindowDimensions();
   const scanProgress = useSharedValue(0);
   const fx = useMemo(
@@ -300,7 +301,7 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
         logoMarkHeight: 1,
         subtitle: 'SYSTEM ACCESS :: CORE-TERMINAL',
         primaryText: 'EXECUTE LOGIN',
-        watermark: true,
+        watermark: !isIOS,
       };
     }
 
@@ -314,7 +315,7 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
         logoMarkHeight: 1,
         subtitle: 'Warehouse scanner terminal for quick access.',
         primaryText: 'SIGN IN',
-        watermark: isWeb,
+        watermark: isWeb && !isIOS,
       };
     }
 
@@ -326,9 +327,9 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
       logoMarkWidth: 28,
       logoMarkHeight: 2,
       primaryText: 'SIGN IN',
-      watermark: isWeb || themeName === 'obsidianGold' || themeName === 'noirGraphite',
+      watermark: !isIOS && (isWeb || themeName === 'obsidianGold' || themeName === 'noirGraphite'),
     };
-  }, [isWeb, themeName]);
+  }, [isWeb, isIOS, themeName]);
 
   const normalizedUsername = username.trim().toLowerCase();
   const firebaseApiKey = process.env.EXPO_PUBLIC_FIREBASE_API_KEY;

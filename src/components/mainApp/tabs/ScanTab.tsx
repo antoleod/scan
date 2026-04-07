@@ -92,6 +92,7 @@ export function ScanTab({
   const { height } = useWindowDimensions();
   const cameraHeight = Math.max(320, Math.round(height * 0.65));
   const [toastVisible, setToastVisible] = React.useState(false);
+  const lastCameraEventRef = React.useRef<{ data: string; ts: number }>({ data: '', ts: 0 });
   const toastY = useSharedValue(60);
 
   React.useEffect(() => {
@@ -152,6 +153,11 @@ export function ScanTab({
             barcodeScannerSettings={{ barcodeTypes: cameraBarcodeTypes }}
             onCameraReady={onCameraReady}
             onBarcodeScanned={(event) => {
+              const now = Date.now();
+              const value = String(event.data || '');
+              if (!value) return;
+              if (value === lastCameraEventRef.current.data && now - lastCameraEventRef.current.ts < 650) return;
+              lastCameraEventRef.current = { data: value, ts: now };
               onBarcodeScanned(event.data);
             }}
           />

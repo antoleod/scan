@@ -96,8 +96,10 @@ export async function playSuccessfulScanFeedback(): Promise<void> {
       return;
     }
 
-    await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    await playNativeBeep();
+    await Promise.all([
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success),
+      playNativeBeep(),
+    ]);
   } catch {
     // Feedback is best-effort only.
   }
