@@ -33,10 +33,12 @@ function LogoMark({ accent, foreground, compact }: { accent: string; foreground:
 
 export function AppHeader({
   palette,
+  statusChip,
   compact,
   themeName,
 }: {
   palette: Palette;
+  statusChip: string;
   compact?: boolean;
   themeName: ThemeName;
 }) {
@@ -49,6 +51,7 @@ export function AppHeader({
         <View>
           <Text style={[mainAppStyles.kicker, { color: palette.accent }]}>BARRA CORE</Text>
           <Text style={[mainAppStyles.title, { color: palette.fg }]}>Oryxen Scanner</Text>
+          <Text style={[mainAppStyles.subtitle, { color: palette.muted }]}>{statusChip}</Text>
         </View>
       </View>
     </View>
