@@ -180,6 +180,7 @@ function MainApp() {
   const feedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autoSyncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const realtimeSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autoCaptureRef = useRef<{ payload: string; ts: number } | null>(null);
   const syncBusyRef = useRef(false);
   const cameraRef = useRef<CameraView>(null);
   const laserAnim = useRef(new Animated.Value(0)).current;
@@ -447,6 +448,42 @@ function MainApp() {
     await playSuccessfulScanFeedback();
   }
 
+  async function autoCaptureScannedBarcode(payload: string) {
+    if (!cameraRef.current) return;
+    if (!payload) return;
+    const now = Date.now();
+    const last = autoCaptureRef.current;
+    if (last && last.payload === payload && now - last.ts < 1500) return;
+    autoCaptureRef.current = { payload, ts: now };
+
+    try {
+      const picture = await cameraRef.current.takePictureAsync({
+        quality: 0.45,
+        base64: false,
+        exif: false,
+        skipProcessing: true,
+        shutterSound: false,
+      });
+
+      if (!picture?.uri) return;
+
+      const expectedType = payload.startsWith('http://') || payload.startsWith('https://') ? 'QR' : 'BARCODE';
+      const { capture, items } = await addPendingCapture({
+        uri: picture.uri,
+        expectedType,
+      });
+      setPendingCaptures(items);
+      await updatePendingCapture(capture.id, {
+        extractedText: payload,
+        scanStatus: 'saved',
+      });
+      setPendingCaptures(await loadPendingCaptures());
+      showFeedback('success', 'Photo saved automatically');
+    } catch (error) {
+      await diag.warn('capture.auto.error', { message: String(error) });
+    }
+  }
+
   async function processIncomingScan(raw: string, source: ScanRecord['source']) {
     if (scanBusyRef.current) return;
     if (source === 'camera' && Date.now() < scanCooldownRef.current) return;
@@ -633,6 +670,7 @@ function MainApp() {
       const handled = await importBackupJson(data, 'qr');
       if (handled) return;
     }
+    void autoCaptureScannedBarcode(data);
     await processIncomingScan(data, 'camera');
   }
 

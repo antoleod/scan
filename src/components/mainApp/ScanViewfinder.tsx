@@ -1,7 +1,7 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import Animated, { interpolate, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
+import Animated, { Easing, interpolate, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
 
 const C = {
   overlay: 'rgba(0,0,0,0.55)',
@@ -25,11 +25,13 @@ export function ScanViewfinder({
 }) {
   const lineProgress = useSharedValue(0);
   const pulse = useSharedValue(0);
+  const glow = useSharedValue(0);
 
   React.useEffect(() => {
-    lineProgress.value = withRepeat(withTiming(1, { duration: 1850 }), -1, true);
-    pulse.value = withRepeat(withTiming(1, { duration: 1600 }), -1, true);
-  }, [lineProgress, pulse]);
+    lineProgress.value = withRepeat(withTiming(1, { duration: 1250, easing: Easing.inOut(Easing.cubic) }), -1, true);
+    pulse.value = withRepeat(withTiming(1, { duration: 1400, easing: Easing.inOut(Easing.quad) }), -1, true);
+    glow.value = withRepeat(withTiming(1, { duration: 2200, easing: Easing.inOut(Easing.sin) }), -1, true);
+  }, [lineProgress, pulse, glow]);
 
   const lineStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: interpolate(lineProgress.value, [0, 1], [VIEW_H * 0.08, VIEW_H * 0.88]) }],
@@ -41,17 +43,25 @@ export function ScanViewfinder({
     opacity: interpolate(pulse.value, [0, 1], [0.8, 1]),
   }));
 
+  const glowStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(glow.value, [0, 0.5, 1], [0.18, 0.32, 0.18]),
+    transform: [{ scale: interpolate(glow.value, [0, 1], [0.96, 1.04]) }],
+  }));
+
   return (
     <View style={styles.root} pointerEvents="box-none">
       <View style={styles.overlayTop} pointerEvents="none" />
       <View style={styles.middle} pointerEvents="none">
         <View style={styles.overlaySide} />
         <Animated.View style={[styles.viewfinder, pulseStyle]}>
+          <Animated.View style={[styles.glowRing, glowStyle]} />
+          <View style={styles.grid} />
           <View style={[styles.corner, styles.tl]} />
           <View style={[styles.corner, styles.tr]} />
           <View style={[styles.corner, styles.bl]} />
           <View style={[styles.corner, styles.br]} />
           <Animated.View style={[styles.scanLine, lineStyle]} />
+          <View style={styles.scanCore} />
         </Animated.View>
         <View style={styles.overlaySide} />
       </View>
@@ -93,6 +103,25 @@ const styles = StyleSheet.create({
     height: VIEW_H,
     position: 'relative',
   },
+  glowRing: {
+    position: 'absolute',
+    inset: -10,
+    borderRadius: 28,
+    borderWidth: 1,
+    borderColor: 'rgba(255,107,0,0.45)',
+    shadowColor: C.accent,
+    shadowOpacity: 0.35,
+    shadowRadius: 18,
+    elevation: 5,
+  },
+  grid: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'transparent',
+    borderColor: 'rgba(255,255,255,0.06)',
+    borderWidth: 1,
+    borderRadius: 20,
+    opacity: 0.55,
+  },
   corner: {
     position: 'absolute',
     width: BRACKET,
@@ -127,8 +156,22 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: '8%',
     right: '8%',
-    height: 1.5,
+    height: 2,
     backgroundColor: C.accent,
+    shadowColor: C.accent,
+    shadowOpacity: 0.85,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  scanCore: {
+    position: 'absolute',
+    left: '16%',
+    right: '16%',
+    top: '50%',
+    height: 10,
+    marginTop: -5,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,107,0,0.14)',
   },
   flash: {
     position: 'absolute',

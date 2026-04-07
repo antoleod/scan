@@ -156,7 +156,7 @@ export function ScanTab({
               const now = Date.now();
               const value = String(event.data || '');
               if (!value) return;
-              if (value === lastCameraEventRef.current.data && now - lastCameraEventRef.current.ts < 650) return;
+              if (value === lastCameraEventRef.current.data && now - lastCameraEventRef.current.ts < 300) return;
               lastCameraEventRef.current = { data: value, ts: now };
               onBarcodeScanned(event.data);
             }}
