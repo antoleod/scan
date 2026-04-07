@@ -40,13 +40,84 @@ import { loadSettings } from '../core/settings';
 import { isValidIdentifier } from '../core/validation';
 import { useAuth } from './useAuth';
 
-const fullBrandingText = 'ORYXEN TECH Â· ORYXEN SCANNER Â· SECURE TRAIL';
+const fullBrandingText = 'ORYXEN TECH \u00b7 ORYXEN SCANNER \u00b7 SECURE TRAIL';
+
+// Inject premium CSS animations (web only)
+function usePremiumCssEffects() {
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof document === 'undefined') return;
+    const id = 'oryxen-premium-css';
+    if (document.getElementById(id)) return;
+    const style = document.createElement('style');
+    style.id = id;
+    style.textContent = `
+      @keyframes oryxen-orb-drift-a {
+        0%,100% { transform: translate(0,0) scale(1); opacity:0.07; }
+        33%      { transform: translate(-24px,18px) scale(1.1); opacity:0.13; }
+        66%      { transform: translate(16px,-12px) scale(0.92); opacity:0.09; }
+      }
+      @keyframes oryxen-orb-drift-b {
+        0%,100% { transform: translate(0,0) scale(1); opacity:0.05; }
+        40%      { transform: translate(20px,28px) scale(1.08); opacity:0.11; }
+        70%      { transform: translate(-14px,8px) scale(0.95); opacity:0.07; }
+      }
+      @keyframes oryxen-orb-drift-c {
+        0%,100% { transform: translate(0,0) scale(1); opacity:0.06; }
+        50%      { transform: translate(10px,-22px) scale(1.12); opacity:0.12; }
+      }
+      @keyframes oryxen-shimmer-sweep {
+        0%   { transform: translateX(-120%); }
+        100% { transform: translateX(220%); }
+      }
+      @keyframes oryxen-glow-pulse {
+        0%,100% { opacity:0.18; transform: scale(1); }
+        50%     { opacity:0.38; transform: scale(1.06); }
+      }
+      @keyframes oryxen-ring-rotate {
+        from { transform: rotate(0deg); }
+        to   { transform: rotate(360deg); }
+      }
+      .oryxen-orb-a {
+        position:absolute; border-radius:50%; filter:blur(72px); pointer-events:none;
+        animation: oryxen-orb-drift-a 9s ease-in-out infinite;
+      }
+      .oryxen-orb-b {
+        position:absolute; border-radius:50%; filter:blur(90px); pointer-events:none;
+        animation: oryxen-orb-drift-b 12s ease-in-out infinite;
+        animation-delay: -4s;
+      }
+      .oryxen-orb-c {
+        position:absolute; border-radius:50%; filter:blur(60px); pointer-events:none;
+        animation: oryxen-orb-drift-c 15s ease-in-out infinite;
+        animation-delay: -8s;
+      }
+      .oryxen-card-shimmer {
+        position:absolute; inset:0; pointer-events:none; overflow:hidden; border-radius:14px;
+      }
+      .oryxen-card-shimmer::after {
+        content:'';
+        position:absolute; top:0; bottom:0; width:60%;
+        background: linear-gradient(90deg, transparent, rgba(255,255,255,0.055), transparent);
+        animation: oryxen-shimmer-sweep 4s ease-in-out infinite;
+        animation-delay: 1.5s;
+      }
+      .oryxen-glow-halo {
+        position:absolute; border-radius:50%; pointer-events:none;
+        animation: oryxen-glow-pulse 3s ease-in-out infinite;
+      }
+      .oryxen-ring-spin {
+        position:absolute; border-radius:50%; pointer-events:none;
+        animation: oryxen-ring-rotate 12s linear infinite;
+      }
+    `;
+    document.head.appendChild(style);
+  }, []);
+}
 
 
 function AnimatedStripe({ index, theme, baseHeight, width, opacity }: { index: number; theme: any; baseHeight: number; width: number; opacity: number }) {
   const eqValue = useSharedValue(0);
   useEffect(() => {
-    // Desfase de animaciÃ³n para crear el efecto de ecualizador
     eqValue.value = withDelay(index * 15, withRepeat(withTiming(1, { duration: 500 + (index % 7) * 120 }), -1, true));
   }, [eqValue, index]);
 
@@ -59,12 +130,67 @@ function AnimatedStripe({ index, theme, baseHeight, width, opacity }: { index: n
   );
 }
 
+// Floating ambient orb (non-web fallback for CSS animations)
+function FloatingOrb({ size, color, delay, dur, startX, startY }: {
+  size: number; color: string; delay: number; dur: number; startX: number; startY: number;
+}) {
+  const prog = useSharedValue(0);
+  useEffect(() => {
+    prog.value = withDelay(delay, withRepeat(
+      withTiming(1, { duration: dur, easing: Easing.inOut(Easing.sin) }), -1, true
+    ));
+  }, [prog, delay, dur]);
+
+  const style = useAnimatedStyle(() => ({
+    opacity: interpolate(prog.value, [0, 0.5, 1], [0.04, 0.11, 0.04]),
+    transform: [
+      { translateX: interpolate(prog.value, [0, 1], [startX, startX + 28]) },
+      { translateY: interpolate(prog.value, [0, 1], [startY, startY - 18]) },
+      { scale: interpolate(prog.value, [0, 0.5, 1], [1, 1.14, 1]) },
+    ],
+  }));
+
+  return (
+    <Animated.View
+      style={[{ position: 'absolute', width: size, height: size, borderRadius: size / 2, backgroundColor: color }, style]}
+      pointerEvents="none"
+    />
+  );
+}
+
+// Pulsing glow ring around icon
+function GlowRing({ size, color, delay, dur, opacity }: { size: number; color: string; delay: number; dur: number; opacity: number }) {
+  const pulse = useSharedValue(0);
+  useEffect(() => {
+    pulse.value = withDelay(delay, withRepeat(
+      withTiming(1, { duration: dur, easing: Easing.inOut(Easing.quad) }), -1, true
+    ));
+  }, [pulse, delay, dur]);
+
+  const style = useAnimatedStyle(() => ({
+    opacity: interpolate(pulse.value, [0, 1], [0, opacity]),
+    transform: [{ scale: interpolate(pulse.value, [0, 1], [0.85, 1.15]) }],
+  }));
+
+  return (
+    <Animated.View
+      style={[{
+        position: 'absolute', width: size, height: size, borderRadius: size / 2,
+        borderWidth: 1, borderColor: color,
+      }, style]}
+      pointerEvents="none"
+    />
+  );
+}
+
 interface LoginFormProps {
   onSwitchToRegister: () => void;
   onSwitchToForgot: () => void;
 }
 
 export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: LoginFormProps) {
+  usePremiumCssEffects();
+
   const { login, enterAsGuest, firebase } = useAuth();
   const [username, setUsername] = useState('');
   const [pin, setPin] = useState('');
@@ -189,6 +315,8 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
 
   const glitchValue = useSharedValue(0);
   const footerPulse = useSharedValue(0);
+  const logoShimmer = useSharedValue(0);
+  const cardEntrance = useSharedValue(0);
 
   const chromaticRedStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: interpolate(glitchValue.value, [0, 1], [0, -6]) }],
@@ -220,6 +348,23 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
       false
     );
   }, [footerPulse]);
+
+  // Logo shimmer sweep – loops every ~6 seconds
+  useEffect(() => {
+    logoShimmer.value = withDelay(1200, withRepeat(
+      withSequence(
+        withTiming(1, { duration: 900, easing: Easing.out(Easing.quad) }),
+        withTiming(0, { duration: 0 }),
+        withDelay(5000, withTiming(0, { duration: 0 }))
+      ),
+      -1
+    ));
+  }, [logoShimmer]);
+
+  // Card entrance spring
+  useEffect(() => {
+    cardEntrance.value = withDelay(200, withTiming(1, { duration: 520, easing: Easing.out(Easing.cubic) }));
+  }, [cardEntrance]);
 
   const glitchStyle = useAnimatedStyle(() => ({
     transform: [
@@ -261,6 +406,19 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
     transform: [
       { rotate: `${interpolate(scanProgress.value, [0, 1], [0, 20])}deg` },
       { scale: interpolate(scanProgress.value, [0, 0.5, 1], [0.96, 1.06, 0.96]) }
+    ],
+  }));
+
+  const logoShimmerStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(logoShimmer.value, [0, 0.3, 0.7, 1], [0, 0.6, 0.6, 0]),
+    transform: [{ translateX: interpolate(logoShimmer.value, [0, 1], [-120, 280]) }],
+  }));
+
+  const cardEntranceStyle = useAnimatedStyle(() => ({
+    opacity: cardEntrance.value,
+    transform: [
+      { translateY: interpolate(cardEntrance.value, [0, 1], [24, 0]) },
+      { scale: interpolate(cardEntrance.value, [0, 1], [0.97, 1]) },
     ],
   }));
 
@@ -407,6 +565,20 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
   return (
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={[styles.container, { backgroundColor: theme.background }]}>
       <View style={[styles.background, palette.watermark ? styles.watermarkShell : null]}>
+        {/* Premium ambient orbs – CSS on web, Reanimated on native */}
+        {Platform.OS === 'web' ? (
+          <View style={StyleSheet.absoluteFill} pointerEvents="none">
+            <View {...({ className: 'oryxen-orb-a' } as any)} style={{ width: 360, height: 360, top: -80, left: -80, backgroundColor: theme.primary + '33' }} />
+            <View {...({ className: 'oryxen-orb-b' } as any)} style={{ width: 280, height: 280, bottom: -60, right: -60, backgroundColor: theme.secondary + '28' }} />
+            <View {...({ className: 'oryxen-orb-c' } as any)} style={{ width: 220, height: 220, top: '40%', left: '55%', backgroundColor: theme.primary + '22' }} />
+          </View>
+        ) : (
+          <View style={StyleSheet.absoluteFill} pointerEvents="none">
+            <FloatingOrb size={320} color={theme.primary} delay={0} dur={8000} startX={-80} startY={-80} />
+            <FloatingOrb size={260} color={theme.secondary} delay={3000} dur={11000} startX={100} startY={200} />
+            <FloatingOrb size={200} color={theme.primary} delay={6000} dur={9500} startX={50} startY={400} />
+          </View>
+        )}
         {palette.watermark && (
           <View style={[styles.watermarkContainer, styles.watermarkVisible]} pointerEvents="none">
             {/* Capa de Aberración: Rojo (Shift Left) */}
@@ -503,20 +675,24 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
 
           <Animated.View entering={FadeInDown.delay(80).duration(450)} style={styles.logoRow}>
             <View style={styles.logoWrap}>
-              <Text
-                style={[
-                  styles.logo,
-                  {
-                    color: theme.text,
-                    fontFamily: palette.logoFamily,
-                    fontWeight: palette.logoWeight,
-                    fontStyle: palette.logoStyle,
-                    letterSpacing: palette.logoLetterSpacing,
-                  },
-                ]}
-              >
-                Oryxen Scanner
-              </Text>
+              <View style={styles.logoTextWrap}>
+                <Text
+                  style={[
+                    styles.logo,
+                    {
+                      color: theme.text,
+                      fontFamily: palette.logoFamily,
+                      fontWeight: palette.logoWeight,
+                      fontStyle: palette.logoStyle,
+                      letterSpacing: palette.logoLetterSpacing,
+                    },
+                  ]}
+                >
+                  Oryxen Scanner
+                </Text>
+                {/* Shimmer sweep across logo */}
+                <Animated.View style={[styles.logoShimmerStrip, logoShimmerStyle, { backgroundColor: `${theme.text}` }]} pointerEvents="none" />
+              </View>
               <View style={[styles.logoBar, { backgroundColor: theme.secondary, width: palette.logoMarkWidth, height: palette.logoMarkHeight }]} />
             </View>
             <View style={[styles.logoDivider, { backgroundColor: theme.secondary, opacity: 0.1 }]} />
@@ -525,6 +701,14 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
           <Animated.View entering={FadeInDown.delay(160).duration(450)} style={styles.iconRow}>
             <Animated.View style={pulseStyle}>
               <View style={styles.iconShell}>
+                {/* Premium glow rings */}
+                <GlowRing size={150} color={theme.secondary} delay={0} dur={2800} opacity={0.22} />
+                <GlowRing size={118} color={theme.primary} delay={700} dur={2200} opacity={0.18} />
+                {Platform.OS === 'web' && (
+                  <View {...({ className: 'oryxen-glow-halo' } as any)}
+                    style={{ width: 100, height: 100, backgroundColor: theme.secondary + '18' }}
+                  />
+                )}
                 {/* Círculo de Estrellas Europeas */}
                 <Animated.View style={[styles.starsContainer, starsStyle]}>
                   {Array.from({ length: 12 }).map((_, i) => {
@@ -559,7 +743,11 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
             </Animated.View>
           </Animated.View>
 
-          <Animated.View entering={FadeInDown.delay(400).duration(450)} style={[styles.formCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+          <Animated.View style={[styles.formCard, { backgroundColor: theme.surface, borderColor: theme.border }, cardEntranceStyle]}>
+            {/* Web shimmer overlay via CSS */}
+            {Platform.OS === 'web' && (
+              <View {...({ className: 'oryxen-card-shimmer' } as any)} style={StyleSheet.absoluteFill} pointerEvents="none" />
+            )}
             <View style={styles.field}>
               <Text style={[styles.label, { color: theme.secondary }]}>USERNAME OR EMAIL</Text>
               <TextInput
@@ -726,7 +914,9 @@ const styles = StyleSheet.create({
   badgeRow: { flexDirection: 'row', gap: 8 },
   logoRow: { gap: 10 },
   logoWrap: { gap: 4 },
+  logoTextWrap: { overflow: 'hidden', position: 'relative' },
   logo: { fontSize: 28, lineHeight: 32 },
+  logoShimmerStrip: { position: 'absolute', top: 0, bottom: 0, width: 60, opacity: 0.12, borderRadius: 4 },
   logoBar: {},
   logoDivider: { height: 1, opacity: 0.2 },
   iconRow: { alignItems: 'center', paddingVertical: 12 },
@@ -746,7 +936,7 @@ const styles = StyleSheet.create({
   pasteAction: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14, paddingVertical: 10 },
   pastePrefix: { fontSize: 13, fontWeight: '700', fontFamily: Platform.select({ web: 'monospace', default: 'monospace' }) },
   pasteText: { fontSize: 13, fontWeight: '600' },
-  formCard: { borderRadius: 14, borderWidth: 1, padding: 16, gap: 16 },
+  formCard: { borderRadius: 14, borderWidth: 1, padding: 16, gap: 16, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 16 }, shadowOpacity: 0.4, shadowRadius: 32, elevation: 12 },
   field: { gap: 6 },
   label: { fontSize: 10, fontWeight: '800', letterSpacing: 1.2, textTransform: 'uppercase' },
   input: { height: 48, borderRadius: 10, borderWidth: 1, paddingHorizontal: 14, fontSize: 15, shadowOffset: { width: 0, height: 0 }, shadowRadius: 8 },

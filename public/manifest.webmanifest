@@ -1,13 +1,17 @@
 {
   "name": "Oryxen Scanner",
   "short_name": "Oryxen",
+  "description": "Secure barcode & QR scanner workspace with offline-ready cloud sync.",
+  "lang": "en",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
+  "display_override": ["standalone", "minimal-ui", "browser"],
   "orientation": "portrait",
-  "background_color": "#111111",
+  "background_color": "#0a0f1e",
   "theme_color": "#1A1A1A",
-  "description": "Secure scanner workspace with offline-ready web support.",
+  "categories": ["productivity", "utilities", "business"],
+  "prefer_related_applications": false,
   "icons": [
     {
       "src": "./favicon.png",
@@ -26,6 +30,21 @@
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
+    },
+    {
+      "src": "./favicon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "./favicon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Oryxen Scanner home screen"
     }
   ]
 }

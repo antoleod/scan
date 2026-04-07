@@ -179,6 +179,7 @@ function MainApp() {
   });
   const feedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autoSyncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const syncBusyRef = useRef(false);
   const cameraRef = useRef<CameraView>(null);
   const laserAnim = useRef(new Animated.Value(0)).current;
   const entryDraftRef = useRef<EntryDraftSnapshot | null>(null);
@@ -919,8 +920,8 @@ function MainApp() {
   }
 
   async function syncNow(showAlert = true) {
-    if (syncBusy || !user) return;
-
+    if (syncBusyRef.current || !user) return;
+    syncBusyRef.current = true;
     setSyncBusy(true);
     try {
       const result = await syncScansWithFirebase(history);
@@ -950,6 +951,7 @@ function MainApp() {
       await diag.error('firebase.sync.error', { message: String(error) });
       if (showAlert) Alert.alert('Sync error', String(error));
     } finally {
+      syncBusyRef.current = false;
       setSyncBusy(false);
     }
   }
@@ -962,16 +964,15 @@ function MainApp() {
     if (autoSyncTimerRef.current) clearTimeout(autoSyncTimerRef.current);
     autoSyncTimerRef.current = setTimeout(() => {
       syncNow(false).catch(() => undefined);
-    }, 0);
+    }, 800);
   }, [history, user, persistenceMode]);
 
   // Real-time cross-device sync via Firestore onSnapshot.
   useEffect(() => {
     if (!user || persistenceMode !== 'firebase') return;
-    // Initial full sync on login so we start with fresh server state.
-    syncNow(false).catch(() => undefined);
+    let cancelled = false;
+    let cleanupFn: (() => void) | null = null;
 
-    let unsub: (() => void) | null = null;
     subscribeToScans((serverScans) => {
       setHistory((current) => {
         const localKeys = new Set(current.map((x) => historyKey(x)));
@@ -984,9 +985,15 @@ function MainApp() {
         saveHistory(merged).catch(() => undefined);
         return merged;
       });
-    }).then((u) => { unsub = u; }).catch(() => undefined);
+    }).then((u) => {
+      if (cancelled) { u(); return; }
+      cleanupFn = u;
+    }).catch(() => undefined);
 
-    return () => { unsub?.(); };
+    return () => {
+      cancelled = true;
+      cleanupFn?.();
+    };
   }, [user?.uid, persistenceMode]);
 
   async function clearAllHistory() {

@@ -5,6 +5,12 @@ type BeforeInstallPromptEvent = Event & {
   userChoice?: Promise<{ outcome: 'accepted' | 'dismissed'; platform: string }>;
 };
 
+export type BrowserInstallSupport =
+  | 'chromium'   // Chrome, Edge, Samsung Browser – supports beforeinstallprompt
+  | 'firefox'    // Firefox Android – supports PWA via browser menu, no prompt API
+  | 'safari'     // Safari iOS/macOS – Add to Home Screen only
+  | 'unknown';
+
 let deferredPrompt: BeforeInstallPromptEvent | null = null;
 let initialized = false;
 const listeners = new Set<(available: boolean) => void>();
@@ -12,17 +18,35 @@ const listeners = new Set<(available: boolean) => void>();
 function emitAvailability() {
   const available = Boolean(deferredPrompt);
   listeners.forEach((listener) => {
-    try {
-      listener(available);
-    } catch {
-      // Ignore listener errors.
-    }
+    try { listener(available); } catch { /* ignore */ }
   });
 }
 
 function getWindowSafe() {
   if (Platform.OS !== 'web' || typeof window === 'undefined') return null;
   return window as Window;
+}
+
+export function detectBrowserInstallSupport(): BrowserInstallSupport {
+  const win = getWindowSafe();
+  if (!win) return 'unknown';
+  const ua = win.navigator.userAgent;
+  if (/Firefox/i.test(ua)) return 'firefox';
+  if (/Safari/i.test(ua) && !/Chrome/i.test(ua)) return 'safari';
+  if (/Chrome|Chromium|Edg|OPR|Samsung/i.test(ua)) return 'chromium';
+  return 'unknown';
+}
+
+/** Returns human-readable install instructions for browsers that don't support the prompt API. */
+export function getManualInstallInstructions(): string | null {
+  const browser = detectBrowserInstallSupport();
+  if (browser === 'safari') {
+    return 'To install: tap the Share button (square with arrow) at the bottom, then select "Add to Home Screen".';
+  }
+  if (browser === 'firefox') {
+    return 'To install on Firefox Android: tap the three-dot menu and select "Install" or "Add to Home Screen".';
+  }
+  return null;
 }
 
 export function initPwaInstallBridge() {
@@ -46,20 +70,32 @@ export function canInstallPwa() {
   return Boolean(deferredPrompt);
 }
 
+export function isAlreadyInstalled(): boolean {
+  const win = getWindowSafe();
+  if (!win) return false;
+  const nav = win.navigator as Navigator & { standalone?: boolean };
+  return win.matchMedia?.('(display-mode: standalone)').matches || Boolean(nav.standalone);
+}
+
 export function getPwaInstallDiagnostics() {
   const win = getWindowSafe();
   if (!win) {
     return { installable: false, reason: 'Not running in web environment.' };
   }
-  const nav = win.navigator as Navigator & { standalone?: boolean };
-  const standaloneMatch = win.matchMedia?.('(display-mode: standalone)').matches;
-  if (standaloneMatch || nav.standalone) {
+  if (isAlreadyInstalled()) {
     return { installable: false, reason: 'Already installed in this browser profile.' };
   }
   if (deferredPrompt) {
     return { installable: true, reason: 'Installer event is available.' };
   }
-  if (!('serviceWorker' in nav)) {
+  const browser = detectBrowserInstallSupport();
+  if (browser === 'safari') {
+    return { installable: false, reason: getManualInstallInstructions()! };
+  }
+  if (browser === 'firefox') {
+    return { installable: false, reason: getManualInstallInstructions()! };
+  }
+  if (!('serviceWorker' in win.navigator)) {
     return { installable: false, reason: 'Service Worker is not supported in this browser.' };
   }
   return {
@@ -81,7 +117,5 @@ export async function triggerPwaInstall() {
 export function subscribePwaInstallAvailability(listener: (available: boolean) => void) {
   listeners.add(listener);
   listener(Boolean(deferredPrompt));
-  return () => {
-    listeners.delete(listener);
-  };
+  return () => { listeners.delete(listener); };
 }
