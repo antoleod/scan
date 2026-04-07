@@ -19,6 +19,7 @@ import {
   NoteTemplate,
   addRichNoteUnique,
   addTemplate,
+  updateTemplate,
   ensureWorkNotesAndEmailTemplates,
   removeNote,
   removeTemplate,
@@ -149,6 +150,7 @@ export function NotesTab({ palette }: { palette: Palette }) {
   const [templateTo, setTemplateTo] = useState('');
   const [templateSubject, setTemplateSubject] = useState('');
   const [templateBody, setTemplateBody] = useState('');
+  const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
   const [templateSearch, setTemplateSearch] = useState('');
   const [clipboardAvailable, setClipboardAvailable] = useState(true);
   const [groups, setGroups] = useState<SharedNoteGroup[]>([]);
@@ -454,6 +456,34 @@ export function NotesTab({ palette }: { palette: Palette }) {
   function sendClipboardToTemplate(entry: ClipboardEntry) {
     setWorkspaceTab('templates');
     setTemplateBody((current) => current ? `${current}\n${entry.content}` : entry.content);
+  }
+
+  function buildTemplateShareText(template: NoteTemplate) {
+    const lines = [
+      `Template: ${template.name}`,
+      template.to ? `To: ${template.to}` : '',
+      template.subject ? `Subject: ${template.subject}` : '',
+      '',
+      template.body || '',
+    ].filter(Boolean);
+    return lines.join('\n');
+  }
+
+  function startEditingTemplate(template: NoteTemplate) {
+    setWorkspaceTab('templates');
+    setEditingTemplateId(template.id);
+    setTemplateName(template.name || '');
+    setTemplateTo(template.to || '');
+    setTemplateSubject(template.subject || '');
+    setTemplateBody(template.body || '');
+  }
+
+  function resetTemplateEditor() {
+    setEditingTemplateId(null);
+    setTemplateName('');
+    setTemplateTo('');
+    setTemplateSubject('');
+    setTemplateBody('');
   }
 
   async function createOutlookEventFromContent(raw: string) {
@@ -787,14 +817,36 @@ export function NotesTab({ palette }: { palette: Palette }) {
               <TextInput style={[mainAppStyles.input, { backgroundColor: palette.bg, color: palette.fg, borderColor: palette.border }]} placeholder="Subject" placeholderTextColor={palette.muted} value={templateSubject} onChangeText={setTemplateSubject} />
               <TextInput style={[mainAppStyles.input, styles.noteInput, { backgroundColor: palette.bg, color: palette.fg, borderColor: palette.border }]} placeholder="Body" placeholderTextColor={palette.muted} multiline value={templateBody} onChangeText={setTemplateBody} />
               <View style={styles.editorActions}>
-                <Pressable style={[styles.iconOnlyAction, { borderColor: palette.border }]} onPress={() => { addTemplate({ name: templateName || 'Template', kind: 'email', to: templateTo.trim(), subject: templateSubject, body: templateBody, location: '', durationMinutes: 30 }).then(setTemplates).then(() => { setTemplateName(''); setTemplateTo(''); setTemplateSubject(''); setTemplateBody(''); }).catch(() => undefined); }}>
+                <Pressable style={[styles.iconOnlyAction, { borderColor: palette.border }]} onPress={() => {
+                  const payload = { name: templateName || 'Template', kind: 'email' as const, to: templateTo.trim(), subject: templateSubject, body: templateBody, location: '', durationMinutes: 30 };
+                  const action = editingTemplateId ? updateTemplate(editingTemplateId, payload) : addTemplate(payload);
+                  action.then(setTemplates).then(() => resetTemplateEditor()).catch(() => undefined);
+                }}>
                   <Ionicons name="save-outline" size={16} color={palette.fg} />
                 </Pressable>
+                {editingTemplateId ? (
+                  <Pressable style={[styles.iconOnlyAction, { borderColor: palette.border }]} onPress={resetTemplateEditor}>
+                    <Ionicons name="close-outline" size={16} color={palette.fg} />
+                  </Pressable>
+                ) : null}
               </View>
             </View>
             <View style={[mainAppStyles.card, { backgroundColor: palette.card, borderColor: palette.border }]}>
               <TextInput style={[mainAppStyles.input, { backgroundColor: palette.bg, color: palette.fg, borderColor: palette.border, marginTop: 0 }]} placeholder="Search templates" placeholderTextColor={palette.muted} value={templateSearch} onChangeText={setTemplateSearch} />
-              {filteredTemplates.map((template) => <View key={template.id} style={[styles.compactCard, { borderColor: palette.border, backgroundColor: palette.bg }]}><Text style={{ color: palette.fg, fontWeight: '800' }} numberOfLines={1}>{template.name}</Text><Text style={{ color: palette.muted, fontSize: 11 }} numberOfLines={1}>{template.to || '(No recipients)'}</Text><Text style={{ color: palette.muted, fontSize: 11 }} numberOfLines={1}>{template.subject || '(No subject)'}</Text><View style={styles.editorActions}><Pressable onPress={() => removeTemplate(template.id).then(setTemplates)}><Ionicons name="trash-outline" size={16} color="#ef4444" /></Pressable></View></View>)}
+              {filteredTemplates.map((template) => (
+                <View key={template.id} style={[styles.compactCard, { borderColor: palette.border, backgroundColor: palette.bg }]}>
+                  <Text style={{ color: palette.fg, fontWeight: '800' }} numberOfLines={1}>{template.name}</Text>
+                  <Text style={{ color: palette.muted, fontSize: 11 }} numberOfLines={1}>{template.to || '(No recipients)'}</Text>
+                  <Text style={{ color: palette.muted, fontSize: 11 }} numberOfLines={1}>{template.subject || '(No subject)'}</Text>
+                  <View style={styles.editorActions}>
+                    <Pressable onPress={() => startEditingTemplate(template)}><Ionicons name="create-outline" size={16} color={palette.fg} /></Pressable>
+                    <Pressable onPress={() => forceCopyToClipboard(buildTemplateShareText(template)).catch(() => undefined)}><Ionicons name="copy-outline" size={16} color={palette.fg} /></Pressable>
+                    <Pressable onPress={() => { const text = buildTemplateShareText(template); void Linking.openURL(`https://wa.me/?text=${encodeURIComponent(text)}`); }}><Ionicons name="share-social-outline" size={16} color={palette.fg} /></Pressable>
+                    <Pressable onPress={() => { const body = buildTemplateShareText(template); void Linking.openURL(`mailto:${encodeURIComponent(template.to || '')}?subject=${encodeURIComponent(template.subject || template.name)}&body=${encodeURIComponent(body)}`); }}><Ionicons name="mail-outline" size={16} color={palette.fg} /></Pressable>
+                    <Pressable onPress={() => removeTemplate(template.id).then(setTemplates)}><Ionicons name="trash-outline" size={16} color="#ef4444" /></Pressable>
+                  </View>
+                </View>
+              ))}
             </View>
           </>
         ) : null}

@@ -385,6 +385,29 @@ export async function addTemplate(template: Omit<NoteTemplate, 'id' | 'createdAt
   return next;
 }
 
+export async function updateTemplate(
+  id: string,
+  patch: Partial<Pick<NoteTemplate, 'name' | 'to' | 'subject' | 'body' | 'location' | 'durationMinutes' | 'kind'>>,
+): Promise<NoteTemplate[]> {
+  const current = await loadTemplates();
+  const next = current.map((item) =>
+    item.id === id
+      ? {
+        ...item,
+        ...patch,
+        name: typeof patch.name === 'string' ? patch.name : item.name,
+        to: typeof patch.to === 'string' ? patch.to : item.to,
+        subject: typeof patch.subject === 'string' ? patch.subject : item.subject,
+        body: typeof patch.body === 'string' ? patch.body : item.body,
+        updatedAt: Date.now(),
+      }
+      : item,
+  );
+  await saveTemplates(next);
+  await syncNotesStateIfAuthenticated(undefined, next);
+  return next;
+}
+
 export async function ensureWorkNotesAndEmailTemplates(): Promise<{
   notes: NoteItem[];
   templates: NoteTemplate[];
