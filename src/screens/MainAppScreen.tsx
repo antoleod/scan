@@ -1281,13 +1281,6 @@ function MainApp() {
     return enabledTypes.length > 0 ? enabledTypes : SCAN_BARCODE_TYPES;
   }, [settings.barcodeTypes]);
 
-  const statusChip = persistenceMode === 'local'
-    ? isGuest
-      ? 'Guest mode (local)'
-      : 'Local mode'
-    : user
-      ? `Firebase (${user.email || 'user'})`
-      : 'Firebase guest';
   const selectedDateLabel = selectedDate ? selectedDate.toLocaleDateString() : null;
   const tabOrder: Tab[] = ['notes', 'scan', 'history', 'settings'];
 
@@ -1319,8 +1312,6 @@ function MainApp() {
       <AppLayout>
         <AppHeader
           palette={palette}
-          statusChip={statusChip}
-          autoDetectLabel={settings.autoDetect ? 'AUTO' : settings.scanProfile.toUpperCase()}
           compact={isCompactLayout}
           themeName={activeTheme}
         />
