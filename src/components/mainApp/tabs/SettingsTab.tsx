@@ -23,7 +23,7 @@ type BarcodeOption = { name: string; label: string; description: string; hardwar
 type SupportedTheme = AppSettings['theme'];
 type AppThemeName = 'euBlue' | 'dark' | 'light' | 'parliament' | 'custom' | 'noirGraphite' | 'midnightSteel' | 'obsidianGold';
 
-const PASSWORD_WORDS = ['amber', 'cactus', 'signal', 'orbit', 'raven', 'velvet', 'anchor', 'matrix', 'ember', 'breeze', 'atlas', 'comet', 'lumen', 'solace', 'harbor', 'zenith', 'pixel', 'vector'];
+const PASSWORD_WORDS = ['choco', 'milk', 'sun', 'river', 'cloud', 'mint', 'lemon', 'tiger', 'magic', 'honey', 'rocket', 'ocean', 'forest', 'happy', 'coffee', 'pixel', 'anchor', 'velvet'];
 const SYMBOLS = ['!', '@', '#', '$', '%', '&', '*', '?'];
 const LETTER_POOL = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
 const DIGIT_POOL = '0123456789';
@@ -58,6 +58,12 @@ function stylizeSeed(seed: string) {
       return options ? randomFrom(options) : randomFrom([char.toLowerCase(), char.toUpperCase()]);
     })
     .join('');
+}
+
+function mergeMemorableWords(first: string, second: string) {
+  const left = first.slice(0, Math.max(2, Math.ceil(first.length * 0.7)));
+  const right = second.slice(Math.max(1, Math.floor(second.length * 0.25)));
+  return `${left}${right}`;
 }
 
 function SectionCard({ title, subtitle, accent, subtitleColor, cardBackground, cardBorder, children, defaultOpen = false }: { title: string; subtitle?: string; accent: string; subtitleColor: string; cardBackground: string; cardBorder: string; children: React.ReactNode; defaultOpen?: boolean }) {
@@ -142,9 +148,8 @@ export function SettingsTab({
   const { setThemeName } = useAppTheme();
   const [bulkInput, setBulkInput] = useState('');
   const [passPhrase, setPassPhrase] = useState('');
-  const [passwordMode, setPasswordMode] = useState<'phrases' | 'length' | 'seed'>('phrases');
-  const [phraseCount, setPhraseCount] = useState('3');
-  const [passwordLength, setPasswordLength] = useState('14');
+  const [passwordMode, setPasswordMode] = useState<'phrases' | 'seed'>('phrases');
+  const [phraseCount, setPhraseCount] = useState(2);
   const [seedText, setSeedText] = useState('Welcome');
   const [installBusy, setInstallBusy] = useState(false);
   const [pwaInstallAvailable, setPwaInstallAvailable] = useState(canInstallPwa());
@@ -196,17 +201,14 @@ export function SettingsTab({
   const generatePassword = () => {
     const currentYear = String(new Date().getFullYear());
     if (passwordMode === 'phrases') {
-      const count = Math.max(2, Math.min(24, Number.parseInt(phraseCount, 10) || 10));
+      const count = Math.max(2, Math.min(8, phraseCount || 2));
       const words = Array.from({ length: count }, () => randomFrom(PASSWORD_WORDS));
-      const normalized = words.map((word, index) => (index === 0 ? word[0].toUpperCase() + word.slice(1) : word)).join('');
-      setPassPhrase(`${normalized}${randomFrom(SYMBOLS)}${Math.floor(10 + Math.random() * 90)}`);
-      return;
-    }
-    if (passwordMode === 'length') {
-      const length = Math.max(8, Math.min(64, Number.parseInt(passwordLength, 10) || 14));
-      const base = `${randomChars(1, LETTER_POOL.toUpperCase())}${randomChars(1, LETTER_POOL.toLowerCase())}${randomChars(1, DIGIT_POOL)}${randomFrom(SYMBOLS)}`;
-      const extra = randomChars(Math.max(0, length - base.length), MIXED_POOL);
-      setPassPhrase((base + extra).slice(0, length));
+      const first = words[0];
+      const second = words[1];
+      const shownSecond = stylizeSeed(second);
+      const merged = mergeMemorableWords(first, second);
+      const extras = words.slice(2).map((word) => word[0].toUpperCase() + word.slice(1)).join('');
+      setPassPhrase(`${first[0].toUpperCase()}${first.slice(1)}+${shownSecond[0].toUpperCase()}${shownSecond.slice(1)}=${merged[0].toUpperCase()}${merged.slice(1)}${extras}${randomFrom(SYMBOLS)}${currentYear}`);
       return;
     }
     const cleanSeed = seedText.trim();
@@ -230,12 +232,11 @@ export function SettingsTab({
           <View style={styles.modeRow}>
               {[
                 { key: 'phrases', label: 'Phrases' },
-                { key: 'length', label: 'Length' },
                 { key: 'seed', label: 'Seed (Welcome)' },
               ].map((mode) => {
-              const selected = passwordMode === mode.key;
+                const selected = passwordMode === mode.key;
               return (
-                <Pressable key={mode.key} onPress={() => setPasswordMode(mode.key as 'phrases' | 'length' | 'seed')} style={[styles.modeChip, { borderColor: selected ? activeAccent : palette.border, backgroundColor: selected ? 'rgba(255,216,77,0.16)' : palette.card }]}>
+                <Pressable key={mode.key} onPress={() => setPasswordMode(mode.key as 'phrases' | 'seed')} style={[styles.modeChip, { borderColor: selected ? activeAccent : palette.border, backgroundColor: selected ? 'rgba(255,216,77,0.16)' : palette.card }]}>
                   <Text style={[styles.modeChipText, { color: selected ? activeAccent : palette.fg }]}>{mode.label}</Text>
                 </Pressable>
               );
@@ -243,48 +244,19 @@ export function SettingsTab({
           </View>
           {passwordMode === 'phrases' ? (
             <View style={styles.controlStack}>
-              <Text style={[styles.controlLabel, { color: palette.muted }]}>How many words should be used</Text>
-              <View style={styles.modeRow}>
-                {['10', '14', '18'].map((value) => {
-                  const selected = phraseCount === value;
-                  return (
-                    <Pressable key={value} onPress={() => setPhraseCount(value)} style={[styles.modeChip, { borderColor: selected ? activeAccent : palette.border, backgroundColor: selected ? 'rgba(255,216,77,0.16)' : palette.card }]}>
-                      <Text style={[styles.modeChipText, { color: selected ? activeAccent : palette.fg }]}>{value}</Text>
-                    </Pressable>
-                  );
-                })}
+              <Text style={[styles.controlLabel, { color: palette.muted }]}>Easy-to-remember phrase count (min 2)</Text>
+              <View style={styles.counterRow}>
+                <Pressable onPress={() => setPhraseCount((current) => Math.max(2, current - 1))} style={[styles.counterBtn, { borderColor: palette.border }]}>
+                  <Text style={[styles.counterBtnText, { color: palette.fg }]}>-</Text>
+                </Pressable>
+                <View style={[styles.counterValue, { borderColor: palette.border, backgroundColor: palette.card }]}>
+                  <Text style={[styles.counterValueText, { color: palette.fg }]}>{phraseCount}</Text>
+                </View>
+                <Pressable onPress={() => setPhraseCount((current) => Math.min(8, current + 1))} style={[styles.counterBtn, { borderColor: palette.border }]}>
+                  <Text style={[styles.counterBtnText, { color: palette.fg }]}>+</Text>
+                </Pressable>
               </View>
-              <TextInput
-                style={[styles.input, styles.smallInput, { borderColor: palette.border, color: palette.fg, backgroundColor: palette.card }]}
-                value={phraseCount}
-                onChangeText={(value) => setPhraseCount(value.replace(/[^0-9]/g, ''))}
-                keyboardType="number-pad"
-                placeholder="Custom number"
-                placeholderTextColor={palette.muted}
-              />
-            </View>
-          ) : null}
-          {passwordMode === 'length' ? (
-            <View style={styles.controlStack}>
-              <Text style={[styles.controlLabel, { color: palette.muted }]}>Select password length</Text>
-              <View style={styles.modeRow}>
-                {['10', '14', '18'].map((value) => {
-                  const selected = passwordLength === value;
-                  return (
-                    <Pressable key={value} onPress={() => setPasswordLength(value)} style={[styles.modeChip, { borderColor: selected ? activeAccent : palette.border, backgroundColor: selected ? 'rgba(255,216,77,0.16)' : palette.card }]}>
-                      <Text style={[styles.modeChipText, { color: selected ? activeAccent : palette.fg }]}>{value}</Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-              <TextInput
-                style={[styles.input, styles.smallInput, { borderColor: palette.border, color: palette.fg, backgroundColor: palette.card }]}
-                value={passwordLength}
-                onChangeText={(value) => setPasswordLength(value.replace(/[^0-9]/g, ''))}
-                keyboardType="number-pad"
-                placeholder="Custom number"
-                placeholderTextColor={palette.muted}
-              />
+              <Text style={[styles.helperLine, { color: palette.muted, marginTop: 0 }]}>Example style: Choco+M!lk=ChocoMilk!2026</Text>
             </View>
           ) : null}
           {passwordMode === 'seed' ? (
@@ -492,9 +464,13 @@ const styles = StyleSheet.create({
   modeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   modeChip: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 8 },
   modeChipText: { fontSize: 11, fontWeight: '800' },
-  controlRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
   controlStack: { gap: 8 },
   controlLabel: { fontSize: 12, fontWeight: '700' },
   smallInput: { minWidth: 84, maxWidth: 96, textAlign: 'center' },
+  counterRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  counterBtn: { width: 36, height: 36, borderWidth: 1, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  counterBtnText: { fontSize: 22, fontWeight: '900', lineHeight: 24 },
+  counterValue: { minWidth: 56, height: 36, borderWidth: 1, borderRadius: 10, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 10 },
+  counterValueText: { fontSize: 14, fontWeight: '800' },
   input: { minHeight: 42, borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 13 },
 });
