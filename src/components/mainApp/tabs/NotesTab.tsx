@@ -146,6 +146,7 @@ export function NotesTab({ palette }: { palette: Palette }) {
   const [ocrBusy, setOcrBusy] = useState(false);
 
   const [templateName, setTemplateName] = useState('');
+  const [templateTo, setTemplateTo] = useState('');
   const [templateSubject, setTemplateSubject] = useState('');
   const [templateBody, setTemplateBody] = useState('');
   const [templateSearch, setTemplateSearch] = useState('');
@@ -342,7 +343,7 @@ export function NotesTab({ palette }: { palette: Palette }) {
   const filteredTemplates = useMemo(() => {
     const q = templateSearch.trim().toLowerCase();
     if (!q) return templates;
-    return templates.filter((t) => `${t.name} ${t.subject} ${t.body}`.toLowerCase().includes(q));
+    return templates.filter((t) => `${t.name} ${t.to || ''} ${t.subject} ${t.body}`.toLowerCase().includes(q));
   }, [templates, templateSearch]);
 
   const filteredClipboard = useMemo(() => {
@@ -650,7 +651,7 @@ export function NotesTab({ palette }: { palette: Palette }) {
               </View>
             </View>
 
-            {smartResult ? <View style={[mainAppStyles.card, { backgroundColor: palette.card, borderColor: palette.border }]}><Text style={{ color: palette.fg, fontWeight: '800', marginBottom: 6 }}>Generated structure</Text><Text style={{ color: palette.fg, fontSize: 12, lineHeight: 18 }}>{smartResult.summary}</Text><View style={styles.editorActions}><Pressable style={[styles.iconOnlyAction, { borderColor: palette.border }]} onPress={() => saveDraftAsNote().catch(() => undefined)}><Ionicons name="document-text-outline" size={16} color={palette.fg} /></Pressable><Pressable style={[styles.iconOnlyAction, { borderColor: palette.border }]} onPress={() => { setWorkspaceTab('templates'); setTemplateName(smartResult.ticketNumber || 'Generated template'); setTemplateSubject(`Follow-up ${smartResult.ticketNumber || ''}`.trim()); setTemplateBody(smartResult.summary); }}><Ionicons name="layers-outline" size={16} color={palette.fg} /></Pressable><Pressable style={[styles.iconOnlyAction, { borderColor: palette.border }]} onPress={() => createOutlookEventFromContent(smartResult.summary).catch(() => undefined)}><Ionicons name="calendar-outline" size={16} color={palette.fg} /></Pressable></View></View> : null}
+            {smartResult ? <View style={[mainAppStyles.card, { backgroundColor: palette.card, borderColor: palette.border }]}><Text style={{ color: palette.fg, fontWeight: '800', marginBottom: 6 }}>Generated structure</Text><Text style={{ color: palette.fg, fontSize: 12, lineHeight: 18 }}>{smartResult.summary}</Text><View style={styles.editorActions}><Pressable style={[styles.iconOnlyAction, { borderColor: palette.border }]} onPress={() => saveDraftAsNote().catch(() => undefined)}><Ionicons name="document-text-outline" size={16} color={palette.fg} /></Pressable><Pressable style={[styles.iconOnlyAction, { borderColor: palette.border }]} onPress={() => { setWorkspaceTab('templates'); setTemplateName(smartResult.ticketNumber || 'Generated template'); setTemplateTo(''); setTemplateSubject(`Follow-up ${smartResult.ticketNumber || ''}`.trim()); setTemplateBody(smartResult.summary); }}><Ionicons name="layers-outline" size={16} color={palette.fg} /></Pressable><Pressable style={[styles.iconOnlyAction, { borderColor: palette.border }]} onPress={() => createOutlookEventFromContent(smartResult.summary).catch(() => undefined)}><Ionicons name="calendar-outline" size={16} color={palette.fg} /></Pressable></View></View> : null}
 
             <View style={[mainAppStyles.card, { backgroundColor: palette.card, borderColor: palette.border }]}>
               <View style={styles.filterRow}>{(['all', 'work', 'pinned', 'archived'] as NoteFilter[]).map((item) => <Pressable key={item} style={[styles.categoryChip, { borderColor: filter === item ? palette.accent : palette.border }]} onPress={() => setFilter(item)}><Text style={{ color: palette.fg, fontSize: 11, fontWeight: '700' }}>{item}</Text></Pressable>)}</View>
@@ -780,8 +781,21 @@ export function NotesTab({ palette }: { palette: Palette }) {
 
         {workspaceTab === 'templates' ? (
           <>
-            <View style={[mainAppStyles.card, { backgroundColor: palette.card, borderColor: palette.border }]}><TextInput style={[mainAppStyles.input, { backgroundColor: palette.bg, color: palette.fg, borderColor: palette.border, marginTop: 0 }]} placeholder="Template name" placeholderTextColor={palette.muted} value={templateName} onChangeText={setTemplateName} /><TextInput style={[mainAppStyles.input, { backgroundColor: palette.bg, color: palette.fg, borderColor: palette.border }]} placeholder="Subject" placeholderTextColor={palette.muted} value={templateSubject} onChangeText={setTemplateSubject} /><TextInput style={[mainAppStyles.input, styles.noteInput, { backgroundColor: palette.bg, color: palette.fg, borderColor: palette.border }]} placeholder="Body" placeholderTextColor={palette.muted} multiline value={templateBody} onChangeText={setTemplateBody} /><View style={styles.editorActions}><Pressable style={[styles.iconOnlyAction, { borderColor: palette.border }]} onPress={() => { addTemplate({ name: templateName || 'Template', kind: 'email', subject: templateSubject, body: templateBody, location: '', durationMinutes: 30 }).then(setTemplates).then(() => { setTemplateName(''); setTemplateSubject(''); setTemplateBody(''); }).catch(() => undefined); }}><Ionicons name="save-outline" size={16} color={palette.fg} /></Pressable></View></View>
-            <View style={[mainAppStyles.card, { backgroundColor: palette.card, borderColor: palette.border }]}><TextInput style={[mainAppStyles.input, { backgroundColor: palette.bg, color: palette.fg, borderColor: palette.border, marginTop: 0 }]} placeholder="Search templates" placeholderTextColor={palette.muted} value={templateSearch} onChangeText={setTemplateSearch} />{filteredTemplates.map((template) => <View key={template.id} style={[styles.compactCard, { borderColor: palette.border, backgroundColor: palette.bg }]}><Text style={{ color: palette.fg, fontWeight: '800' }} numberOfLines={1}>{template.name}</Text><Text style={{ color: palette.muted, fontSize: 11 }} numberOfLines={1}>{template.subject || '(No subject)'}</Text><View style={styles.editorActions}><Pressable onPress={() => removeTemplate(template.id).then(setTemplates)}><Ionicons name="trash-outline" size={16} color="#ef4444" /></Pressable></View></View>)}</View>
+            <View style={[mainAppStyles.card, { backgroundColor: palette.card, borderColor: palette.border }]}>
+              <TextInput style={[mainAppStyles.input, { backgroundColor: palette.bg, color: palette.fg, borderColor: palette.border, marginTop: 0 }]} placeholder="Template name" placeholderTextColor={palette.muted} value={templateName} onChangeText={setTemplateName} />
+              <TextInput style={[mainAppStyles.input, { backgroundColor: palette.bg, color: palette.fg, borderColor: palette.border }]} placeholder="To (emails separated by ;)" placeholderTextColor={palette.muted} value={templateTo} onChangeText={setTemplateTo} />
+              <TextInput style={[mainAppStyles.input, { backgroundColor: palette.bg, color: palette.fg, borderColor: palette.border }]} placeholder="Subject" placeholderTextColor={palette.muted} value={templateSubject} onChangeText={setTemplateSubject} />
+              <TextInput style={[mainAppStyles.input, styles.noteInput, { backgroundColor: palette.bg, color: palette.fg, borderColor: palette.border }]} placeholder="Body" placeholderTextColor={palette.muted} multiline value={templateBody} onChangeText={setTemplateBody} />
+              <View style={styles.editorActions}>
+                <Pressable style={[styles.iconOnlyAction, { borderColor: palette.border }]} onPress={() => { addTemplate({ name: templateName || 'Template', kind: 'email', to: templateTo.trim(), subject: templateSubject, body: templateBody, location: '', durationMinutes: 30 }).then(setTemplates).then(() => { setTemplateName(''); setTemplateTo(''); setTemplateSubject(''); setTemplateBody(''); }).catch(() => undefined); }}>
+                  <Ionicons name="save-outline" size={16} color={palette.fg} />
+                </Pressable>
+              </View>
+            </View>
+            <View style={[mainAppStyles.card, { backgroundColor: palette.card, borderColor: palette.border }]}>
+              <TextInput style={[mainAppStyles.input, { backgroundColor: palette.bg, color: palette.fg, borderColor: palette.border, marginTop: 0 }]} placeholder="Search templates" placeholderTextColor={palette.muted} value={templateSearch} onChangeText={setTemplateSearch} />
+              {filteredTemplates.map((template) => <View key={template.id} style={[styles.compactCard, { borderColor: palette.border, backgroundColor: palette.bg }]}><Text style={{ color: palette.fg, fontWeight: '800' }} numberOfLines={1}>{template.name}</Text><Text style={{ color: palette.muted, fontSize: 11 }} numberOfLines={1}>{template.to || '(No recipients)'}</Text><Text style={{ color: palette.muted, fontSize: 11 }} numberOfLines={1}>{template.subject || '(No subject)'}</Text><View style={styles.editorActions}><Pressable onPress={() => removeTemplate(template.id).then(setTemplates)}><Ionicons name="trash-outline" size={16} color="#ef4444" /></Pressable></View></View>)}
+            </View>
           </>
         ) : null}
 

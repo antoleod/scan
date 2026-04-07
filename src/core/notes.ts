@@ -40,6 +40,7 @@ export interface NoteTemplate {
   id: string;
   name: string;
   kind: TemplateKind;
+  to?: string;
   subject: string;
   body: string;
   location?: string;
@@ -348,6 +349,7 @@ export async function loadTemplates(): Promise<NoteTemplate[]> {
         id: String(item?.id || makeId('tpl')),
         name: String(item?.name || '').trim(),
         kind: item?.kind === 'appointment' ? 'appointment' : 'email',
+        to: String(item?.to || '').trim(),
         subject: String(item?.subject || '').trim(),
         body: String(item?.body || ''),
         location: item?.location ? String(item.location) : '',
@@ -433,19 +435,21 @@ export async function ensureWorkNotesAndEmailTemplates(): Promise<{
   if (!hasEmailTemplates) {
     const now = Date.now();
     const emailTemplates: NoteTemplate[] = [
-      {
-        id: makeId('tpl'),
-        name: 'Ticket Update',
-        kind: 'email',
-        subject: 'Update on your IT ticket',
-        body: 'Hello,\n\nYour request was processed on {{date}} at {{time}}.\n\nStatus: In progress.\nReference: {{clipboard}}\n\nRegards,\nIT Support',
-        createdAt: now,
-        updatedAt: now,
-      },
+ {
+  id: makeId('tpl'),
+  name: 'Late Notification',
+  kind: 'email',
+  to: 'mourad.elmessaoudi@europarl.europa.eu; ludovic.ngoran@europarl.europa.eu; livia.coman@ext.europarl.europa.eu',
+  subject: 'Slight Delay Today',
+  body: 'Hello Team,\n\nI would like to inform you that I will be approximately 15 to 20 minutes late today.\n\nThe train I usually take was canceled, so I am driving instead, and traffic is heavier than expected.\n\nThis is only for today, and everything will be back to normal afterwards.\n\nThank you very much for your understanding.\n\nKind regards,\nJuan Dioses\nIT Support\njuan.dioses@ext.europarl.europa.eu',
+  createdAt: now + 2,
+  updatedAt: now + 2,
+},
       {
         id: makeId('tpl'),
         name: 'Badge Delivered',
         kind: 'email',
+        to: '',
         subject: 'Your access badge is ready',
         body: 'Hello,\n\nYour new badge is ready for pickup.\nPlease bring your ID card.\n\nRegards,\nIT Support',
         createdAt: now + 1,
@@ -455,6 +459,7 @@ export async function ensureWorkNotesAndEmailTemplates(): Promise<{
         id: makeId('tpl'),
         name: 'Closure Confirmation',
         kind: 'email',
+        to: '',
         subject: 'Ticket closure confirmation',
         body: 'Hello,\n\nWe are closing your ticket based on successful validation.\nIf you still need help, reply to this email.\n\nRegards,\nIT Support',
         createdAt: now + 2,
