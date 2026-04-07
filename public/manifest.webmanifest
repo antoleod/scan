@@ -3,6 +3,7 @@
   "short_name": "Oryxen",
   "description": "Secure barcode & QR scanner workspace with offline-ready cloud sync.",
   "lang": "en",
+  "id": "./",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

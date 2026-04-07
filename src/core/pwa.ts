@@ -31,20 +31,26 @@ export function detectBrowserInstallSupport(): BrowserInstallSupport {
   const win = getWindowSafe();
   if (!win) return 'unknown';
   const ua = win.navigator.userAgent;
-  if (/Firefox/i.test(ua)) return 'firefox';
-  if (/Safari/i.test(ua) && !/Chrome/i.test(ua)) return 'safari';
+  if (/Firefox|FxiOS/i.test(ua)) return 'firefox';
+  if (/Safari/i.test(ua) && !/Chrome|Chromium|CriOS|Edg|OPR|Samsung/i.test(ua)) return 'safari';
   if (/Chrome|Chromium|Edg|OPR|Samsung/i.test(ua)) return 'chromium';
   return 'unknown';
 }
 
 /** Returns human-readable install instructions for browsers that don't support the prompt API. */
 export function getManualInstallInstructions(): string | null {
+  const win = getWindowSafe();
+  const isMobile = Boolean(win?.matchMedia?.('(max-width: 900px)').matches);
   const browser = detectBrowserInstallSupport();
   if (browser === 'safari') {
-    return 'To install: tap the Share button (square with arrow) at the bottom, then select "Add to Home Screen".';
+    return isMobile
+      ? 'Safari iOS: tap Share (square with arrow), then "Add to Home Screen".'
+      : 'Safari macOS: File > Add to Dock to install this app.';
   }
   if (browser === 'firefox') {
-    return 'To install on Firefox Android: tap the three-dot menu and select "Install" or "Add to Home Screen".';
+    return isMobile
+      ? 'Firefox Android: open menu (⋮) and choose "Install" or "Add to Home screen".'
+      : 'Firefox desktop has limited install UX. Use Edge/Chrome for one-click install, or keep as pinned tab.';
   }
   return null;
 }

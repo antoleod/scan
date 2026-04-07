@@ -4,7 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { AppSettings, type PersistenceMode } from '../../../types';
 import { BARCODE_FORMAT_OPTIONS, type BarcodeFormat } from '../../../core/barcode';
-import { canInstallPwa, getPwaInstallDiagnostics, subscribePwaInstallAvailability, triggerPwaInstall } from '../../../core/pwa';
+import { canInstallPwa, detectBrowserInstallSupport, getManualInstallInstructions, getPwaInstallDiagnostics, subscribePwaInstallAvailability, triggerPwaInstall } from '../../../core/pwa';
 import { createSharedNoteGroup, fetchSharedGroupsForCurrentUser, joinSharedNoteGroup, type SharedNoteGroup } from '../../../core/firebase';
 import { useAppTheme } from '../../../constants/theme';
 
@@ -355,13 +355,14 @@ export function SettingsTab({
                   }
                   return;
                 }
-                const browser = typeof navigator !== 'undefined' ? (navigator.userAgent || '').toLowerCase() : '';
-                const isChromeEdge = browser.includes('chrome') || browser.includes('edg');
+                const browserSupport = detectBrowserInstallSupport();
+                const manualText = getManualInstallInstructions();
                 Alert.alert(
                   'Manual install',
-                  isChromeEdge
-                    ? 'Use browser menu (⋮) > Install app. If it does not appear, refresh and interact with the app for a few seconds.'
-                    : 'Use your browser install option (Add to Home screen / Install app). Chrome or Edge on desktop gives the best support.'
+                  manualText ||
+                    (browserSupport === 'chromium'
+                      ? 'Use browser menu (⋮) > Install app. If it does not appear, refresh and interact with the app for a few seconds.'
+                      : 'Use your browser install option (Add to Home screen / Install app).')
                 );
               }}
               style={[styles.bulkButton, { backgroundColor: activeAccent, opacity: installBusy ? 0.6 : 1 }]}
@@ -372,7 +373,14 @@ export function SettingsTab({
             </Pressable>
             <Pressable
               onPress={() => {
-                void Linking.openURL('https://support.google.com/chrome/answer/9658361');
+                const browserSupport = detectBrowserInstallSupport();
+                const guideUrl =
+                  browserSupport === 'safari'
+                    ? 'https://support.apple.com/guide/safari/ibrw9f78f7fe/mac'
+                    : browserSupport === 'firefox'
+                      ? 'https://support.mozilla.org/en-US/kb/add-web-page-shortcuts-your-home-screen'
+                      : 'https://support.google.com/chrome/answer/9658361';
+                void Linking.openURL(guideUrl);
               }}
               style={[styles.bulkButton, { backgroundColor: 'transparent', borderWidth: 1, borderColor: palette.border }]}
             >
