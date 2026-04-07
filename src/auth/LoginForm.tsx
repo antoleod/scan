@@ -1,6 +1,7 @@
-﻿import { Ionicons } from '@expo/vector-icons';
+﻿﻿import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
-import { useEffect, useMemo, useState } from 'react';
+import * as LocalAuthentication from 'expo-local-authentication';
+import { useEffect, useMemo, useState, useRef } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -10,6 +11,7 @@ import {
   Pressable,
   Text,
   TextInput,
+  Switch,
   useWindowDimensions,
   View
 } from 'react-native';
@@ -194,14 +196,58 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
   const { login, enterAsGuest, firebase } = useAuth();
   const [username, setUsername] = useState('');
   const [pin, setPin] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [isBiometricSupported, setIsBiometricSupported] = useState(false);
   const [connectionState, setConnectionState] = useState<'checking' | 'connected' | 'limited' | 'error'>('checking');
   const [errors, setErrors] = useState<{ username?: string; pin?: string }>({});
   const [focusedField, setFocusedField] = useState<'username' | 'pin' | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
   const [rememberPassword, setRememberPassword] = useState(false);
+  const [hasAutoAttempted, setHasAutoAttempted] = useState(false);
 
+  const pinInputRef = useRef<TextInput>(null);
   const [displayedBrandingText, setDisplayedBrandingText] = useState('');
+
+  // Shake animation for error feedback
+  const shakeX = useSharedValue(0);
+  const shakeStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: shakeX.value }],
+  }));
+
+  const triggerShake = () => {
+    shakeX.value = withSequence(
+      withTiming(-12, { duration: 40 }),
+      withTiming(12, { duration: 40 }),
+      withTiming(-12, { duration: 40 }),
+      withTiming(12, { duration: 40 }),
+      withTiming(0, { duration: 40 })
+    );
+    if (Platform.OS !== 'web') {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
+    }
+  };
+
+  // Tooltip Animation for Copy
+  const tooltipOpacity = useSharedValue(0);
+  const tooltipY = useSharedValue(0);
+
+  const tooltipStyle = useAnimatedStyle(() => ({
+    opacity: tooltipOpacity.value,
+    transform: [{ translateY: tooltipY.value }],
+  }));
+
+  const showTooltip = () => {
+    tooltipY.value = 0;
+    tooltipOpacity.value = withSequence(
+      withTiming(1, { duration: 200 }),
+      withDelay(1500, withTiming(0, { duration: 400 }))
+    );
+    tooltipY.value = withSequence(
+      withTiming(-8, { duration: 200 }),
+      withDelay(1500, withTiming(-15, { duration: 400 }))
+    );
+  };
 
   const cursorOpacity = useSharedValue(0);
   useEffect(() => {
@@ -404,7 +450,7 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
   const starsStyle = useAnimatedStyle(() => ({
     opacity: interpolate(scanProgress.value, [0, 0.2, 0.5, 0.8, 1], [0.3, 0.6, 1, 0.6, 0.3]),
     transform: [
-      { rotate: `${interpolate(scanProgress.value, [0, 1], [0, 20])}deg` },
+      { rotate: `${interpolate(scanProgress.value, [0, 1], [0, -360])}deg` }, // Rotación completa y continua
       { scale: interpolate(scanProgress.value, [0, 0.5, 1], [0.96, 1.06, 0.96]) }
     ],
   }));
@@ -466,6 +512,12 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
       .catch(() => undefined);
 
     const checkConnection = async () => {
+      const hasHardware = await LocalAuthentication.hasHardwareAsync();
+      const isEnrolled = await LocalAuthentication.isEnrolledAsync();
+      if (!cancelled && hasHardware && isEnrolled) {
+        setIsBiometricSupported(true);
+      }
+
       if (!firebaseApiKey) {
         if (!cancelled) setConnectionState('error');
         return;
@@ -497,6 +549,16 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
     };
   }, [firebaseApiKey]);
 
+  // Auto-trigger biometrics if enabled and supported
+  useEffect(() => {
+    if (isBiometricSupported && rememberPassword && !hasAutoAttempted && !isLoading && !authError) {
+      setHasAutoAttempted(true);
+      // Slight delay for UI and keyboard stabilization
+      const timer = setTimeout(() => void handleBiometricAuth(), 800);
+      return () => clearTimeout(timer);
+    }
+  }, [isBiometricSupported, rememberPassword]);
+
   const validate = () => {
     const newErrors: { username?: string; pin?: string } = {};
     let valid = true;
@@ -521,8 +583,63 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
     return valid;
   };
 
+  const handleBiometricAuth = async () => {
+    try {
+      const authTypes = await LocalAuthentication.supportedAuthenticationTypesAsync();
+      let promptMessage = 'Sign in with Biometrics';
+      
+      if (Platform.OS === 'ios') {
+        if (authTypes.includes(LocalAuthentication.AuthenticationType.FACIAL_RECOGNITION)) {
+          promptMessage = 'Sign in with FaceID';
+        } else if (authTypes.includes(LocalAuthentication.AuthenticationType.FINGERPRINT)) {
+          promptMessage = 'Sign in with TouchID';
+        }
+      } else if (Platform.OS === 'android') {
+        if (authTypes.includes(LocalAuthentication.AuthenticationType.FINGERPRINT)) {
+          promptMessage = 'Sign in with Fingerprint';
+        }
+      }
+
+      const result = await LocalAuthentication.authenticateAsync({
+        promptMessage,
+        fallbackLabel: 'Use PIN',
+        disableDeviceFallback: false,
+      });
+
+      if (result.success) {
+        setIsLoading(true);
+        const saved = await loadEncryptedCredentials();
+        if (saved) {
+          await login(saved.identifier, saved.password);
+          if (Platform.OS !== 'web') {
+            await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          }
+        } else {
+          setAuthError('No saved credentials found for biometric login.');
+        }
+      }
+    } catch (error) {
+      console.error('Biometric error:', error);
+      setAuthError('Biometric authentication failed.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleCopyLoginId = async () => {
+    if (!normalizedUsername) return;
+    await Clipboard.setStringAsync(firebaseEmail);
+    showTooltip();
+    if (Platform.OS !== 'web') {
+      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+  };
+
   const handleSignIn = async () => {
-    if (!validate()) return;
+    if (!validate()) {
+      triggerShake();
+      return;
+    }
 
     setIsLoading(true);
     setAuthError(null);
@@ -545,6 +662,7 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unable to sign in right now.';
       setAuthError(message);
+      triggerShake();
     } finally {
       setIsLoading(false);
     }
@@ -773,67 +891,140 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
                 autoCapitalize="none"
                 autoCorrect={false}
                 autoComplete="username"
+                textContentType="username"
+                importantForAutofill="yes"
                 keyboardAppearance="dark"
                 autoFocus // change 2: open keyboard immediately on mount
                 returnKeyType="next"
                 blurOnSubmit={false}
+                onSubmitEditing={() => pinInputRef.current?.focus()}
                 onKeyPress={handleSubmitShortcut}
               />
-              {errors.username ? <Text style={[styles.error, { color: theme.error }]}>{errors.username}</Text> : null}
-              {username ? <Text style={[styles.helper, { color: theme.textSecondary }]}>Login id: <Text style={styles.helperStrong}>{normalizedUsername}</Text></Text> : null}
+              {errors.username ? (
+                <Animated.View entering={FadeIn.duration(200)}>
+                  <Text style={[styles.error, { color: theme.error }]}>{errors.username}</Text>
+                </Animated.View>
+              ) : null}
+              {username ? (
+                <View style={styles.helperRow}>
+                  <Text style={[styles.helper, { color: theme.textSecondary }]}>Login id: <Text style={styles.helperStrong}>{normalizedUsername}</Text></Text>
+                  <Pressable onPress={handleCopyLoginId} style={styles.miniCopyBtn}>
+                    <Ionicons name="copy-outline" size={12} color={theme.secondary} />
+                  </Animated.View>
+                </View>
+              ) : null}
             </View>
 
             <View style={styles.field}>
               <Text style={[styles.label, { color: theme.secondary }]}>PASSWORD</Text>
-              <TextInput
-                style={[
-                  styles.input,
-                  {
-                    backgroundColor: theme.inputBg,
-                    color: theme.text,
-                    borderColor: errors.pin ? theme.error : focusedField === 'pin' ? theme.secondary : theme.border,
-                    shadowColor: focusedField === 'pin' ? theme.secondary : 'transparent',
-                    shadowOpacity: focusedField === 'pin' ? 0.35 : 0,
-                  },
-                ]}
-                placeholder="••••••"
-                placeholderTextColor={theme.textSecondary}
-                value={pin}
-                onChangeText={(text) => {
-                  setPin(text);
-                  if (errors.pin) setErrors({ ...errors, pin: undefined });
-                }}
-                onFocus={() => setFocusedField('pin')}
-                onBlur={() => setFocusedField(null)}
-                secureTextEntry
-                autoComplete="current-password"
-                keyboardAppearance="dark"
-                returnKeyType="go"
-                onSubmitEditing={() => {
-                  void handleSignIn();
-                }}
-                onKeyPress={handleSubmitShortcut}
-              />
-              {errors.pin ? <Text style={[styles.error, { color: theme.error }]}>{errors.pin}</Text> : null}
+              <View style={styles.passwordWrapper}>
+                <TextInput
+                  ref={pinInputRef}
+                  style={[
+                    styles.input,
+                    styles.passwordInput,
+                    {
+                      backgroundColor: theme.inputBg,
+                      color: theme.text,
+                      borderColor: errors.pin ? theme.error : focusedField === 'pin' ? theme.secondary : theme.border,
+                      shadowColor: focusedField === 'pin' ? theme.secondary : 'transparent',
+                      shadowOpacity: focusedField === 'pin' ? 0.35 : 0,
+                    },
+                  ]}
+                  placeholder="••••••"
+                  placeholderTextColor={theme.textSecondary}
+                  value={pin}
+                  onChangeText={(text) => {
+                    setPin(text);
+                    if (errors.pin) setErrors({ ...errors, pin: undefined });
+                  }}
+                  onFocus={() => setFocusedField('pin')}
+                  onBlur={() => setFocusedField(null)}
+                  secureTextEntry={!showPassword}
+                  autoComplete="current-password"
+                  textContentType="password"
+                  importantForAutofill="yes"
+                  keyboardAppearance="dark"
+                  keyboardType="numeric"
+                  returnKeyType="go"
+                  onSubmitEditing={() => {
+                    void handleSignIn();
+                  }}
+                  onKeyPress={handleSubmitShortcut}
+                />
+                <Pressable 
+                  onPress={() => setShowPassword(!showPassword)}
+                  style={styles.eyeIcon}
+                >
+                  <Ionicons 
+                    name={showPassword ? 'eye-off-outline' : 'eye-outline'} 
+                    size={20} 
+                    color={focusedField === 'pin' ? theme.secondary : theme.textSecondary} 
+                  />
+                </Pressable>
+              </View>
+              {errors.pin ? (
+                <Animated.View entering={FadeIn.duration(200)}>
+                  <Text style={[styles.error, { color: theme.error }]}>{errors.pin}</Text>
+                </Animated.View>
+              ) : null}
               <Text style={[styles.note, { color: theme.textSecondary }]}>Use your workspace password.</Text>
             </View>
 
-            <Pressable
-              style={[styles.primaryButton, { backgroundColor: theme.secondary }, isLoading && styles.primaryDisabled]}
-              onPress={handleSignIn}
-              disabled={isLoading || !firebase.enabled}
-            >
-              {({ pressed }) => (
-                <View style={[styles.primaryButtonInner, pressed && { opacity: 0.86, transform: [{ scale: 0.99 }] }]}>
-                  {isLoading ? (
-                    <ActivityIndicator color={theme.primary} />
-                  ) : (
-                    <Text style={[styles.primaryText, { color: theme.primary }]}>{palette.primaryText}</Text>
+            <View style={styles.rememberRow}>
+              <Pressable style={styles.rememberLeft} onPress={() => setRememberPassword(!rememberPassword)}>
+                <Switch
+                  value={rememberPassword}
+                  onValueChange={setRememberPassword}
+                  trackColor={{ false: theme.border, true: theme.secondary + '80' }}
+                  thumbColor={rememberPassword ? theme.secondary : '#f4f3f4'}
+                  ios_backgroundColor={theme.border}
+                />
+                <Text style={[styles.rememberText, { color: theme.textSecondary }]}>Remember session</Text>
+              </Pressable>
+            </View>
+
+            <View style={styles.actionRow}>
+              <Animated.View style={[{ flex: 1 }, shakeStyle]}>
+                <Pressable
+                  style={[styles.primaryButton, { backgroundColor: theme.secondary }, isLoading && styles.primaryDisabled]}
+                  onPress={handleSignIn}
+                  disabled={isLoading || !firebase.enabled}
+                >
+                  {({ pressed }) => (
+                    <View style={[styles.primaryButtonInner, pressed && { opacity: 0.86, transform: [{ scale: 0.99 }] }]}>
+                      {isLoading ? (
+                        <ActivityIndicator color={theme.primary} />
+                      ) : (
+                        <Text style={[styles.primaryText, { color: theme.primary }]}>{palette.primaryText}</Text>
+                      )}
+                      <Animated.View style={[styles.buttonScan, scanLineStyle, { backgroundColor: `${theme.secondary}66` }]} />
+                    </View>
                   )}
-                  <Animated.View style={[styles.buttonScan, scanLineStyle, { backgroundColor: `${theme.secondary}66` }]} />
-                </View>
+                </Pressable>
+              </Animated.View>
+
+              {isBiometricSupported && (
+                <Pressable
+                  style={[styles.biometricButton, { borderColor: theme.border, backgroundColor: theme.inputBg }]}
+                  onPress={handleBiometricAuth}
+                  disabled={isLoading}
+                >
+                  {({ pressed }) => (
+                    <Ionicons 
+                      name="finger-print" 
+                      size={24} 
+                      color={pressed ? theme.secondary : theme.text} 
+                    />
+                  )}
+                </Pressable>
               )}
-            </Pressable>
+            </View>
+
+            {/* Tooltip Copied */}
+            <Animated.View style={[styles.tooltip, { backgroundColor: theme.secondary }, tooltipStyle]} pointerEvents="none">
+              <Text style={[styles.tooltipText, { color: theme.primary }]}>COPIED!</Text>
+            </Animated.View>
 
             {authError ? (
               <Text style={[styles.authError, { color: theme.error, borderColor: `${theme.error}40`, backgroundColor: `${theme.error}12` }]}>
@@ -940,10 +1131,22 @@ const styles = StyleSheet.create({
   field: { gap: 6 },
   label: { fontSize: 10, fontWeight: '800', letterSpacing: 1.2, textTransform: 'uppercase' },
   input: { height: 48, borderRadius: 10, borderWidth: 1, paddingHorizontal: 14, fontSize: 15, shadowOffset: { width: 0, height: 0 }, shadowRadius: 8 },
+  passwordWrapper: { position: 'relative', justifyContent: 'center' },
+  passwordInput: { paddingRight: 44 },
+  eyeIcon: { position: 'absolute', right: 12, width: 32, height: 32, alignItems: 'center', justifyContent: 'center' },
   error: { fontSize: 11, fontWeight: '600' },
+  helperRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   helper: { fontSize: 10 },
   helperStrong: { fontWeight: '700' },
+  miniCopyBtn: { padding: 4 },
+  tooltip: { position: 'absolute', top: -35, right: 10, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6, zIndex: 50 },
+  tooltipText: { fontSize: 10, fontWeight: '900', letterSpacing: 0.5 },
   note: { fontSize: 10, lineHeight: 15 },
+  rememberRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 },
+  rememberLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  rememberText: { fontSize: 12, fontWeight: '600' },
+  actionRow: { flexDirection: 'row', gap: 10, alignItems: 'center' },
+  biometricButton: { width: 48, height: 48, borderRadius: 10, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   primaryButton: { borderRadius: 10, overflow: 'hidden' },
   primaryDisabled: { opacity: 0.6 },
   primaryButtonInner: { height: 48, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },

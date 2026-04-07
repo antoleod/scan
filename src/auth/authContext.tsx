@@ -72,9 +72,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               return;
             }
 
-            if (!lastAuthTs) {
-              await saveLastAuthTimestamp(Date.now());
-            }
+            // Update timestamp to extend session (resets the 15-day inactivity window)
+            await saveLastAuthTimestamp(Date.now());
 
             setUser(nextUser);
             setIsGuest(false);
