@@ -958,7 +958,7 @@ function MainApp() {
     if (autoSyncTimerRef.current) clearTimeout(autoSyncTimerRef.current);
     autoSyncTimerRef.current = setTimeout(() => {
       syncNow(false).catch(() => undefined);
-    }, 1400);
+    }, 0);
   }, [history, user, persistenceMode]);
 
   useEffect(() => {
