@@ -145,7 +145,7 @@ export function SettingsTab({
   const [passwordMode, setPasswordMode] = useState<'phrases' | 'length' | 'seed'>('phrases');
   const [phraseCount, setPhraseCount] = useState('3');
   const [passwordLength, setPasswordLength] = useState('14');
-  const [seedText, setSeedText] = useState('GEAN');
+  const [seedText, setSeedText] = useState('Welcome');
   const [installBusy, setInstallBusy] = useState(false);
   const [pwaInstallAvailable, setPwaInstallAvailable] = useState(canInstallPwa());
   const [isInstalled, setIsInstalled] = useState(false);
@@ -196,7 +196,7 @@ export function SettingsTab({
   const generatePassword = () => {
     const currentYear = String(new Date().getFullYear());
     if (passwordMode === 'phrases') {
-      const count = Math.max(2, Math.min(6, Number.parseInt(phraseCount, 10) || 3));
+      const count = Math.max(2, Math.min(24, Number.parseInt(phraseCount, 10) || 10));
       const words = Array.from({ length: count }, () => randomFrom(PASSWORD_WORDS));
       const normalized = words.map((word, index) => (index === 0 ? word[0].toUpperCase() + word.slice(1) : word)).join('');
       setPassPhrase(`${normalized}${randomFrom(SYMBOLS)}${Math.floor(10 + Math.random() * 90)}`);
@@ -210,7 +210,7 @@ export function SettingsTab({
       return;
     }
     const cleanSeed = seedText.trim();
-    const seed = cleanSeed || 'GEAN';
+    const seed = cleanSeed || 'Welcome';
     const styled = stylizeSeed(seed);
     const suffix = `${randomChars(2, LETTER_POOL.toLowerCase())}${currentYear}`;
     setPassPhrase(`${styled}${suffix}`);
@@ -228,11 +228,11 @@ export function SettingsTab({
 
         <SectionCard title="Password generator" subtitle="Top priority tool." accent={palette.accent} subtitleColor={palette.muted} cardBackground={palette.card} cardBorder={palette.border} defaultOpen>
           <View style={styles.modeRow}>
-            {[
-              { key: 'phrases', label: 'Phrases' },
-              { key: 'length', label: 'Tamaño' },
-              { key: 'seed', label: 'Base (GEAN)' },
-            ].map((mode) => {
+              {[
+                { key: 'phrases', label: 'Phrases' },
+                { key: 'length', label: 'Length' },
+                { key: 'seed', label: 'Seed (Welcome)' },
+              ].map((mode) => {
               const selected = passwordMode === mode.key;
               return (
                 <Pressable key={mode.key} onPress={() => setPasswordMode(mode.key as 'phrases' | 'length' | 'seed')} style={[styles.modeChip, { borderColor: selected ? activeAccent : palette.border, backgroundColor: selected ? 'rgba(255,216,77,0.16)' : palette.card }]}>
@@ -242,41 +242,62 @@ export function SettingsTab({
             })}
           </View>
           {passwordMode === 'phrases' ? (
-            <View style={styles.controlRow}>
-              <Text style={[styles.controlLabel, { color: palette.muted }]}>Cantidad de phrases</Text>
+            <View style={styles.controlStack}>
+              <Text style={[styles.controlLabel, { color: palette.muted }]}>How many words should be used</Text>
+              <View style={styles.modeRow}>
+                {['10', '14', '18'].map((value) => {
+                  const selected = phraseCount === value;
+                  return (
+                    <Pressable key={value} onPress={() => setPhraseCount(value)} style={[styles.modeChip, { borderColor: selected ? activeAccent : palette.border, backgroundColor: selected ? 'rgba(255,216,77,0.16)' : palette.card }]}>
+                      <Text style={[styles.modeChipText, { color: selected ? activeAccent : palette.fg }]}>{value}</Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
               <TextInput
                 style={[styles.input, styles.smallInput, { borderColor: palette.border, color: palette.fg, backgroundColor: palette.card }]}
                 value={phraseCount}
-                onChangeText={setPhraseCount}
+                onChangeText={(value) => setPhraseCount(value.replace(/[^0-9]/g, ''))}
                 keyboardType="number-pad"
-                placeholder="3"
+                placeholder="Custom number"
                 placeholderTextColor={palette.muted}
               />
             </View>
           ) : null}
           {passwordMode === 'length' ? (
-            <View style={styles.controlRow}>
-              <Text style={[styles.controlLabel, { color: palette.muted }]}>Tamaño del password</Text>
+            <View style={styles.controlStack}>
+              <Text style={[styles.controlLabel, { color: palette.muted }]}>Select password length</Text>
+              <View style={styles.modeRow}>
+                {['10', '14', '18'].map((value) => {
+                  const selected = passwordLength === value;
+                  return (
+                    <Pressable key={value} onPress={() => setPasswordLength(value)} style={[styles.modeChip, { borderColor: selected ? activeAccent : palette.border, backgroundColor: selected ? 'rgba(255,216,77,0.16)' : palette.card }]}>
+                      <Text style={[styles.modeChipText, { color: selected ? activeAccent : palette.fg }]}>{value}</Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
               <TextInput
                 style={[styles.input, styles.smallInput, { borderColor: palette.border, color: palette.fg, backgroundColor: palette.card }]}
                 value={passwordLength}
-                onChangeText={setPasswordLength}
+                onChangeText={(value) => setPasswordLength(value.replace(/[^0-9]/g, ''))}
                 keyboardType="number-pad"
-                placeholder="14"
+                placeholder="Custom number"
                 placeholderTextColor={palette.muted}
               />
             </View>
           ) : null}
           {passwordMode === 'seed' ? (
             <View style={styles.controlStack}>
-              <Text style={[styles.controlLabel, { color: palette.muted }]}>Texto base a mantener</Text>
+              <Text style={[styles.controlLabel, { color: palette.muted }]}>Base word to keep in the generated password</Text>
+              <Text style={[styles.helperLine, { color: palette.muted, marginTop: 0 }]}>Example: Welcome to W3lc0mexy2026</Text>
               <TextInput
                 style={[styles.input, { borderColor: palette.border, color: palette.fg, backgroundColor: palette.card }]}
                 value={seedText}
                 onChangeText={setSeedText}
-                placeholder="GEAN"
+                placeholder="Welcome"
                 placeholderTextColor={palette.muted}
-                autoCapitalize="characters"
+                autoCapitalize="words"
               />
             </View>
           ) : null}
