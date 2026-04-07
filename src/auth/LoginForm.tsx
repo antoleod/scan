@@ -1,4 +1,5 @@
 ﻿﻿import { Ionicons } from '@expo/vector-icons';
+import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
 import * as LocalAuthentication from 'expo-local-authentication';
 import { useEffect, useMemo, useState, useRef } from 'react';
