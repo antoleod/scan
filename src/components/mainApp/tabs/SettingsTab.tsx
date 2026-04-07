@@ -24,6 +24,41 @@ type SupportedTheme = AppSettings['theme'];
 type AppThemeName = 'euBlue' | 'dark' | 'light' | 'parliament' | 'custom' | 'noirGraphite' | 'midnightSteel' | 'obsidianGold';
 
 const PASSWORD_WORDS = ['amber', 'cactus', 'signal', 'orbit', 'raven', 'velvet', 'anchor', 'matrix', 'ember', 'breeze', 'atlas', 'comet', 'lumen', 'solace', 'harbor', 'zenith', 'pixel', 'vector'];
+const SYMBOLS = ['!', '@', '#', '$', '%', '&', '*', '?'];
+const LETTER_POOL = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
+const DIGIT_POOL = '0123456789';
+const MIXED_POOL = `${LETTER_POOL}${DIGIT_POOL}${SYMBOLS.join('')}`;
+
+function randomFrom<T>(items: T[]): T {
+  return items[Math.floor(Math.random() * items.length)];
+}
+
+function randomChars(length: number, source: string) {
+  let output = '';
+  for (let i = 0; i < length; i += 1) output += source[Math.floor(Math.random() * source.length)];
+  return output;
+}
+
+function stylizeSeed(seed: string) {
+  const map: Record<string, string[]> = {
+    a: ['a', 'A', '@', '4'],
+    e: ['e', 'E', '3'],
+    i: ['i', 'I', '1'],
+    o: ['o', 'O', '0'],
+    s: ['s', 'S', '$', '5'],
+    t: ['t', 'T', '7'],
+    n: ['n', 'N'],
+    g: ['g', 'G', '9'],
+  };
+  return seed
+    .trim()
+    .split('')
+    .map((char) => {
+      const options = map[char.toLowerCase()];
+      return options ? randomFrom(options) : randomFrom([char.toLowerCase(), char.toUpperCase()]);
+    })
+    .join('');
+}
 
 function SectionCard({ title, subtitle, accent, subtitleColor, cardBackground, cardBorder, children, defaultOpen = false }: { title: string; subtitle?: string; accent: string; subtitleColor: string; cardBackground: string; cardBorder: string; children: React.ReactNode; defaultOpen?: boolean }) {
   const [open, setOpen] = useState(defaultOpen);
@@ -107,6 +142,10 @@ export function SettingsTab({
   const { setThemeName } = useAppTheme();
   const [bulkInput, setBulkInput] = useState('');
   const [passPhrase, setPassPhrase] = useState('');
+  const [passwordMode, setPasswordMode] = useState<'phrases' | 'length' | 'seed'>('phrases');
+  const [phraseCount, setPhraseCount] = useState('3');
+  const [passwordLength, setPasswordLength] = useState('14');
+  const [seedText, setSeedText] = useState('GEAN');
   const [installBusy, setInstallBusy] = useState(false);
   const [pwaInstallAvailable, setPwaInstallAvailable] = useState(canInstallPwa());
   const [isInstalled, setIsInstalled] = useState(false);
@@ -155,8 +194,26 @@ export function SettingsTab({
   const bulkPreview = useMemo(() => Array.from(new Set(bulkInput.split(/[\n\r,;\t]+/g).map((v) => v.trim()).filter(Boolean))), [bulkInput]);
 
   const generatePassword = () => {
-    const base = PASSWORD_WORDS[Math.floor(Math.random() * PASSWORD_WORDS.length)];
-    setPassPhrase(`${base}${Math.floor(10 + Math.random() * 90)}!`);
+    const currentYear = String(new Date().getFullYear());
+    if (passwordMode === 'phrases') {
+      const count = Math.max(2, Math.min(6, Number.parseInt(phraseCount, 10) || 3));
+      const words = Array.from({ length: count }, () => randomFrom(PASSWORD_WORDS));
+      const normalized = words.map((word, index) => (index === 0 ? word[0].toUpperCase() + word.slice(1) : word)).join('');
+      setPassPhrase(`${normalized}${randomFrom(SYMBOLS)}${Math.floor(10 + Math.random() * 90)}`);
+      return;
+    }
+    if (passwordMode === 'length') {
+      const length = Math.max(8, Math.min(64, Number.parseInt(passwordLength, 10) || 14));
+      const base = `${randomChars(1, LETTER_POOL.toUpperCase())}${randomChars(1, LETTER_POOL.toLowerCase())}${randomChars(1, DIGIT_POOL)}${randomFrom(SYMBOLS)}`;
+      const extra = randomChars(Math.max(0, length - base.length), MIXED_POOL);
+      setPassPhrase((base + extra).slice(0, length));
+      return;
+    }
+    const cleanSeed = seedText.trim();
+    const seed = cleanSeed || 'GEAN';
+    const styled = stylizeSeed(seed);
+    const suffix = `${randomChars(2, LETTER_POOL.toLowerCase())}${currentYear}`;
+    setPassPhrase(`${styled}${suffix}`);
   };
 
   return (
@@ -170,6 +227,59 @@ export function SettingsTab({
         </View>
 
         <SectionCard title="Password generator" subtitle="Top priority tool." accent={palette.accent} subtitleColor={palette.muted} cardBackground={palette.card} cardBorder={palette.border} defaultOpen>
+          <View style={styles.modeRow}>
+            {[
+              { key: 'phrases', label: 'Phrases' },
+              { key: 'length', label: 'Tamaño' },
+              { key: 'seed', label: 'Base (GEAN)' },
+            ].map((mode) => {
+              const selected = passwordMode === mode.key;
+              return (
+                <Pressable key={mode.key} onPress={() => setPasswordMode(mode.key as 'phrases' | 'length' | 'seed')} style={[styles.modeChip, { borderColor: selected ? activeAccent : palette.border, backgroundColor: selected ? 'rgba(255,216,77,0.16)' : palette.card }]}>
+                  <Text style={[styles.modeChipText, { color: selected ? activeAccent : palette.fg }]}>{mode.label}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+          {passwordMode === 'phrases' ? (
+            <View style={styles.controlRow}>
+              <Text style={[styles.controlLabel, { color: palette.muted }]}>Cantidad de phrases</Text>
+              <TextInput
+                style={[styles.input, styles.smallInput, { borderColor: palette.border, color: palette.fg, backgroundColor: palette.card }]}
+                value={phraseCount}
+                onChangeText={setPhraseCount}
+                keyboardType="number-pad"
+                placeholder="3"
+                placeholderTextColor={palette.muted}
+              />
+            </View>
+          ) : null}
+          {passwordMode === 'length' ? (
+            <View style={styles.controlRow}>
+              <Text style={[styles.controlLabel, { color: palette.muted }]}>Tamaño del password</Text>
+              <TextInput
+                style={[styles.input, styles.smallInput, { borderColor: palette.border, color: palette.fg, backgroundColor: palette.card }]}
+                value={passwordLength}
+                onChangeText={setPasswordLength}
+                keyboardType="number-pad"
+                placeholder="14"
+                placeholderTextColor={palette.muted}
+              />
+            </View>
+          ) : null}
+          {passwordMode === 'seed' ? (
+            <View style={styles.controlStack}>
+              <Text style={[styles.controlLabel, { color: palette.muted }]}>Texto base a mantener</Text>
+              <TextInput
+                style={[styles.input, { borderColor: palette.border, color: palette.fg, backgroundColor: palette.card }]}
+                value={seedText}
+                onChangeText={setSeedText}
+                placeholder="GEAN"
+                placeholderTextColor={palette.muted}
+                autoCapitalize="characters"
+              />
+            </View>
+          ) : null}
           <Pressable onPress={generatePassword} style={[styles.bulkButton, { backgroundColor: activeAccent }]}><Text style={[styles.bulkButtonText, { color: '#111' }]}>Generate</Text></Pressable>
           {passPhrase ? <View style={[styles.passwordResult, { borderColor: palette.border, backgroundColor: palette.card }]}><Text style={[styles.passwordResultText, { color: palette.fg }]}>{passPhrase}</Text></View> : null}
         </SectionCard>
@@ -358,5 +468,12 @@ const styles = StyleSheet.create({
   bottomLogoutBtn: { alignSelf: 'stretch' },
   passwordResult: { borderWidth: 1, borderRadius: 12, padding: 12, gap: 10 },
   passwordResultText: { fontSize: 13, fontWeight: '800', letterSpacing: 0.4, lineHeight: 18 },
+  modeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  modeChip: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 8 },
+  modeChipText: { fontSize: 11, fontWeight: '800' },
+  controlRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
+  controlStack: { gap: 8 },
+  controlLabel: { fontSize: 12, fontWeight: '700' },
+  smallInput: { minWidth: 84, maxWidth: 96, textAlign: 'center' },
   input: { minHeight: 42, borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 13 },
 });
