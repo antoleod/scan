@@ -1321,7 +1321,7 @@ function MainApp() {
   const tabOrder: Tab[] = ['notes', 'scan', 'history', 'settings'];
 
   const swipeResponder = useMemo(() => {
-    if (Platform.OS === 'web') return null;
+    if (Platform.OS === 'web' || Platform.OS === 'ios') return null;
     return PanResponder.create({
       onStartShouldSetPanResponder: () => false,
       onMoveShouldSetPanResponder: (_, gestureState) => {
@@ -1356,7 +1356,7 @@ function MainApp() {
         <KeyboardAvoidingView
           style={styles.content}
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          keyboardVerticalOffset={isCompactLayout ? 6 : 0}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? (isCompactLayout ? 20 : 12) : 0}
         >
           <View style={styles.tabViewport} {...webPanHandlers}>
           {bootStatus !== 'ready' ? (

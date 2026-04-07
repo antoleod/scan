@@ -208,6 +208,7 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
   const [hasAutoAttempted, setHasAutoAttempted] = useState(false);
 
   const pinInputRef = useRef<TextInput>(null);
+  const glitchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [displayedBrandingText, setDisplayedBrandingText] = useState('');
 
   // Shake animation for error feedback
@@ -382,10 +383,13 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
         withTiming(0.7, { duration: 40 }),
         withTiming(0, { duration: 50 })
       );
-      // Disparar glitch aleatoriamente cada 4-9 segundos
-      setTimeout(triggerGlitch, 4000 + Math.random() * 5000);
+      glitchTimerRef.current = setTimeout(triggerGlitch, 4000 + Math.random() * 5000);
     };
     triggerGlitch();
+    return () => {
+      if (glitchTimerRef.current) clearTimeout(glitchTimerRef.current);
+      glitchTimerRef.current = null;
+    };
   }, [glitchValue]);
 
   useEffect(() => {
@@ -471,22 +475,7 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
 
 
 
-  // SincronizaciÃ³n del pulso hÃ¡ptico â€” evita useAnimatedReaction/runOnJS en web
-  useEffect(() => {
-    if (Platform.OS === 'web') return;
-    let prevVal: number | null = null;
-    let rafId: number;
-    const poll = () => {
-      const now = scanProgress.value;
-      if (prevVal !== null && ((prevVal < 0.5 && now >= 0.5) || (prevVal > 0.5 && now <= 0.5))) {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => { });
-      }
-      prevVal = now;
-      rafId = requestAnimationFrame(poll);
-    };
-    rafId = requestAnimationFrame(poll);
-    return () => cancelAnimationFrame(rafId);
-  }, [scanProgress]);
+  // Avoid continuous haptic polling on iOS; this caused excessive vibration and jank.
 
   useEffect(() => {
     let cancelled = false;
@@ -682,7 +671,11 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
   };
 
   return (
-    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={[styles.container, { backgroundColor: theme.background }]}>
+    <KeyboardAvoidingView
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 20 : 0}
+      style={[styles.container, { backgroundColor: theme.background }]}
+    >
       <View style={[styles.background, palette.watermark ? styles.watermarkShell : null]}>
         {/* Premium ambient orbs – CSS on web, Reanimated on native */}
         {Platform.OS === 'web' ? (
@@ -895,7 +888,7 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
                 textContentType="username"
                 importantForAutofill="yes"
                 keyboardAppearance="dark"
-                autoFocus // change 2: open keyboard immediately on mount
+                autoFocus={Platform.OS !== 'ios'}
                 returnKeyType="next"
                 blurOnSubmit={false}
                 onSubmitEditing={() => pinInputRef.current?.focus()}
@@ -946,7 +939,7 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
                   textContentType="password"
                   importantForAutofill="yes"
                   keyboardAppearance="dark"
-                  keyboardType="numeric"
+                  keyboardType={Platform.OS === 'ios' ? 'number-pad' : 'numeric'}
                   returnKeyType="go"
                   onSubmitEditing={() => {
                     void handleSignIn();
