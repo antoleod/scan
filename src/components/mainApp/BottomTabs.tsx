@@ -72,58 +72,54 @@ export function BottomTabs({
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
   };
 
+  function renderTab(tab: { key: Tab; icon: string; iconActive: string; label: string; anim: ReturnType<typeof useAnimatedStyle> }) {
+    const active = activeTab === tab.key;
+    return (
+      <Animated.View key={tab.key} style={[tab.anim, { flex: 1 }]}>
+        <Pressable
+          onPress={() => onTabPress(tab.key)}
+          style={({ pressed }) => [
+            mainAppStyles.footerBtn,
+            active ? { backgroundColor: palette.accent + '16' } : null,
+            pressed ? { opacity: 0.75 } : null,
+          ]}
+        >
+          {active && <View style={[mainAppStyles.footerIndicator, { backgroundColor: palette.accent }]} />}
+          <View style={mainAppStyles.footerBtnInner}>
+            <Ionicons
+              name={(active ? tab.iconActive : tab.icon) as keyof typeof Ionicons.glyphMap}
+              size={active ? 23 : 21}
+              color={active ? palette.accent : palette.muted}
+            />
+            <Text style={{ color: active ? palette.accent : palette.muted, fontSize: 9, fontWeight: active ? '800' : '600', letterSpacing: 0.6 }}>
+              {tab.label.toUpperCase()}
+            </Text>
+          </View>
+        </Pressable>
+      </Animated.View>
+    );
+  }
+
   return (
     <View
       style={[
         mainAppStyles.footer,
         { backgroundColor: palette.card, borderColor: palette.border },
-        Platform.OS === 'web' ? { width: '100%', borderRadius: 0, marginBottom: 0, paddingHorizontal: 10 } : null,
+        Platform.OS === 'web' ? { width: '100%', borderRadius: 0, marginBottom: 0, paddingHorizontal: 6 } : null,
       ]}
     >
-      <Animated.View style={[notesAnim, { flex: 1 }]}>
-        <Pressable onPress={() => onTabPress('notes')} style={[mainAppStyles.footerBtn, activeTab === 'notes' ? { backgroundColor: palette.accent + '14' } : null]}>
-          {activeTab === 'notes' && <View style={[mainAppStyles.footerIndicator, { backgroundColor: palette.accent }]} />}
-          <View style={mainAppStyles.footerBtnInner}>
-            <Ionicons name="document-text-outline" size={activeTab === 'notes' ? 22 : 20} color={activeTab === 'notes' ? palette.accent : palette.muted} />
-            <Text style={{ color: activeTab === 'notes' ? palette.accent : palette.muted, fontSize: 9, fontWeight: '700', letterSpacing: 0.8 }}>NOTES</Text>
-          </View>
-        </Pressable>
-      </Animated.View>
+      {renderTab({ key: 'notes', icon: 'document-text-outline', iconActive: 'document-text', label: 'Notes', anim: notesAnim })}
       <Animated.View style={[addAnim, { flex: 1 }]}>
-        <Pressable onPress={onAdd} hitSlop={8} style={[mainAppStyles.footerAddBtn, { backgroundColor: palette.accent, borderColor: palette.accent + 'cc', transform: [{ translateY: -1 }] }]}>
+        <Pressable onPress={onAdd} hitSlop={8} style={[mainAppStyles.footerAddBtn, { backgroundColor: palette.accent, borderColor: palette.accent + 'cc', transform: [{ translateY: -2 }] }]}>
           <View style={mainAppStyles.footerBtnInner}>
-            <Ionicons name="add" size={22} color="#fff" />
+            <Ionicons name="add" size={24} color="#fff" />
             <Text style={{ color: '#fff', fontSize: 9, fontWeight: '800', letterSpacing: 0.6 }}>ADD</Text>
           </View>
         </Pressable>
       </Animated.View>
-      <Animated.View style={[historyAnim, { flex: 1 }]}>
-        <Pressable onPress={() => onTabPress('history')} style={[mainAppStyles.footerBtn, activeTab === 'history' ? { backgroundColor: palette.accent + '14' } : null]}>
-          {activeTab === 'history' && <View style={[mainAppStyles.footerIndicator, { backgroundColor: palette.accent }]} />}
-          <View style={mainAppStyles.footerBtnInner}>
-            <Ionicons name="time-outline" size={activeTab === 'history' ? 22 : 20} color={activeTab === 'history' ? palette.accent : palette.muted} />
-            <Text style={{ color: activeTab === 'history' ? palette.accent : palette.muted, fontSize: 9, fontWeight: '700', letterSpacing: 0.8 }}>HISTORY</Text>
-          </View>
-        </Pressable>
-      </Animated.View>
-      <Animated.View style={[scanAnim, { flex: 1 }]}>
-        <Pressable onPress={() => onTabPress('scan')} style={[mainAppStyles.footerBtn, activeTab === 'scan' ? { backgroundColor: palette.accent + '14' } : null]}>
-          {activeTab === 'scan' && <View style={[mainAppStyles.footerIndicator, { backgroundColor: palette.accent }]} />}
-          <View style={mainAppStyles.footerBtnInner}>
-            <Ionicons name="scan" size={activeTab === 'scan' ? 22 : 20} color={activeTab === 'scan' ? palette.accent : palette.muted} />
-            <Text style={{ color: activeTab === 'scan' ? palette.accent : palette.muted, fontSize: 9, fontWeight: '700', letterSpacing: 0.8 }}>SCAN</Text>
-          </View>
-        </Pressable>
-      </Animated.View>
-      <Animated.View style={[settingsAnim, { flex: 1 }]}>
-        <Pressable onPress={() => onTabPress('settings')} style={[mainAppStyles.footerBtn, activeTab === 'settings' ? { backgroundColor: palette.accent + '14' } : null]}>
-          {activeTab === 'settings' && <View style={[mainAppStyles.footerIndicator, { backgroundColor: palette.accent }]} />}
-          <View style={mainAppStyles.footerBtnInner}>
-            <Ionicons name="settings-outline" size={activeTab === 'settings' ? 22 : 20} color={activeTab === 'settings' ? palette.accent : palette.muted} />
-            <Text style={{ color: activeTab === 'settings' ? palette.accent : palette.muted, fontSize: 9, fontWeight: '700', letterSpacing: 0.8 }}>SETTINGS</Text>
-          </View>
-        </Pressable>
-      </Animated.View>
+      {renderTab({ key: 'history', icon: 'time-outline', iconActive: 'time', label: 'History', anim: historyAnim })}
+      {renderTab({ key: 'scan', icon: 'scan-outline', iconActive: 'scan', label: 'Scan', anim: scanAnim })}
+      {renderTab({ key: 'settings', icon: 'settings-outline', iconActive: 'settings', label: 'Settings', anim: settingsAnim })}
     </View>
   );
 }

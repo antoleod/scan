@@ -376,6 +376,14 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
       } else {
         await clearSavedCredentials();
       }
+      if (Platform.OS === 'web' && typeof window !== 'undefined' && 'credentials' in navigator && typeof (window as any).PasswordCredential !== 'undefined') {
+        try {
+          const cred = new (window as any).PasswordCredential({ id: username, password: pin });
+          await navigator.credentials.store(cred);
+        } catch {
+          // Credential Management API not available or blocked.
+        }
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unable to sign in right now.';
       setAuthError(message);
@@ -576,6 +584,7 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
                 onBlur={() => setFocusedField(null)}
                 autoCapitalize="none"
                 autoCorrect={false}
+                autoComplete="username"
                 keyboardAppearance="dark"
                 autoFocus // change 2: open keyboard immediately on mount
                 returnKeyType="next"
@@ -609,6 +618,7 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
                 onFocus={() => setFocusedField('pin')}
                 onBlur={() => setFocusedField(null)}
                 secureTextEntry
+                autoComplete="current-password"
                 keyboardAppearance="dark"
                 returnKeyType="go"
                 onSubmitEditing={() => {

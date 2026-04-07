@@ -35,6 +35,11 @@ export function initPwaInstallBridge() {
     deferredPrompt = event as BeforeInstallPromptEvent;
     emitAvailability();
   });
+
+  win.addEventListener('appinstalled', () => {
+    deferredPrompt = null;
+    emitAvailability();
+  });
 }
 
 export function canInstallPwa() {

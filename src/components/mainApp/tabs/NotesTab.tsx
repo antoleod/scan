@@ -6,7 +6,6 @@ import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
-import DateTimePicker from '@react-native-community/datetimepicker';
 
 import {
   fetchSharedGroupsForCurrentUser,
@@ -166,11 +165,8 @@ export function NotesTab({ palette }: { palette: Palette }) {
   const [previewEntry, setPreviewEntry] = useState<ClipboardEntry | null>(null);
   const [previewNoteImageUri, setPreviewNoteImageUri] = useState<string | null>(null);
   const [shareNote, setShareNote] = useState<NoteItem | null>(null);
-  const [searchOpen, setSearchOpen] = useState(false);
   const [searchText, setSearchText] = useState('');
   const [searchCategory, setSearchCategory] = useState<'all' | string>('all');
-  const [searchDate, setSearchDate] = useState('');
-  const [showDatePicker, setShowDatePicker] = useState(false);
   const [selectedClipboardIds, setSelectedClipboardIds] = useState<Set<string>>(new Set());
   const [lastNoteTap, setLastNoteTap] = useState<{ id: string; ts: number } | null>(null);
   const [lastTap, setLastTap] = useState<{ id: string; ts: number } | null>(null);
@@ -372,7 +368,6 @@ export function NotesTab({ palette }: { palette: Palette }) {
     const q = searchText.trim().toLowerCase();
     let next = q ? notes.filter((n) => `${n.text} ${(n.attachments || []).join(' ')} ${n.category}`.toLowerCase().includes(q)) : notes;
     if (searchCategory !== 'all') next = next.filter((n) => n.category === searchCategory);
-    if (searchDate) next = next.filter((n) => new Date(n.updatedAt).toISOString().slice(0, 10) === searchDate);
     if (activeGroupId === 'personal') {
       next = next.filter((n) => !n.groupId);
     } else {
@@ -383,7 +378,7 @@ export function NotesTab({ palette }: { palette: Palette }) {
     if (filter === 'archived') next = next.filter((n) => n.archived);
     if (filter !== 'archived') next = next.filter((n) => !n.archived);
     return next;
-  }, [notes, searchText, searchCategory, searchDate, filter, activeGroupId]);
+  }, [notes, searchText, searchCategory, filter, activeGroupId]);
 
   const filteredTemplates = useMemo(() => {
     const q = templateSearch.trim().toLowerCase();
@@ -395,9 +390,8 @@ export function NotesTab({ palette }: { palette: Palette }) {
     const q = searchText.trim().toLowerCase();
     let next = q ? clipboardItems.filter((n) => `${n.content} ${n.category}`.toLowerCase().includes(q)) : clipboardItems;
     if (searchCategory !== 'all') next = next.filter((n) => n.category === searchCategory);
-    if (searchDate) next = next.filter((n) => new Date(n.capturedAt).toISOString().slice(0, 10) === searchDate);
     return next;
-  }, [clipboardItems, searchText, searchCategory, searchDate]);
+  }, [clipboardItems, searchText, searchCategory]);
 
   const noteRows = useMemo(() => chunk(filteredNotes, isDesktop ? desktopColumns : 1), [filteredNotes, isDesktop, desktopColumns]);
   const groupedClipboard = useMemo(() => {
@@ -661,9 +655,9 @@ export function NotesTab({ palette }: { palette: Palette }) {
           ] as { key: WorkspaceTab; icon: keyof typeof Ionicons.glyphMap; label: string }[]).map((tab) => {
             const active = workspaceTab === tab.key;
             return (
-              <Pressable key={tab.key} onPress={() => setWorkspaceTab(tab.key)} style={({ pressed }) => [styles.workspaceTab, { borderColor: active ? palette.accent : palette.border, backgroundColor: active ? `${palette.accent}22` : palette.bg, opacity: pressed ? 0.85 : 1 }]}>
-                <Ionicons name={tab.icon} size={14} color={active ? palette.accent : palette.muted} />
-                <Text style={{ color: active ? palette.accent : palette.fg, fontSize: 12, fontWeight: '700' }}>{tab.label}</Text>
+              <Pressable key={tab.key} onPress={() => setWorkspaceTab(tab.key)} style={({ pressed }) => [styles.workspaceTab, { borderColor: active ? palette.accent : palette.border, backgroundColor: active ? `${palette.accent}22` : 'transparent', opacity: pressed ? 0.8 : 1 }]}>
+                <Ionicons name={tab.icon} size={15} color={active ? palette.accent : palette.muted} />
+                <Text style={{ color: active ? palette.accent : palette.muted, fontSize: 12, fontWeight: '800', letterSpacing: 0.3 }}>{tab.label}</Text>
               </Pressable>
             );
           })}
@@ -726,8 +720,29 @@ export function NotesTab({ palette }: { palette: Palette }) {
 
             {smartResult ? <View style={[mainAppStyles.card, { backgroundColor: palette.card, borderColor: palette.border }]}><Text style={{ color: palette.fg, fontWeight: '800', marginBottom: 6 }}>Generated structure</Text><Text style={{ color: palette.fg, fontSize: 12, lineHeight: 18 }}>{smartResult.summary}</Text><View style={styles.editorActions}><Pressable style={[styles.iconOnlyAction, { borderColor: palette.border }]} onPress={() => saveDraftAsNote().catch(() => undefined)}><Ionicons name="document-text-outline" size={16} color={palette.fg} /></Pressable><Pressable style={[styles.iconOnlyAction, { borderColor: palette.border }]} onPress={() => { setWorkspaceTab('templates'); setTemplateName(smartResult.ticketNumber || 'Generated template'); setTemplateTo(''); setTemplateSubject(`Follow-up ${smartResult.ticketNumber || ''}`.trim()); setTemplateBody(smartResult.summary); }}><Ionicons name="layers-outline" size={16} color={palette.fg} /></Pressable><Pressable style={[styles.iconOnlyAction, { borderColor: palette.border }]} onPress={() => createOutlookEventFromContent(smartResult.summary).catch(() => undefined)}><Ionicons name="calendar-outline" size={16} color={palette.fg} /></Pressable></View></View> : null}
 
-            <View style={[mainAppStyles.card, { backgroundColor: palette.card, borderColor: palette.border }]}>
-              <View style={styles.filterRow}>{(['all', 'work', 'pinned', 'archived'] as NoteFilter[]).map((item) => <Pressable key={item} style={[styles.categoryChip, { borderColor: filter === item ? palette.accent : palette.border }]} onPress={() => setFilter(item)}><Text style={{ color: palette.fg, fontSize: 11, fontWeight: '700' }}>{item}</Text></Pressable>)}</View>
+            <View style={[mainAppStyles.card, { backgroundColor: palette.card, borderColor: palette.border, gap: 10 }]}>
+              <View style={[styles.searchRow, { borderColor: palette.border, backgroundColor: palette.bg }]}>
+                <Ionicons name="search" size={15} color={searchText ? palette.accent : palette.muted} />
+                <TextInput
+                  style={[styles.searchInput, { color: palette.fg }]}
+                  placeholder="Search notes..."
+                  placeholderTextColor={palette.muted}
+                  value={searchText}
+                  onChangeText={setSearchText}
+                />
+                {searchText ? (
+                  <Pressable onPress={() => setSearchText('')} hitSlop={8}>
+                    <Ionicons name="close-circle" size={15} color={palette.muted} />
+                  </Pressable>
+                ) : null}
+              </View>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterChipRow}>
+                {(['all', 'work', 'pinned', 'archived'] as NoteFilter[]).map((item) => (
+                  <Pressable key={item} style={[styles.categoryChip, { borderColor: filter === item ? palette.accent : palette.border, backgroundColor: filter === item ? `${palette.accent}18` : 'transparent' }]} onPress={() => setFilter(item)}>
+                    <Text style={{ color: filter === item ? palette.accent : palette.fg, fontSize: 12, fontWeight: '700' }}>{item}</Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
             </View>
 
             <View style={styles.gridWrap}>
@@ -767,9 +782,9 @@ export function NotesTab({ palette }: { palette: Palette }) {
                         ]}
                       >
                         <View style={styles.cardHead}>
-                          <Text style={{ color: palette.muted, fontSize: 10 }}>{new Date(note.updatedAt).toLocaleDateString()} {new Date(note.updatedAt).toLocaleTimeString()}</Text>
-                          <Pressable onPress={() => togglePinned(note.id).then(setNotes)}>
-                            <Ionicons name={note.pinned ? 'bookmark' : 'bookmark-outline'} size={16} color={palette.accent} />
+                          <Text style={{ color: palette.muted, fontSize: 10, flex: 1 }} numberOfLines={1}>{new Date(note.updatedAt).toLocaleDateString()} · {new Date(note.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</Text>
+                          <Pressable onPress={() => togglePinned(note.id).then(setNotes)} hitSlop={8}>
+                            <Ionicons name={note.pinned ? 'bookmark' : 'bookmark-outline'} size={16} color={note.pinned ? palette.accent : palette.muted} />
                           </Pressable>
                         </View>
                         {firstAttachment ? (
@@ -795,30 +810,32 @@ export function NotesTab({ palette }: { palette: Palette }) {
                             style={[mainAppStyles.input, { marginTop: 6, backgroundColor: palette.bg, color: palette.fg, borderColor: palette.border }]}
                           />
                         ) : (
-                          <Text style={{ color: palette.fg, fontSize: 12, lineHeight: 17 }} numberOfLines={expanded ? 0 : 2}>{preview}</Text>
+                          <Text style={{ color: palette.fg, fontSize: 13, lineHeight: 19 }} numberOfLines={expanded ? 0 : 3}>{preview}</Text>
                         )}
                         <View style={styles.cardFoot}>
-                          <Text style={{ color: note.category === 'work' ? palette.accent : palette.muted, fontSize: 10, fontWeight: '800' }}>{note.category.toUpperCase()}</Text>
+                          <View style={[styles.categoryChip, { borderColor: note.category === 'work' ? `${palette.accent}60` : palette.border, backgroundColor: note.category === 'work' ? `${palette.accent}14` : 'transparent', paddingHorizontal: 8, paddingVertical: 4 }]}>
+                            <Text style={{ color: note.category === 'work' ? palette.accent : palette.muted, fontSize: 9, fontWeight: '800', letterSpacing: 0.5 }}>{note.category.toUpperCase()}</Text>
+                          </View>
                           <View style={styles.editorActions}>
                             {editingNoteId === note.id ? (
-                              <Pressable onPress={() => updateNoteText(note.id, editingText).then((next) => { setNotes(next); setEditingNoteId(null); setEditingText(''); })}>
-                                <Ionicons name="checkmark-outline" size={16} color={palette.accent} />
+                              <Pressable hitSlop={8} onPress={() => updateNoteText(note.id, editingText).then((next) => { setNotes(next); setEditingNoteId(null); setEditingText(''); })}>
+                                <Ionicons name="checkmark-circle" size={18} color={palette.accent} />
                               </Pressable>
                             ) : (
-                              <Pressable onPress={() => { setEditingNoteId(note.id); setEditingText(note.text); }}>
+                              <Pressable hitSlop={8} onPress={() => { setEditingNoteId(note.id); setEditingText(note.text); }}>
                                 <Ionicons name="create-outline" size={16} color={palette.fg} />
                               </Pressable>
                             )}
-                            <Pressable onPress={() => toggleArchived(note.id).then(setNotes)}>
-                              <Ionicons name={note.archived ? 'archive-outline' : 'archive'} size={16} color={palette.fg} />
+                            <Pressable hitSlop={8} onPress={() => toggleArchived(note.id).then(setNotes)}>
+                              <Ionicons name={note.archived ? 'archive' : 'archive-outline'} size={16} color={palette.fg} />
                             </Pressable>
-                            <Pressable onPress={() => setShareNote(note)}>
+                            <Pressable hitSlop={8} onPress={() => setShareNote(note)}>
                               <Ionicons name="share-social-outline" size={16} color={palette.fg} />
                             </Pressable>
-                            <Pressable onPress={() => createQuickReminderFromNote(note).catch(() => undefined)}>
+                            <Pressable hitSlop={8} onPress={() => createQuickReminderFromNote(note).catch(() => undefined)}>
                               <Ionicons name="alarm-outline" size={16} color={palette.fg} />
                             </Pressable>
-                            <Pressable onPress={() => removeNote(note.id).then(setNotes)}>
+                            <Pressable hitSlop={8} onPress={() => removeNote(note.id).then(setNotes)}>
                               <Ionicons name="trash-outline" size={16} color="#ef4444" />
                             </Pressable>
                           </View>
@@ -896,7 +913,7 @@ export function NotesTab({ palette }: { palette: Palette }) {
 
         {workspaceTab === 'clipboard' ? (
           <>
-            <View style={[mainAppStyles.card, { backgroundColor: palette.card, borderColor: palette.border }]}>
+            <View style={[mainAppStyles.card, { backgroundColor: palette.card, borderColor: palette.border, gap: 10 }]}>
               <View style={styles.editorHeader}>
                 <Text style={{ color: palette.fg, fontWeight: '800' }}>Clipboard timeline</Text>
                 <View style={styles.editorActions}>
@@ -908,7 +925,22 @@ export function NotesTab({ palette }: { palette: Palette }) {
                   </Pressable>
                 </View>
               </View>
-              <Text style={{ color: palette.muted, fontSize: 11, marginTop: 4 }}>
+              <View style={[styles.searchRow, { borderColor: palette.border, backgroundColor: palette.bg }]}>
+                <Ionicons name="search" size={15} color={searchText ? palette.accent : palette.muted} />
+                <TextInput
+                  style={[styles.searchInput, { color: palette.fg }]}
+                  placeholder="Search clipboard..."
+                  placeholderTextColor={palette.muted}
+                  value={searchText}
+                  onChangeText={setSearchText}
+                />
+                {searchText ? (
+                  <Pressable onPress={() => setSearchText('')} hitSlop={8}>
+                    <Ionicons name="close-circle" size={15} color={palette.muted} />
+                  </Pressable>
+                ) : null}
+              </View>
+              <Text style={{ color: palette.muted, fontSize: 11 }}>
                 Live capture enabled. Long-press entries to select and bulk delete.
               </Text>
               {(browserInfo.isFirefox || browserInfo.isSafari) ? (
@@ -982,52 +1014,6 @@ export function NotesTab({ palette }: { palette: Palette }) {
         ) : null}
       </View>
 
-      {(workspaceTab === 'notes' || workspaceTab === 'clipboard') ? (
-        <Pressable style={[styles.floatingSearch, { backgroundColor: palette.accent }]} onPress={() => setSearchOpen(true)}>
-          <Ionicons name="search" size={18} color="#fff" />
-        </Pressable>
-      ) : null}
-
-      <Modal animationType="fade" transparent visible={searchOpen} onRequestClose={() => setSearchOpen(false)} statusBarTranslucent>
-        <Pressable style={mainAppStyles.modalBackdrop} onPress={() => setSearchOpen(false)}>
-          <Pressable style={[mainAppStyles.modalForm, { backgroundColor: palette.card, borderColor: palette.border, maxWidth: 560 }]} onPress={() => null}>
-            <View style={mainAppStyles.modalHeader}>
-              <Text style={[mainAppStyles.sectionTitle, { color: palette.fg }]}>Smart search</Text>
-              <Pressable style={[mainAppStyles.modalCloseBtn, { borderColor: palette.border }]} onPress={() => setSearchOpen(false)}>
-                <Ionicons name="close" size={18} color={palette.fg} />
-              </Pressable>
-            </View>
-            <TextInput style={[mainAppStyles.input, { backgroundColor: palette.bg, color: palette.fg, borderColor: palette.border, marginTop: 0 }]} placeholder="Search text..." placeholderTextColor={palette.muted} value={searchText} onChangeText={setSearchText} />
-            <Pressable
-              style={[mainAppStyles.input, { backgroundColor: palette.bg, borderColor: palette.border, marginTop: 10 }]}
-              onPress={() => setShowDatePicker(true)}
-            >
-              <Text style={{ color: searchDate ? palette.fg : palette.muted, fontSize: 13 }}>
-                {searchDate || 'Pick date'}
-              </Text>
-            </Pressable>
-            {showDatePicker ? (
-              <DateTimePicker
-                value={searchDate ? new Date(`${searchDate}T00:00:00`) : new Date()}
-                mode="date"
-                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                onChange={(_, date) => {
-                  setShowDatePicker(false);
-                  if (!date) return;
-                  const iso = new Date(date).toISOString().slice(0, 10);
-                  setSearchDate(iso);
-                }}
-              />
-            ) : null}
-            <View style={styles.filterRow}>
-              <Pressable style={[styles.categoryChip, { borderColor: searchCategory === 'all' ? palette.accent : palette.border }]} onPress={() => setSearchCategory('all')}><Text style={{ color: palette.fg, fontSize: 11, fontWeight: '700' }}>all</Text></Pressable>
-              {(workspaceTab === 'notes' ? noteCategories : clipboardCategories).map((c) => (
-                <Pressable key={c} style={[styles.categoryChip, { borderColor: searchCategory === c ? palette.accent : palette.border }]} onPress={() => setSearchCategory(c)}><Text style={{ color: palette.fg, fontSize: 11, fontWeight: '700' }}>{c}</Text></Pressable>
-              ))}
-            </View>
-          </Pressable>
-        </Pressable>
-      </Modal>
 
       <Modal animationType="fade" transparent visible={Boolean(previewEntry)} onRequestClose={() => setPreviewEntry(null)} statusBarTranslucent>
         <Pressable style={mainAppStyles.modalBackdrop} onPress={() => setPreviewEntry(null)}>
@@ -1119,36 +1105,38 @@ export function NotesTab({ palette }: { palette: Palette }) {
 }
 
 const styles = StyleSheet.create({
-  content: { paddingBottom: 24 },
-  workspace: { gap: 8 },
-  workspaceTabs: { flexDirection: 'row', gap: 8, marginBottom: 0 },
-  workspaceTab: { flex: 1, minHeight: 36, borderWidth: 1, borderRadius: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingHorizontal: 8 },
+  content: { paddingBottom: 32 },
+  workspace: { gap: 10 },
+  workspaceTabs: { flexDirection: 'row', gap: 6, marginBottom: 0 },
+  workspaceTab: { flex: 1, minHeight: 42, borderWidth: 1, borderRadius: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingHorizontal: 8 },
   resumeCard: { paddingVertical: 10 },
   editorHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   groupSelectorRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
   shareRow: { flexDirection: 'row', gap: 10 },
-  iconAction: { borderWidth: 1, borderRadius: 999, minHeight: 30, paddingHorizontal: 10, flexDirection: 'row', alignItems: 'center', gap: 6 },
-  noteInput: { minHeight: 96, textAlignVertical: 'top' },
+  iconAction: { borderWidth: 1, borderRadius: 999, minHeight: 32, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', gap: 6 },
+  noteInput: { minHeight: 100, textAlignVertical: 'top' },
   attachmentRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 },
   attachmentChip: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 5, flexDirection: 'row', alignItems: 'center', gap: 5, maxWidth: 120 },
   editorFooter: { marginTop: 10, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 10 },
   categoryRow: { flexDirection: 'row', gap: 6 },
-  categoryChip: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 6 },
+  categoryChip: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 7 },
   editorActions: { flexDirection: 'row', gap: 10, alignItems: 'center' },
-  iconOnlyAction: { width: 30, height: 30, borderRadius: 15, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
-  filterRow: { flexDirection: 'row', gap: 6, marginTop: 8 },
-  gridWrap: { gap: 8 },
-  gridRow: { flexDirection: 'row', gap: 8 },
-  compactCard: { borderWidth: 1, borderRadius: 10, padding: 9, gap: 8 },
-  noteThumb: { width: '100%', height: 112, borderRadius: 8, backgroundColor: '#111' },
+  iconOnlyAction: { width: 34, height: 34, borderRadius: 17, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  filterRow: { flexDirection: 'row', gap: 6 },
+  filterChipRow: { flexDirection: 'row', gap: 6, alignItems: 'center' },
+  searchRow: { flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 8 },
+  searchInput: { flex: 1, fontSize: 13, paddingVertical: 0 },
+  gridWrap: { gap: 10 },
+  gridRow: { flexDirection: 'row', gap: 10 },
+  compactCard: { borderWidth: 1, borderRadius: 12, padding: 12, gap: 8 },
+  noteThumb: { width: '100%', height: 120, borderRadius: 8, backgroundColor: '#111' },
   clipThumb: { width: '100%', height: 96, borderRadius: 8, backgroundColor: '#111' },
   cardHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
-  cardFoot: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  colorRow: { flexDirection: 'row', gap: 8, marginTop: 4 },
+  cardFoot: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 6 },
+  colorRow: { flexDirection: 'row', gap: 8, marginTop: 2 },
   colorDot: { width: 14, height: 14, borderRadius: 999, borderWidth: 1 },
   previewImage: { width: '100%', height: 260, borderRadius: 10, backgroundColor: '#000' },
   previewImageLarge: { width: '100%', height: 420, borderRadius: 10, backgroundColor: '#000' },
   previewActions: { marginTop: 14, flexDirection: 'row', gap: 10 },
-  previewBtn: { flex: 1, minHeight: 40, borderRadius: 10, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
-  floatingSearch: { position: 'absolute', right: 16, bottom: 18, width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center', zIndex: 20 },
+  previewBtn: { flex: 1, minHeight: 44, borderRadius: 10, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
 });
