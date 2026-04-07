@@ -101,8 +101,9 @@ export function looksLikeOfficeCode(value: string): boolean {
   const hasLetters = /[A-Z]/.test(upper);
   const hasDigits = /\d/.test(upper);
   const hasSpaces = /\s/.test(payload);
+  const hasOfficeKeyword = /\b(OFFICE|ASSET|DEVICE|WORKSTATION|LAPTOP|DESKTOP|MONITOR|PRINTER)\b/.test(upper);
 
-  return hasLetters && hasDigits && (hasSpaces || upper.length >= 6);
+  return hasLetters && hasDigits && (hasSpaces || hasOfficeKeyword);
 }
 
 export function detectCodeType(value: string, hint?: CodeType): CodeType {
