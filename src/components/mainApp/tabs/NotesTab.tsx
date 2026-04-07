@@ -130,6 +130,14 @@ export function NotesTab({ palette }: { palette: Palette }) {
   const { width } = useWindowDimensions();
   const isDesktop = width >= 1024;
   const desktopColumns = width >= 1600 ? 3 : width >= 1200 ? 2 : 1;
+  const isWeb = Platform.OS === 'web';
+  const browserInfo = useMemo(() => {
+    if (!isWeb || typeof navigator === 'undefined') return { isFirefox: false, isSafari: false };
+    const ua = String(navigator.userAgent || '').toLowerCase();
+    const isFirefox = ua.includes('firefox');
+    const isSafari = ua.includes('safari') && !ua.includes('chrome') && !ua.includes('chromium') && !ua.includes('edg');
+    return { isFirefox, isSafari };
+  }, [isWeb]);
 
   const [workspaceTab, setWorkspaceTab] = useState<WorkspaceTab>('notes');
   const [notes, setNotes] = useState<NoteItem[]>([]);
@@ -169,6 +177,22 @@ export function NotesTab({ palette }: { palette: Palette }) {
 
   const autoCategory = useMemo(() => detectAutoCategory(draftText), [draftText]);
   const activeCategory = manualCategory || autoCategory;
+
+  async function readClipboardTextBestEffort(): Promise<string> {
+    if (Platform.OS === 'web' && typeof navigator !== 'undefined' && navigator.clipboard?.readText) {
+      try {
+        const text = await navigator.clipboard.readText();
+        return String(text || '');
+      } catch {
+        // continue with expo fallback
+      }
+    }
+    try {
+      return String(await Clipboard.getStringAsync() || '');
+    } catch {
+      return '';
+    }
+  }
 
   useEffect(() => {
     ensureWorkNotesAndEmailTemplates().then(({ notes: n, templates: t }) => {
@@ -219,7 +243,7 @@ export function NotesTab({ palette }: { palette: Palette }) {
       const data = event.clipboardData;
       if (!data) return;
 
-      const text = data.getData('text');
+      const text = data.getData('text/plain') || data.getData('text');
       if (text && text.trim()) {
         addClipboardEntryUnique(text.trim()).then((result) => {
           if (result.inserted) setClipboardItems(result.entries);
@@ -246,7 +270,7 @@ export function NotesTab({ palette }: { palette: Palette }) {
 
     const onCopyOrCut = () => {
       setTimeout(() => {
-        Clipboard.getStringAsync().then((text) => {
+        readClipboardTextBestEffort().then((text) => {
           const value = String(text || '').trim();
           if (!value) return;
           addClipboardEntryUnique(value).then((result) => {
@@ -257,7 +281,7 @@ export function NotesTab({ palette }: { palette: Palette }) {
     };
 
     const onFocus = () => {
-      Clipboard.getStringAsync().then((text) => {
+      readClipboardTextBestEffort().then((text) => {
         const value = String(text || '').trim();
         if (!value) return;
         addClipboardEntryUnique(value).then((result) => {
@@ -281,6 +305,8 @@ export function NotesTab({ palette }: { palette: Palette }) {
   }, []);
 
   useEffect(() => {
+    const allowPolling = !browserInfo.isFirefox && !browserInfo.isSafari;
+    if (!allowPolling) return;
     if (!clipboardAvailable) return;
     let mounted = true;
     let lastSeen = '';
@@ -288,12 +314,14 @@ export function NotesTab({ palette }: { palette: Palette }) {
 
     const tick = async () => {
       try {
-        const text = await Clipboard.getStringAsync();
+        const text = await readClipboardTextBestEffort();
         const value = String(text || '').trim();
-        if (!mounted || !value || value === lastSeen) return;
-        lastSeen = value;
-        const result = await addClipboardEntryUnique(value);
-        if (result.inserted) setClipboardItems(result.entries);
+        if (!mounted) return;
+        if (value && value !== lastSeen) {
+          lastSeen = value;
+          const result = await addClipboardEntryUnique(value);
+          if (result.inserted) setClipboardItems(result.entries);
+        }
 
         const getImageAsync = (Clipboard as unknown as { getImageAsync?: () => Promise<{ data: string } | null> }).getImageAsync;
         if (getImageAsync) {
@@ -313,14 +341,29 @@ export function NotesTab({ palette }: { palette: Palette }) {
       }
     };
 
-    const timer = setInterval(() => { tick().catch(() => undefined); }, 300);
+    const timer = setInterval(() => { tick().catch(() => undefined); }, 1200);
     tick().catch(() => undefined);
 
     return () => {
       mounted = false;
       clearInterval(timer);
     };
-  }, [clipboardAvailable]);
+  }, [clipboardAvailable, browserInfo.isFirefox, browserInfo.isSafari]);
+
+  async function captureClipboardNow() {
+    const text = (await readClipboardTextBestEffort()).trim();
+    if (text) {
+      const result = await addClipboardEntryUnique(text);
+      if (result.inserted) setClipboardItems(result.entries);
+    }
+    const getImageAsync = (Clipboard as unknown as { getImageAsync?: () => Promise<{ data: string } | null> }).getImageAsync;
+    if (!getImageAsync) return;
+    const image = await getImageAsync();
+    if (!image?.data) return;
+    const dataUri = `data:image/png;base64,${image.data}`;
+    const result = await addClipboardImageUnique(dataUri);
+    if (result.inserted) setClipboardItems(result.entries);
+  }
 
   const noteCategories = useMemo(() => Array.from(new Set(notes.map((n) => n.category))), [notes]);
   const clipboardCategories = useMemo(() => Array.from(new Set(clipboardItems.map((n) => n.category))), [clipboardItems]);
@@ -857,6 +900,9 @@ export function NotesTab({ palette }: { palette: Palette }) {
               <View style={styles.editorHeader}>
                 <Text style={{ color: palette.fg, fontWeight: '800' }}>Clipboard timeline</Text>
                 <View style={styles.editorActions}>
+                  <Pressable style={[styles.iconOnlyAction, { borderColor: palette.border }]} onPress={() => captureClipboardNow().catch(() => undefined)}>
+                    <Ionicons name="clipboard-outline" size={16} color={palette.fg} />
+                  </Pressable>
                   <Pressable style={[styles.iconOnlyAction, { borderColor: palette.border }]} onPress={() => importScreenshotToClipboard().catch(() => undefined)}>
                     <Ionicons name="image-outline" size={16} color={palette.fg} />
                   </Pressable>
@@ -865,6 +911,11 @@ export function NotesTab({ palette }: { palette: Palette }) {
               <Text style={{ color: palette.muted, fontSize: 11, marginTop: 4 }}>
                 Live capture enabled. Long-press entries to select and bulk delete.
               </Text>
+              {(browserInfo.isFirefox || browserInfo.isSafari) ? (
+                <Text style={{ color: palette.muted, fontSize: 11, marginTop: 4 }}>
+                  Firefox/Safari may restrict background clipboard reads. Use the clipboard button to capture manually.
+                </Text>
+              ) : null}
               {selectedClipboardIds.size ? (
                 <View style={{ marginTop: 8, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
                   <Text style={{ color: palette.muted, fontSize: 11 }}>{selectedClipboardIds.size} selected</Text>
