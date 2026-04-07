@@ -817,11 +817,6 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
                 {/* Premium glow rings */}
                 <GlowRing size={150} color={theme.secondary} delay={0} dur={2800} opacity={0.22} />
                 <GlowRing size={118} color={theme.primary} delay={700} dur={2200} opacity={0.18} />
-                {Platform.OS === 'web' && (
-                  <View {...({ className: 'oryxen-glow-halo' } as any)}
-                    style={{ width: 100, height: 100, backgroundColor: theme.secondary + '18' }}
-                  />
-                )}
                 {/* Círculo de Estrellas Europeas */}
                 <Animated.View style={[styles.starsContainer, starsStyle]}>
                   {Array.from({ length: 12 }).map((_, i) => {
@@ -846,12 +841,7 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
                     <View style={[styles.crosshairLineH, { backgroundColor: theme.secondary }]} />
                     <View style={[styles.crosshairDot, { backgroundColor: theme.secondary }]} />
                   </View>
-                ) : (
-                  <View style={[styles.midnightIcon, { borderColor: `${theme.secondary}40` }]}>
-                    <Animated.View style={[styles.iconLaser, { backgroundColor: theme.secondary, width: '80%', left: '10%' }, iconScanLineStyle]} />
-                    <View style={[styles.midnightIconInner, { borderColor: theme.secondary }]} />
-                  </View>
-                )}
+                ) : null}
               </View>
             </Animated.View>
           </Animated.View>
