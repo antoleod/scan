@@ -4,7 +4,8 @@
       "Bash(wc -l /c/Users/X1/Downloads/scan/scan/src/core/*.ts)",
       "Bash(python3 -c ':*)",
       "Bash(python -c ':*)",
-      "Bash(identify c:/Users/X1/Downloads/scan/scan/dist/favicon.png)"
+      "Bash(identify c:/Users/X1/Downloads/scan/scan/dist/favicon.png)",
+      "Bash(ls c:/Users/X1/Downloads/scan/scan/*.json)"
     ]
   }
 }
