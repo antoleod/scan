@@ -20,6 +20,7 @@ import {
   getDocs,
   getFirestore,
   getDoc,
+  onSnapshot,
   query,
   serverTimestamp,
   setDoc,
@@ -258,6 +259,52 @@ export async function syncScansWithFirebase(local: ScanRecord[]) {
   });
 
   return { pushed, server };
+}
+
+// Real-time listener for scan changes (cross-device sync).
+export async function subscribeToScans(
+  callback: (scans: ScanRecord[]) => void
+): Promise<() => void> {
+  const rt = await initFirebaseRuntime();
+  if (!rt.enabled || !rt.auth || !rt.db) return () => {};
+  const user = rt.auth.currentUser;
+  if (!user) return () => {};
+  const scansRef = collection(rt.db, 'users', user.uid, 'scans');
+  return onSnapshot(query(scansRef), (snap) => {
+    const scans: ScanRecord[] = [];
+    snap.forEach((d) => {
+      const x = d.data() as ScanRecord;
+      scans.push({ ...x, id: x.id || d.id });
+    });
+    callback(scans);
+  });
+}
+
+// Real-time listener for notes + templates changes (cross-device sync).
+export async function subscribeToNotes(
+  callback: (data: { notes: NoteItem[]; templates: NoteTemplate[] }) => void
+): Promise<() => void> {
+  const rt = await initFirebaseRuntime();
+  if (!rt.enabled || !rt.auth || !rt.db) return () => {};
+  const user = rt.auth.currentUser;
+  if (!user) return () => {};
+  const notesRef = collection(rt.db, 'users', user.uid, 'notes');
+  const templatesRef = collection(rt.db, 'users', user.uid, 'noteTemplates');
+
+  let latestNotes: NoteItem[] = [];
+  let latestTemplates: NoteTemplate[] = [];
+
+  const notesUnsub = onSnapshot(query(notesRef), (snap) => {
+    latestNotes = snap.docs.map((d) => ({ ...(d.data() as NoteItem), id: d.id }));
+    callback({ notes: latestNotes, templates: latestTemplates });
+  });
+
+  const templatesUnsub = onSnapshot(query(templatesRef), (snap) => {
+    latestTemplates = snap.docs.map((d) => ({ ...(d.data() as NoteTemplate), id: d.id }));
+    callback({ notes: latestNotes, templates: latestTemplates });
+  });
+
+  return () => { notesUnsub(); templatesUnsub(); };
 }
 
 export async function syncNotesWithFirebase(localNotes: NoteItem[], localTemplates: NoteTemplate[]) {

@@ -64,6 +64,10 @@ jobs:
       - name: Disable Jekyll
         run: touch dist/.nojekyll
 
+      - name: Inject PWA metadata into HTML
+        run: |
+          sed -i 's|</head>|<link rel="manifest" href="./manifest.webmanifest" />\n<meta name="apple-mobile-web-app-capable" content="yes" />\n<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />\n<meta name="apple-mobile-web-app-title" content="Oryxen" />\n<link rel="apple-touch-icon" href="./favicon.png" />\n</head>|' dist/index.html
+
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:

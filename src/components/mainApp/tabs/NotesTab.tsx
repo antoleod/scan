@@ -9,9 +9,11 @@ import * as Sharing from 'expo-sharing';
 
 import {
   fetchSharedGroupsForCurrentUser,
+  subscribeToNotes,
   upsertSharedGroupNote,
   type SharedNoteGroup,
 } from '../../../core/firebase';
+import { useAuth } from '../../../auth/useAuth';
 import {
   NoteCategory,
   NoteItem,
@@ -27,7 +29,6 @@ import {
   toggleArchived,
   updateNoteText,
   buildAppointmentIcs,
-  refreshNotesFromCloudSilently,
 } from '../../../core/notes';
 import { ClipboardEntry } from '../../../core/clipboard.types';
 import { addClipboardEntryUnique, addClipboardImageUnique, loadClipboardEntries, removeClipboardEntriesByDay, removeClipboardEntriesByIds, updateClipboardEntryCategory } from '../../../core/clipboard';
@@ -126,6 +127,7 @@ function parseFollowUpDate(value: string): Date | null {
 }
 
 export function NotesTab({ palette }: { palette: Palette }) {
+  const { user } = useAuth();
   const { width } = useWindowDimensions();
   const isDesktop = width >= 1024;
   const desktopColumns = width >= 1600 ? 3 : width >= 1200 ? 2 : 1;
@@ -196,28 +198,19 @@ export function NotesTab({ palette }: { palette: Palette }) {
       setTemplates(t);
     }).catch(() => undefined);
     loadClipboardEntries().then(setClipboardItems).catch(() => undefined);
-
-    // Silent cloud pull on open for fast cross-device consistency.
-    refreshNotesFromCloudSilently().then((result) => {
-      if (!result) return;
-      setNotes((current) => mergeNotesByNewest(current, result.notes));
-      setTemplates((current) => mergeTemplatesByNewest(current, result.templates));
-    }).catch(() => undefined);
     fetchSharedGroupsForCurrentUser().then(setGroups).catch(() => undefined);
   }, []);
 
+  // Real-time cross-device sync via Firestore onSnapshot (replaces 10s polling).
   useEffect(() => {
-    // Silent periodic refresh without any user-facing messages.
-    const timer = setInterval(() => {
-      refreshNotesFromCloudSilently().then((result) => {
-        if (!result) return;
-        setNotes((current) => mergeNotesByNewest(current, result.notes));
-        setTemplates((current) => mergeTemplatesByNewest(current, result.templates));
-      }).catch(() => undefined);
-    }, 10000);
-
-    return () => clearInterval(timer);
-  }, []);
+    if (!user) return;
+    let unsub: (() => void) | null = null;
+    subscribeToNotes(({ notes: serverNotes, templates: serverTemplates }) => {
+      setNotes((current) => mergeNotesByNewest(current, serverNotes));
+      setTemplates((current) => mergeTemplatesByNewest(current, serverTemplates));
+    }).then((u) => { unsub = u; }).catch(() => undefined);
+    return () => { unsub?.(); };
+  }, [user?.uid]);
 
   useEffect(() => {
     AsyncStorage.getItem(DRAFT_KEY).then((raw) => {

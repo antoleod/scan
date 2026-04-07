@@ -39,6 +39,7 @@ import {
   clearScansInFirebase,
   initFirebaseRuntime,
   recheckFirebaseRuntime,
+  subscribeToScans,
   syncNotesWithFirebase,
   syncScansWithFirebase,
 } from '../core/firebase';
@@ -953,18 +954,39 @@ function MainApp() {
     }
   }
 
+  // Push pending local scans to Firebase. Guard prevents loop: after push all become 'sent'.
   useEffect(() => {
     if (!user || persistenceMode !== 'firebase') return;
+    const hasPending = history.some((x) => x.status === 'pending');
+    if (!hasPending) return;
     if (autoSyncTimerRef.current) clearTimeout(autoSyncTimerRef.current);
     autoSyncTimerRef.current = setTimeout(() => {
       syncNow(false).catch(() => undefined);
     }, 0);
   }, [history, user, persistenceMode]);
 
+  // Real-time cross-device sync via Firestore onSnapshot.
   useEffect(() => {
     if (!user || persistenceMode !== 'firebase') return;
-    // Fast cross-device sync on login/session restore.
+    // Initial full sync on login so we start with fresh server state.
     syncNow(false).catch(() => undefined);
+
+    let unsub: (() => void) | null = null;
+    subscribeToScans((serverScans) => {
+      setHistory((current) => {
+        const localKeys = new Set(current.map((x) => historyKey(x)));
+        const newFromServer = serverScans.filter((s) => !localKeys.has(historyKey(s)));
+        if (!newFromServer.length) return current;
+        const merged = [
+          ...current.map((x) => (x.status === 'pending' ? { ...x, status: 'sent' as const } : x)),
+          ...newFromServer,
+        ];
+        saveHistory(merged).catch(() => undefined);
+        return merged;
+      });
+    }).then((u) => { unsub = u; }).catch(() => undefined);
+
+    return () => { unsub?.(); };
   }, [user?.uid, persistenceMode]);
 
   async function clearAllHistory() {
