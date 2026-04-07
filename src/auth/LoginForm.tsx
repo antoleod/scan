@@ -906,12 +906,12 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
                 </Animated.View>
               ) : null}
               {username ? (
-                <View style={styles.helperRow}>
+                <Animated.View entering={FadeIn.duration(200)} style={styles.helperRow}>
                   <Text style={[styles.helper, { color: theme.textSecondary }]}>Login id: <Text style={styles.helperStrong}>{normalizedUsername}</Text></Text>
                   <Pressable onPress={handleCopyLoginId} style={styles.miniCopyBtn}>
                     <Ionicons name="copy-outline" size={12} color={theme.secondary} />
-                  </Animated.View>
-                </View>
+                  </Pressable>
+                </Animated.View>
               ) : null}
             </View>
 
