@@ -33,6 +33,7 @@ import {
 } from '../../../core/notes';
 import { ClipboardEntry } from '../../../core/clipboard.types';
 import { addClipboardEntryUnique, addClipboardImageUnique, loadClipboardEntries, removeClipboardEntriesByDay, removeClipboardEntriesByIds, updateClipboardEntryCategory } from '../../../core/clipboard';
+import { ClipboardScreen } from '../../../screens/ClipboardScreen';
 import { mainAppStyles } from '../styles';
 
 type Palette = { bg: string; fg: string; accent: string; muted: string; card: string; border: string };
@@ -1002,131 +1003,11 @@ export function NotesTab({ palette }: { palette: Palette }) {
         ) : null}
 
         {workspaceTab === 'clipboard' ? (
-          <>
-            <View style={[mainAppStyles.card, { backgroundColor: palette.card, borderColor: palette.border, gap: 10 }]}>
-              <View style={styles.editorHeader}>
-              <Text style={{ color: palette.fg, fontWeight: '800' }}>Clipboard history</Text>
-                <View style={styles.editorActions}>
-                  <Pressable style={[styles.iconOnlyAction, { borderColor: palette.border }]} onPress={() => captureClipboardNow().catch(() => undefined)}>
-                    <Ionicons name="clipboard-outline" size={16} color={palette.fg} />
-                  </Pressable>
-                  <Pressable style={[styles.iconOnlyAction, { borderColor: palette.border }]} onPress={() => importScreenshotToClipboard().catch(() => undefined)}>
-                    <Ionicons name="image-outline" size={16} color={palette.fg} />
-                  </Pressable>
-                </View>
-              </View>
-              <View style={[styles.searchRow, { borderColor: palette.border, backgroundColor: palette.bg }]}>
-                <Ionicons name="search" size={15} color={searchText ? palette.accent : palette.muted} />
-                <TextInput
-                  style={[styles.searchInput, { color: palette.fg }]}
-                  placeholder="Search clipboard..."
-                  placeholderTextColor={palette.muted}
-                  value={searchText}
-                  onChangeText={setSearchText}
-                />
-                <View style={[mainAppStyles.filterChipCompact, { borderColor: palette.border, borderWidth: 1 }]}>
-                  <Text style={{ color: palette.muted, fontSize: 11, fontWeight: '700' }}>{filteredClipboard.length} items</Text>
-                </View>
-                {searchText ? (
-                  <Pressable onPress={() => setSearchText('')} hitSlop={8}>
-                    <Ionicons name="close-circle" size={15} color={palette.muted} />
-                  </Pressable>
-                ) : null}
-              </View>
-              <Text style={{ color: palette.muted, fontSize: 11 }}>
-                Live capture is enabled. Long-press entries to select them for bulk delete.
-              </Text>
-              {(browserInfo.isFirefox || browserInfo.isSafari) ? (
-                <Text style={{ color: palette.muted, fontSize: 11, marginTop: 4 }}>
-                  Firefox and Safari may restrict background clipboard reads. Use the clipboard button to capture manually.
-                </Text>
-              ) : null}
-              {selectedClipboardIds.size ? (
-                <View style={{ marginTop: 8, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <Text style={{ color: palette.muted, fontSize: 11 }}>{selectedClipboardIds.size} selected</Text>
-                  <Pressable onPress={() => deleteSelectedClipboard().catch(() => undefined)} style={[styles.categoryChip, { borderColor: palette.border, paddingVertical: 4 }]}>
-                    <Text style={{ color: '#ef4444', fontSize: 10, fontWeight: '800' }}>Delete selected</Text>
-                  </Pressable>
-                </View>
-              ) : null}
-            </View>
-            {filteredClipboard.length === 0 ? (
-              <View style={[mainAppStyles.card, { backgroundColor: palette.card, borderColor: palette.border, alignItems: 'center', gap: 10 }]}>
-                <Ionicons name={clipboardItems.length === 0 ? 'clipboard-outline' : 'search-outline'} size={28} color={palette.accent} />
-                <Text style={{ color: palette.fg, fontSize: 15, fontWeight: '800', textAlign: 'center' }}>{clipboardEmptyTitle}</Text>
-                <Text style={{ color: palette.muted, fontSize: 12, lineHeight: 18, textAlign: 'center' }}>{clipboardEmptyText}</Text>
-                <Pressable
-                  style={({ pressed }) => [
-                    mainAppStyles.btn,
-                    { backgroundColor: palette.accent, borderColor: palette.accent, opacity: pressed ? 0.85 : 1, alignSelf: 'stretch' },
-                  ]}
-                  onPress={() => {
-                    if (clipboardItems.length === 0) {
-                      captureClipboardNow().catch(() => undefined);
-                      return;
-                    }
-                    setSearchText('');
-                  }}
-                >
-                  <Text style={[mainAppStyles.btnText, { textAlign: 'center' }]}>{clipboardItems.length === 0 ? 'Capture now' : 'Clear search'}</Text>
-                </Pressable>
-              </View>
-            ) : null}
-
-            <View style={styles.gridWrap}>
-              {groupedClipboard.map(([day, entries]) => (
-                <View key={day} style={{ gap: 8 }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <Text style={{ color: palette.muted, fontSize: 11, fontWeight: '800' }}>{day} ({entries.length})</Text>
-                    <Pressable onPress={() => deleteClipboardDay(day).catch(() => undefined)} style={[styles.categoryChip, { borderColor: palette.border, paddingVertical: 4 }]}>
-                      <Text style={{ color: '#ef4444', fontSize: 10, fontWeight: '800' }}>Delete day</Text>
-                    </Pressable>
-                  </View>
-                  {chunk(entries, isDesktop ? desktopColumns : 1).map((row, rowIndex) => (
-                    <View key={`clip-row-${day}-${rowIndex}`} style={styles.gridRow}>
-                      {row.map((entry) => {
-                    const eventDate = parseFollowUpDate(entry.content);
-                    return (
-                      <Pressable
-                        key={entry.id}
-                        onPress={() => handleClipboardCardPress(entry)}
-                        onLongPress={() => toggleClipboardSelection(entry.id)}
-                        style={({ pressed }) => [styles.compactCard, { flex: 1, borderColor: selectedClipboardIds.has(entry.id) ? palette.accent : palette.border, backgroundColor: palette.card, opacity: pressed ? 0.92 : 1 }]}
-                      >
-                        <View style={styles.cardHead}>
-                          <Text style={{ color: palette.muted, fontSize: 10 }}>{new Date(entry.capturedAt).toLocaleDateString()} {new Date(entry.capturedAt).toLocaleTimeString()}</Text>
-                          <Text style={{ color: palette.accent, fontSize: 10, fontWeight: '800' }}>{entry.category.toUpperCase()}</Text>
-                        </View>
-                        {entry.kind === 'image' && entry.imageDataUri ? <Image source={{ uri: entry.imageDataUri }} style={styles.clipThumb} resizeMode="cover" /> : null}
-                        <Text style={{ color: palette.fg, fontSize: 12 }} numberOfLines={2}>{entry.content}</Text>
-                        <Text style={{ color: palette.muted, fontSize: 10 }}>Double tap to preview</Text>
-                        <View style={styles.editorActions}>
-                          <Pressable
-                            onPress={() => {
-                              const order: Array<'general' | 'code' | 'servicenow' | 'link'> = ['general', 'code', 'servicenow', 'link'];
-                              const idx = order.indexOf(entry.category as 'general' | 'code' | 'servicenow' | 'link');
-                              const nextCategory = order[(idx + 1) % order.length];
-                              void updateClipboardEntryCategory(entry.id, nextCategory).then(setClipboardItems);
-                            }}
-                            style={[styles.categoryChip, { borderColor: palette.border, paddingVertical: 4, paddingHorizontal: 8 }]}
-                          >
-                            <Text style={{ color: palette.fg, fontSize: 10, fontWeight: '700' }}>{entry.category}</Text>
-                          </Pressable>
-                          <Pressable onPress={() => forceCopyToClipboard(entry.content).catch(() => undefined)}><Ionicons name="copy-outline" size={16} color={palette.fg} /></Pressable>
-                          <Pressable onPress={() => sendClipboardToNote(entry).catch(() => undefined)}><Ionicons name="document-text-outline" size={16} color={palette.fg} /></Pressable>
-                          <Pressable onPress={() => sendClipboardToTemplate(entry)}><Ionicons name="layers-outline" size={16} color={palette.fg} /></Pressable>
-                          {eventDate ? <Pressable onPress={() => createOutlookEventFromContent(entry.content).catch(() => undefined)}><Ionicons name="calendar-outline" size={16} color={palette.fg} /></Pressable> : null}
-                        </View>
-                      </Pressable>
-                    );
-                      })}
-                      {row.length < (isDesktop ? desktopColumns : 1) ? Array.from({ length: (isDesktop ? desktopColumns : 1) - row.length }).map((_, i) => <View key={`clip-fill-${day}-${i}`} style={{ flex: 1 }} />) : null}
-                    </View>
-                  ))}
-                </View>
-              ))}
-            </View>
-          </>
+          <ClipboardScreen
+            palette={palette}
+            onSendToNote={sendClipboardToNote}
+            onSendToTemplate={sendClipboardToTemplate}
+          />
         ) : null}
       </View>
 
