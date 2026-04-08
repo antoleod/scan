@@ -42,6 +42,34 @@ function AuthGate() {
 }
 
 export default function App() {
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+
+    const html = document.documentElement;
+    const body = document.body;
+    const root = document.getElementById('root');
+
+    html.style.width = '100%';
+    html.style.height = '100%';
+    html.style.margin = '0';
+    html.style.overflowX = 'hidden';
+    html.style.backgroundColor = '#070d1b';
+
+    body.style.width = '100%';
+    body.style.height = '100%';
+    body.style.margin = '0';
+    body.style.overflowX = 'hidden';
+    body.style.backgroundColor = '#070d1b';
+
+    if (root) {
+      root.style.width = '100%';
+      root.style.height = '100%';
+      root.style.minHeight = '100%';
+      root.style.overflowX = 'hidden';
+      root.style.backgroundColor = '#070d1b';
+    }
+  }, []);
+
   return (
     <SafeAreaProvider>
       <ThemeProvider initialThemeName="noirGraphite">
