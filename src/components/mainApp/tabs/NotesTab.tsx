@@ -732,7 +732,7 @@ export function NotesTab({ palette }: { palette: Palette }) {
 
         {workspaceTab === 'notes' ? (
           <>
-            <View style={{ gap: 24, paddingHorizontal: 16, paddingTop: 24 }}>
+            <View style={{ width: '100%', gap: 24, paddingHorizontal: 16, paddingTop: 24, alignSelf: 'stretch' }}>
               <ComposerSection
                 ref={draftInputRef}
                 palette={uiPalette}
@@ -752,7 +752,7 @@ export function NotesTab({ palette }: { palette: Palette }) {
               />
 
               {smartResult ? (
-                <View style={{ borderWidth: 1, borderColor: palette.border, borderRadius: 12, backgroundColor: uiPalette.surface, padding: 14, gap: 10 }}>
+                <View style={{ width: '100%', borderWidth: 1, borderColor: palette.border, borderRadius: 12, backgroundColor: uiPalette.surface, padding: 14, gap: 10, alignSelf: 'stretch' }}>
                   <Text style={{ color: palette.fg, fontWeight: '800', fontSize: 14 }}>Suggested structure</Text>
                   <Text style={{ color: uiPalette.textBody, fontSize: 12, lineHeight: 18 }}>{smartResult.summary}</Text>
                   <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
@@ -789,7 +789,7 @@ export function NotesTab({ palette }: { palette: Palette }) {
               />
 
               {filteredNotes.length === 0 ? (
-                <View style={{ borderWidth: 1, borderColor: palette.border, borderRadius: 12, backgroundColor: uiPalette.surface, alignItems: 'center', gap: 10, padding: 16 }}>
+                <View style={{ width: '100%', borderWidth: 1, borderColor: palette.border, borderRadius: 12, backgroundColor: uiPalette.surface, alignItems: 'center', gap: 10, padding: 16, alignSelf: 'stretch' }}>
                   <Ionicons name={notes.length === 0 ? 'document-text-outline' : 'search-outline'} size={28} color={palette.accent} />
                   <Text style={{ color: palette.fg, fontSize: 15, fontWeight: '800', textAlign: 'center' }}>{notesEmptyTitle}</Text>
                   <Text style={{ color: palette.muted, fontSize: 12, lineHeight: 18, textAlign: 'center' }}>{notesEmptyText}</Text>
@@ -869,7 +869,7 @@ export function NotesTab({ palette }: { palette: Palette }) {
 
         {workspaceTab === 'templates' ? (
           <>
-            <View style={[mainAppStyles.card, { backgroundColor: palette.card, borderColor: palette.border }]}>
+            <View style={[mainAppStyles.card, { backgroundColor: palette.card, borderColor: palette.border, width: '100%', alignSelf: 'stretch' }]}>
               <TextInput ref={templateInputRef} style={[mainAppStyles.input, { backgroundColor: palette.bg, color: palette.fg, borderColor: palette.border, marginTop: 0 }]} placeholder="Template name" placeholderTextColor={palette.muted} value={templateName} onChangeText={setTemplateName} />
               <TextInput style={[mainAppStyles.input, { backgroundColor: palette.bg, color: palette.fg, borderColor: palette.border }]} placeholder="To (emails separated by ;)" placeholderTextColor={palette.muted} value={templateTo} onChangeText={setTemplateTo} />
               <TextInput style={[mainAppStyles.input, { backgroundColor: palette.bg, color: palette.fg, borderColor: palette.border }]} placeholder="Subject" placeholderTextColor={palette.muted} value={templateSubject} onChangeText={setTemplateSubject} />
@@ -889,7 +889,7 @@ export function NotesTab({ palette }: { palette: Palette }) {
                 ) : null}
               </View>
             </View>
-            <View style={[mainAppStyles.card, { backgroundColor: palette.card, borderColor: palette.border }]}>
+            <View style={[mainAppStyles.card, { backgroundColor: palette.card, borderColor: palette.border, width: '100%', alignSelf: 'stretch' }]}>
               <View style={[styles.searchRow, { borderColor: palette.border, backgroundColor: palette.bg }]}>
                 <Ionicons name="search" size={15} color={templateSearch ? palette.accent : palette.muted} />
                 <TextInput
@@ -904,7 +904,7 @@ export function NotesTab({ palette }: { palette: Palette }) {
                 </View>
               </View>
             {filteredTemplates.length === 0 ? (
-              <View style={[mainAppStyles.card, { backgroundColor: palette.card, borderColor: palette.border, alignItems: 'center', gap: 10 }]}>
+              <View style={[mainAppStyles.card, { backgroundColor: palette.card, borderColor: palette.border, alignItems: 'center', gap: 10, width: '100%', alignSelf: 'stretch' }]}>
                 <Ionicons name={templates.length === 0 ? 'layers-outline' : 'search-outline'} size={28} color={palette.accent} />
                 <Text style={{ color: palette.fg, fontSize: 15, fontWeight: '800', textAlign: 'center' }}>{templatesEmptyTitle}</Text>
                 <Text style={{ color: palette.muted, fontSize: 12, lineHeight: 18, textAlign: 'center' }}>{templatesEmptyText}</Text>
@@ -928,7 +928,7 @@ export function NotesTab({ palette }: { palette: Palette }) {
             {filteredTemplates.length > 0 ? (
               <>
                 {filteredTemplates.map((template) => (
-                <View key={template.id} style={[styles.compactCard, { borderColor: palette.border, backgroundColor: palette.bg }]}>
+                <View key={template.id} style={[styles.compactCard, { borderColor: palette.border, backgroundColor: palette.bg, width: '100%' }]}>
                   <Text style={{ color: palette.fg, fontWeight: '800' }} numberOfLines={1}>{template.name}</Text>
                   <Text style={{ color: palette.muted, fontSize: 11 }} numberOfLines={1}>{template.to || '(No recipients)'}</Text>
                   <Text style={{ color: palette.muted, fontSize: 11 }} numberOfLines={1}>{template.subject || '(No subject)'}</Text>
