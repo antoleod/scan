@@ -8,8 +8,9 @@ import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 
 import {
-  fetchSharedGroupsForCurrentUser,
   subscribeToNotes,
+  subscribeToSharedGroups,
+  subscribeToSharedGroupNotes,
   upsertSharedGroupNote,
   type SharedNoteGroup,
 } from '../../../core/firebase';
@@ -198,7 +199,6 @@ export function NotesTab({ palette }: { palette: Palette }) {
       setTemplates(t);
     }).catch(() => undefined);
     loadClipboardEntries().then(setClipboardItems).catch(() => undefined);
-    fetchSharedGroupsForCurrentUser().then(setGroups).catch(() => undefined);
   }, []);
 
   // Real-time cross-device sync via Firestore onSnapshot (replaces 10s polling).
@@ -210,6 +210,18 @@ export function NotesTab({ palette }: { palette: Palette }) {
       setTemplates((current) => mergeTemplatesByNewest(current, serverTemplates));
     }).then((u) => { unsub = u; }).catch(() => undefined);
     return () => { unsub?.(); };
+  }, [user?.uid]);
+
+  // Live shared groups + their notes (cross-device / multi-user).
+  useEffect(() => {
+    if (!user) return;
+    let groupsUnsub: (() => void) | null = null;
+    let notesUnsub: (() => void) | null = null;
+    subscribeToSharedGroups(setGroups).then((u) => { groupsUnsub = u; }).catch(() => undefined);
+    subscribeToSharedGroupNotes((sharedNotes) => {
+      setNotes((current) => mergeNotesByNewest(current, sharedNotes));
+    }).then((u) => { notesUnsub = u; }).catch(() => undefined);
+    return () => { groupsUnsub?.(); notesUnsub?.(); };
   }, [user?.uid]);
 
   useEffect(() => {

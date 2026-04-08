@@ -40,7 +40,7 @@ import {
   initFirebaseRuntime,
   recheckFirebaseRuntime,
   subscribeToScans,
-  syncNotesWithFirebase,
+  fetchNotesFromFirebase,
   syncScansWithFirebase,
 } from '../core/firebase';
 import { IMAGE_SCAN_BARCODE_TYPES, buildScanRecord, processScanInput } from '../core/scanPipeline';
@@ -63,7 +63,7 @@ import { QrModal } from '../components/mainApp/QrModal';
 import { ScanTab } from '../components/mainApp/tabs/ScanTab';
 import { SelectionFooter } from '../components/mainApp/SelectionFooter';
 import { SettingsTab } from '../components/mainApp/tabs/SettingsTab';
-import { hardDeleteAllNotes, hardDeleteAllTemplates, loadNotes as loadWorkNotes, loadTemplates as loadNoteTemplates, saveNotes as saveWorkNotes, saveTemplates as saveNoteTemplates } from '../core/notes';
+import { hardDeleteAllNotes, hardDeleteAllTemplates, saveNotes as saveWorkNotes, saveTemplates as saveNoteTemplates } from '../core/notes';
 import { clearClipboardEntries } from '../core/clipboard';
 
 type Tab = 'scan' | 'history' | 'notes' | 'settings';
@@ -976,17 +976,16 @@ function MainApp() {
       setHistory(merged);
       await saveHistory(merged);
 
-      const localNotes = await loadWorkNotes();
-      const localNoteTemplates = await loadNoteTemplates();
-      const notesSync = await syncNotesWithFirebase(localNotes, localNoteTemplates);
-      await saveWorkNotes(notesSync.serverNotes);
-      await saveNoteTemplates(notesSync.serverTemplates);
+      // Notes/templates are expected to stay live via onSnapshot; manual sync pulls server snapshot.
+      const notesSnap = await fetchNotesFromFirebase();
+      await saveWorkNotes(notesSnap.serverNotes);
+      await saveNoteTemplates(notesSnap.serverTemplates);
 
       await diag.info('firebase.sync.ok', { pushed: result.pushed, total: merged.length });
       if (showAlert) {
         Alert.alert(
           'Sync',
-          `OK. scans pushed=${result.pushed}, scans total=${merged.length}, notes=${notesSync.serverNotes.length}, templates=${notesSync.serverTemplates.length}`
+          `OK. scans pushed=${result.pushed}, scans total=${merged.length}, notes=${notesSnap.serverNotes.length}, templates=${notesSnap.serverTemplates.length}`
         );
       }
     } catch (error) {

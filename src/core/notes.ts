@@ -7,9 +7,11 @@ import {
   deleteTemplateFromFirebase,
   fetchNotesFromFirebase,
   fetchSharedGroupNotesForCurrentUser,
-  syncNotesWithFirebase,
+  upsertNoteInFirebase,
+  upsertTemplateInFirebase,
   upsertSharedGroupNote,
 } from './firebase';
+import { diag } from './diagnostics';
 
 const NOTES_KEY = '@barra_notes_v1';
 const TEMPLATES_KEY = '@barra_note_templates_v1';
@@ -99,15 +101,19 @@ export async function saveNotes(items: NoteItem[]): Promise<void> {
   await AsyncStorage.setItem(NOTES_KEY, JSON.stringify(normalizeNotes(items).slice(0, 3000)));
 }
 
-async function syncNotesStateIfAuthenticated(notesOverride?: NoteItem[], templatesOverride?: NoteTemplate[]): Promise<void> {
+async function pushNoteIfAuthenticated(note: NoteItem): Promise<void> {
   try {
-    const notes = notesOverride || (await loadNotes());
-    const templates = templatesOverride || (await loadTemplates());
-    const result = await syncNotesWithFirebase(notes, templates);
-    await AsyncStorage.setItem(NOTES_KEY, JSON.stringify(normalizeNotes(result.serverNotes).slice(0, 3000)));
-    await AsyncStorage.setItem(TEMPLATES_KEY, JSON.stringify(result.serverTemplates.slice(0, 300)));
-  } catch {
-    // keep local flow responsive when offline or unauthenticated
+    await upsertNoteInFirebase(note);
+  } catch (error) {
+    await diag.warn('notes.push.note.error', { message: String(error), noteId: note.id });
+  }
+}
+
+async function pushTemplateIfAuthenticated(template: NoteTemplate): Promise<void> {
+  try {
+    await upsertTemplateInFirebase(template);
+  } catch (error) {
+    await diag.warn('notes.push.template.error', { message: String(error), templateId: template.id });
   }
 }
 
@@ -158,7 +164,7 @@ export async function addNoteUnique(
     ...current,
   ];
   await saveNotes(next);
-  await syncNotesStateIfAuthenticated(normalizeNotes(next));
+  await pushNoteIfAuthenticated(next[0]);
   return { notes: normalizeNotes(next), inserted: true };
 }
 
@@ -200,7 +206,7 @@ export async function addRichNoteUnique(
   ];
 
   await saveNotes(next);
-  await syncNotesStateIfAuthenticated(normalizeNotes(next));
+  await pushNoteIfAuthenticated(next[0]);
   if (groupId?.trim()) {
     await upsertSharedGroupNote(groupId.trim(), next[0]);
   }
@@ -241,7 +247,7 @@ export async function addImageNoteUnique(dataUri: string, title = 'Screenshot ca
     ...current,
   ];
   await saveNotes(next);
-  await syncNotesStateIfAuthenticated(normalizeNotes(next));
+  await pushNoteIfAuthenticated(next[0]);
   return { notes: normalizeNotes(next), inserted: true };
 }
 
@@ -257,8 +263,8 @@ export async function removeNote(id: string): Promise<NoteItem[]> {
     } else {
       await deleteNoteFromFirebase(id);
     }
-  } catch {
-    await syncNotesStateIfAuthenticated(normalized);
+  } catch (error) {
+    await diag.warn('notes.delete.remote.error', { message: String(error), noteId: id });
   }
   return normalized;
 }
@@ -271,8 +277,8 @@ export async function updateNoteText(id: string, text: string): Promise<NoteItem
     item.id === id ? { ...item, text: nextText, updatedAt: Date.now() } : item,
   );
   await saveNotes(next);
-  await syncNotesStateIfAuthenticated(normalizeNotes(next));
   const updated = next.find((item) => item.id === id);
+  if (updated) await pushNoteIfAuthenticated(updated);
   if (updated?.groupId) {
     await upsertSharedGroupNote(updated.groupId, updated);
   }
@@ -285,8 +291,8 @@ export async function togglePinned(id: string): Promise<NoteItem[]> {
     item.id === id ? { ...item, pinned: !item.pinned, updatedAt: Date.now() } : item,
   );
   await saveNotes(next);
-  await syncNotesStateIfAuthenticated(normalizeNotes(next));
   const updated = next.find((item) => item.id === id);
+  if (updated) await pushNoteIfAuthenticated(updated);
   if (updated?.groupId) {
     await upsertSharedGroupNote(updated.groupId, updated);
   }
@@ -299,8 +305,8 @@ export async function setNoteColor(id: string, color: NoteItem['color'] = 'defau
     item.id === id ? { ...item, color, updatedAt: Date.now() } : item,
   );
   await saveNotes(next);
-  await syncNotesStateIfAuthenticated(normalizeNotes(next));
   const updated = next.find((item) => item.id === id);
+  if (updated) await pushNoteIfAuthenticated(updated);
   if (updated?.groupId) {
     await upsertSharedGroupNote(updated.groupId, updated);
   }
@@ -313,8 +319,8 @@ export async function toggleArchived(id: string): Promise<NoteItem[]> {
     item.id === id ? { ...item, archived: !item.archived, updatedAt: Date.now() } : item,
   );
   await saveNotes(next);
-  await syncNotesStateIfAuthenticated(normalizeNotes(next));
   const updated = next.find((item) => item.id === id);
+  if (updated) await pushNoteIfAuthenticated(updated);
   if (updated?.groupId) {
     await upsertSharedGroupNote(updated.groupId, updated);
   }
@@ -325,7 +331,11 @@ export async function clearNotes(): Promise<void> {
   await AsyncStorage.setItem(NOTES_KEY, JSON.stringify([]));
   // Mark as initialized to avoid demo reseeding after user clears everything.
   await AsyncStorage.setItem(NOTES_SEEDED_KEY, '1');
-  await syncNotesStateIfAuthenticated([], undefined);
+  try {
+    await clearNotesInFirebase();
+  } catch (error) {
+    await diag.warn('notes.clear.remote.error', { message: String(error) });
+  }
 }
 
 export async function hardDeleteAllNotes(): Promise<void> {
@@ -365,7 +375,6 @@ export async function loadTemplates(): Promise<NoteTemplate[]> {
 
 export async function saveTemplates(items: NoteTemplate[]): Promise<void> {
   await AsyncStorage.setItem(TEMPLATES_KEY, JSON.stringify(items.slice(0, 300)));
-  await syncNotesStateIfAuthenticated(undefined, items.slice(0, 300));
 }
 
 export async function addTemplate(template: Omit<NoteTemplate, 'id' | 'createdAt' | 'updatedAt'>): Promise<NoteTemplate[]> {
@@ -381,7 +390,7 @@ export async function addTemplate(template: Omit<NoteTemplate, 'id' | 'createdAt
     ...current,
   ];
   await saveTemplates(next);
-  await syncNotesStateIfAuthenticated(undefined, next);
+  await pushTemplateIfAuthenticated(next[0]);
   return next;
 }
 
@@ -404,7 +413,8 @@ export async function updateTemplate(
       : item,
   );
   await saveTemplates(next);
-  await syncNotesStateIfAuthenticated(undefined, next);
+  const updated = next.find((item) => item.id === id);
+  if (updated) await pushTemplateIfAuthenticated(updated);
   return next;
 }
 
@@ -451,7 +461,9 @@ export async function ensureWorkNotesAndEmailTemplates(): Promise<{
     notes = normalizeNotes([...examples, ...notes]);
     await saveNotes(notes);
     await AsyncStorage.setItem(NOTES_SEEDED_KEY, '1');
-    await syncNotesStateIfAuthenticated(notes, templates);
+    for (const note of examples) {
+      await pushNoteIfAuthenticated(note);
+    }
   }
 
   const hasEmailTemplates = templates.some((item) => item.kind === 'email');
@@ -491,7 +503,9 @@ export async function ensureWorkNotesAndEmailTemplates(): Promise<{
     ];
     templates = [...emailTemplates, ...templates];
     await saveTemplates(templates);
-    await syncNotesStateIfAuthenticated(notes, templates);
+    for (const template of emailTemplates) {
+      await pushTemplateIfAuthenticated(template);
+    }
   }
 
   return { notes, templates };
@@ -503,8 +517,8 @@ export async function removeTemplate(id: string): Promise<NoteTemplate[]> {
   await AsyncStorage.setItem(TEMPLATES_KEY, JSON.stringify(next.slice(0, 300)));
   try {
     await deleteTemplateFromFirebase(id);
-  } catch {
-    await syncNotesStateIfAuthenticated(undefined, next);
+  } catch (error) {
+    await diag.warn('templates.delete.remote.error', { message: String(error), templateId: id });
   }
   return next;
 }
