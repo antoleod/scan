@@ -294,15 +294,27 @@ export async function subscribeToNotes(
   let latestNotes: NoteItem[] = [];
   let latestTemplates: NoteTemplate[] = [];
 
-  const notesUnsub = onSnapshot(query(notesRef), (snap) => {
-    latestNotes = snap.docs.map((d) => ({ ...(d.data() as NoteItem), id: d.id }));
-    callback({ notes: latestNotes, templates: latestTemplates });
-  });
+  const notesUnsub = onSnapshot(
+    query(notesRef),
+    (snap) => {
+      latestNotes = snap.docs.map((d) => ({ ...(d.data() as NoteItem), id: d.id }));
+      callback({ notes: latestNotes, templates: latestTemplates });
+    },
+    async (error) => {
+      await diag.warn('notes.subscribe.notes.error', { message: String(error) });
+    }
+  );
 
-  const templatesUnsub = onSnapshot(query(templatesRef), (snap) => {
-    latestTemplates = snap.docs.map((d) => ({ ...(d.data() as NoteTemplate), id: d.id }));
-    callback({ notes: latestNotes, templates: latestTemplates });
-  });
+  const templatesUnsub = onSnapshot(
+    query(templatesRef),
+    (snap) => {
+      latestTemplates = snap.docs.map((d) => ({ ...(d.data() as NoteTemplate), id: d.id }));
+      callback({ notes: latestNotes, templates: latestTemplates });
+    },
+    async (error) => {
+      await diag.warn('notes.subscribe.templates.error', { message: String(error) });
+    }
+  );
 
   return () => { notesUnsub(); templatesUnsub(); };
 }
@@ -314,9 +326,24 @@ export async function upsertNoteInFirebase(note: NoteItem): Promise<void> {
   }
   const user = rt.auth.currentUser;
   if (!user) throw new Error('No authenticated session to save note.');
+  // Keep payload aligned with current Firestore Rules allow-list.
+  const payload = {
+    id: note.id,
+    kind: note.kind,
+    category: note.category,
+    text: note.text,
+    imageBase64: note.imageBase64,
+    imageMimeType: note.imageMimeType,
+    attachments: note.attachments,
+    pinned: Boolean(note.pinned),
+    createdAt: Number(note.createdAt || Date.now()),
+    updatedAt: Number(note.updatedAt || Date.now()),
+    uid: user.uid,
+    updatedAtServer: serverTimestamp(),
+  };
   await setDoc(
     doc(rt.db, 'users', user.uid, 'notes', note.id),
-    { ...note, uid: user.uid, updatedAtServer: serverTimestamp() },
+    payload,
     { merge: true }
   );
 }
@@ -328,9 +355,23 @@ export async function upsertTemplateInFirebase(template: NoteTemplate): Promise<
   }
   const user = rt.auth.currentUser;
   if (!user) throw new Error('No authenticated session to save template.');
+  // Keep payload aligned with current Firestore Rules allow-list.
+  const payload = {
+    id: template.id,
+    name: template.name,
+    kind: template.kind,
+    subject: template.subject,
+    body: template.body,
+    location: template.location || '',
+    durationMinutes: Number(template.durationMinutes || 30),
+    createdAt: Number(template.createdAt || Date.now()),
+    updatedAt: Number(template.updatedAt || Date.now()),
+    uid: user.uid,
+    updatedAtServer: serverTimestamp(),
+  };
   await setDoc(
     doc(rt.db, 'users', user.uid, 'noteTemplates', template.id),
-    { ...template, uid: user.uid, updatedAtServer: serverTimestamp() },
+    payload,
     { merge: true }
   );
 }

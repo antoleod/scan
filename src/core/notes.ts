@@ -16,6 +16,7 @@ import { diag } from './diagnostics';
 const NOTES_KEY = '@barra_notes_v1';
 const TEMPLATES_KEY = '@barra_note_templates_v1';
 const NOTES_SEEDED_KEY = '@barra_notes_seeded_v1';
+const TEMPLATES_PURGED_KEY = '@barra_templates_purged_v1';
 
 export type NoteKind = 'text' | 'image';
 export type NoteCategory = 'general' | 'work';
@@ -425,6 +426,19 @@ export async function ensureWorkNotesAndEmailTemplates(): Promise<{
   let notes = await loadNotes();
   let templates = await loadTemplates();
   const seeded = (await AsyncStorage.getItem(NOTES_SEEDED_KEY)) === '1';
+  const templatesPurged = (await AsyncStorage.getItem(TEMPLATES_PURGED_KEY)) === '1';
+
+  // One-shot purge requested: remove all existing templates locally/cloud and do not auto-seed again.
+  if (!templatesPurged) {
+    templates = [];
+    await AsyncStorage.setItem(TEMPLATES_KEY, JSON.stringify([]));
+    await AsyncStorage.setItem(TEMPLATES_PURGED_KEY, '1');
+    try {
+      await clearTemplatesInFirebase();
+    } catch (error) {
+      await diag.warn('templates.purge.remote.error', { message: String(error) });
+    }
+  }
 
   const hasWorkNotes = notes.some((item) => item.category === 'work');
   if (!seeded && !hasWorkNotes && notes.length === 0) {
@@ -463,48 +477,6 @@ export async function ensureWorkNotesAndEmailTemplates(): Promise<{
     await AsyncStorage.setItem(NOTES_SEEDED_KEY, '1');
     for (const note of examples) {
       await pushNoteIfAuthenticated(note);
-    }
-  }
-
-  const hasEmailTemplates = templates.some((item) => item.kind === 'email');
-  if (!hasEmailTemplates) {
-    const now = Date.now();
-    const emailTemplates: NoteTemplate[] = [
- {
-  id: makeId('tpl'),
-  name: 'Late Notification',
-  kind: 'email',
-  to: 'mourad.elmessaoudi@europarl.europa.eu; ludovic.ngoran@europarl.europa.eu; livia.coman@ext.europarl.europa.eu',
-  subject: 'Slight Delay Today',
-  body: 'Hello Team,\n\nI would like to inform you that I will be approximately 15 to 20 minutes late today.\n\nThe train I usually take was canceled, so I am driving instead, and traffic is heavier than expected.\n\nThis is only for today, and everything will be back to normal afterwards.\n\nThank you very much for your understanding.\n\nKind regards,\nJuan Dioses\nIT Support\njuan.dioses@ext.europarl.europa.eu',
-  createdAt: now + 2,
-  updatedAt: now + 2,
-},
-      {
-        id: makeId('tpl'),
-        name: 'Badge Delivered',
-        kind: 'email',
-        to: '',
-        subject: 'Your access badge is ready',
-        body: 'Hello,\n\nYour new badge is ready for pickup.\nPlease bring your ID card.\n\nRegards,\nIT Support',
-        createdAt: now + 1,
-        updatedAt: now + 1,
-      },
-      {
-        id: makeId('tpl'),
-        name: 'Closure Confirmation',
-        kind: 'email',
-        to: '',
-        subject: 'Ticket closure confirmation',
-        body: 'Hello,\n\nWe are closing your ticket based on successful validation.\nIf you still need help, reply to this email.\n\nRegards,\nIT Support',
-        createdAt: now + 2,
-        updatedAt: now + 2,
-      },
-    ];
-    templates = [...emailTemplates, ...templates];
-    await saveTemplates(templates);
-    for (const template of emailTemplates) {
-      await pushTemplateIfAuthenticated(template);
     }
   }
 
