@@ -100,14 +100,14 @@ export function HistoryTab({
   }
 
   return (
-    <View style={[mainAppStyles.screen, mainAppStyles.screenLocked, { alignSelf: 'center', maxWidth: width >= 1280 ? 1280 : 1200 }]}>
+    <View style={[mainAppStyles.screen, mainAppStyles.screenLocked, { alignSelf: 'center', maxWidth: width >= 1280 ? 1280 : 1200, minWidth: 0 }]}>
       <FlatList
         data={filteredHistory}
         numColumns={columns}
         key={`history-grid-${columns}`}
         keyExtractor={(item) => item.id}
-        contentContainerStyle={[mainAppStyles.listContent, { gap: 8, paddingTop: 8, paddingHorizontal: width >= 1280 ? 0 : 0 }]}
-        columnWrapperStyle={columns > 1 ? { gap: 10 } : undefined}
+        contentContainerStyle={[mainAppStyles.listContent, { gap: 8, paddingTop: 8, paddingBottom: 120, paddingHorizontal: 0, minWidth: 0 }]}
+        columnWrapperStyle={columns > 1 ? { gap: 10, width: '100%', minWidth: 0 } : undefined}
         ListHeaderComponent={(
           <View style={[mainAppStyles.card, { backgroundColor: palette.card, borderColor: palette.border, marginBottom: 0, gap: 10, paddingVertical: width >= 1280 ? 16 : 12, paddingHorizontal: width >= 1280 ? 16 : 12 }]}>
             <View style={[mainAppStyles.filterBar, { marginTop: 0 }]}>

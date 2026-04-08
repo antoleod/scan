@@ -189,7 +189,7 @@ export function ClipboardScreen({ palette, onSendToNote, onSendToTemplate }: Pro
 
       <View style={styles.gridWrap}>
         {groupedClipboard.map(([day, dayEntries]) => (
-          <View key={day} style={{ gap: 8, width: '100%' }}>
+          <View key={day} style={{ gap: 8, width: '100%', minWidth: 0 }}>
             <View style={styles.dayRow}>
               <Text style={{ color: palette.muted, fontSize: 11, fontWeight: '800' }}>{day} ({dayEntries.length})</Text>
               <Pressable onPress={() => deleteClipboardDay(day).catch(() => undefined)} style={[styles.selectionBtn, { borderColor: palette.border }]}>
@@ -208,6 +208,7 @@ export function ClipboardScreen({ palette, onSendToNote, onSendToTemplate }: Pro
                         styles.card,
                         {
                           flex: 1,
+                          minWidth: 0,
                           borderColor: selectedClipboardIds.has(entry.id) ? palette.accent : palette.border,
                           backgroundColor: palette.card,
                           opacity: pressed ? 0.92 : 1,
@@ -288,16 +289,16 @@ export function ClipboardScreen({ palette, onSendToNote, onSendToTemplate }: Pro
 export default ClipboardScreen;
 
 const styles = StyleSheet.create({
-  content: { paddingBottom: 32, gap: 24, width: '100%' },
+  content: { paddingBottom: 128, gap: 24, width: '100%', minWidth: 0, alignItems: 'stretch' },
   headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' },
   searchRow: { flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 8 },
   searchInput: { flex: 1, fontSize: 13, paddingVertical: 0 },
   selectionRow: { marginTop: 8, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   selectionBtn: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 6, minHeight: 34, justifyContent: 'center' },
-  gridWrap: { gap: 10 },
-  gridRow: { flexDirection: 'row', gap: 10 },
-  dayRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  card: { borderWidth: 1, borderRadius: 12, padding: 12, gap: 8 },
+  gridWrap: { gap: 10, width: '100%', minWidth: 0 },
+  gridRow: { flexDirection: 'row', gap: 10, width: '100%', minWidth: 0 },
+  dayRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minWidth: 0 },
+  card: { borderWidth: 1, borderRadius: 12, padding: 12, gap: 8, minWidth: 0 },
   clipThumb: { width: '100%', height: 96, borderRadius: 8, backgroundColor: '#111' },
   cardHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
   actionsRow: { flexDirection: 'row', gap: 10, alignItems: 'center', flexWrap: 'wrap' },

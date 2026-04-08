@@ -718,7 +718,7 @@ export function NotesTab({ palette }: { palette: Palette }) {
       contentContainerStyle={[styles.content, { alignItems: 'stretch' }]}
       keyboardShouldPersistTaps="handled"
     >
-      <View style={[styles.workspace, { width: '100%' }]}>
+      <View style={[styles.workspace, { width: '100%', minWidth: 0, alignSelf: 'stretch' }]}>
         <TabBar
           activeTab={workspaceTab}
           palette={uiPalette}
@@ -732,7 +732,7 @@ export function NotesTab({ palette }: { palette: Palette }) {
 
         {workspaceTab === 'notes' ? (
           <>
-            <View style={{ width: '100%', gap: 24, paddingHorizontal: 16, paddingTop: 24, alignSelf: 'stretch' }}>
+            <View style={{ width: '100%', gap: 24, paddingHorizontal: 16, paddingTop: 24, paddingBottom: 128, alignSelf: 'stretch', minWidth: 0 }}>
               <ComposerSection
                 ref={draftInputRef}
                 palette={uiPalette}
@@ -819,7 +819,7 @@ export function NotesTab({ palette }: { palette: Palette }) {
                       const expanded = expandedNoteId === note.id;
                       const editing = editingNoteId === note.id;
                       return (
-                        <View key={note.id} style={{ flex: 1 }}>
+                        <View key={note.id} style={{ flex: 1, minWidth: 0 }}>
                           <NoteCard
                             note={note}
                             palette={{
@@ -859,7 +859,7 @@ export function NotesTab({ palette }: { palette: Palette }) {
                         </View>
                       );
                     })}
-                    {row.length < (isDesktop ? desktopColumns : 1) ? Array.from({ length: (isDesktop ? desktopColumns : 1) - row.length }).map((_, i) => <View key={`fill-${i}`} style={{ flex: 1 }} />) : null}
+                    {row.length < (isDesktop ? desktopColumns : 1) ? Array.from({ length: (isDesktop ? desktopColumns : 1) - row.length }).map((_, i) => <View key={`fill-${i}`} style={{ flex: 1, minWidth: 0 }} />) : null}
                   </View>
                 ))}
               </View>
@@ -1047,14 +1047,14 @@ export function NotesTab({ palette }: { palette: Palette }) {
 }
 
 const styles = StyleSheet.create({
-  content: { paddingBottom: 32 },
-  workspace: { gap: 10 },
+  content: { paddingBottom: 128, width: '100%', minWidth: 0, alignItems: 'stretch' },
+  workspace: { gap: 10, minWidth: 0 },
   workspaceTabs: { flexDirection: 'row', gap: 6, marginBottom: 0 },
   workspaceTab: { flex: 1, minHeight: 44, borderWidth: 1, borderRadius: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingHorizontal: 8 },
   resumeCard: { paddingVertical: 10 },
   editorHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   groupSelectorRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
-  shareRow: { flexDirection: 'row', gap: 10 },
+  shareRow: { flexDirection: 'row', gap: 10, minWidth: 0 },
   iconAction: { borderWidth: 1, borderRadius: 999, minHeight: 44, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', gap: 6, justifyContent: 'center' },
   noteInput: { minHeight: 100, textAlignVertical: 'top' },
   attachmentRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 },
@@ -1068,9 +1068,9 @@ const styles = StyleSheet.create({
   filterChipRow: { flexDirection: 'row', gap: 6, alignItems: 'center' },
   searchRow: { flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 8 },
   searchInput: { flex: 1, fontSize: 13, paddingVertical: 0 },
-  gridWrap: { gap: 10 },
-  gridRow: { flexDirection: 'row', gap: 10 },
-  compactCard: { borderWidth: 1, borderRadius: 12, padding: 12, gap: 8 },
+  gridWrap: { gap: 10, width: '100%', minWidth: 0 },
+  gridRow: { flexDirection: 'row', gap: 10, width: '100%', minWidth: 0 },
+  compactCard: { borderWidth: 1, borderRadius: 12, padding: 12, gap: 8, minWidth: 0 },
   noteThumb: { width: '100%', height: 120, borderRadius: 8, backgroundColor: '#111' },
   clipThumb: { width: '100%', height: 96, borderRadius: 8, backgroundColor: '#111' },
   cardHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },

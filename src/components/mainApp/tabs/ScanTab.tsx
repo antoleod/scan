@@ -261,7 +261,8 @@ const styles = StyleSheet.create({
     minHeight: 260,
   },
   bottomPanel: {
-    flex: 1,
+    flexGrow: 0,
+    flexShrink: 0,
     backgroundColor: C.panel,
     paddingTop: 12,
     paddingBottom: 14,

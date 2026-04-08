@@ -41,7 +41,7 @@ export function BottomTabs({
   };
 
   return (
-    <View style={{ height: 60, paddingTop: 8, borderTopWidth: 1, borderTopColor: palette.border, backgroundColor: palette.bg, paddingHorizontal: 8 }}>
+    <View style={{ width: '100%', minWidth: 0, flexShrink: 0, height: 60, paddingTop: 8, borderTopWidth: 1, borderTopColor: palette.border, backgroundColor: palette.bg, paddingHorizontal: 8 }}>
       <View style={{ flex: 1, flexDirection: 'row', alignItems: 'stretch', justifyContent: 'space-between' }}>
         {tabs.map((tab) => {
           const active = activeTab === tab.key;
@@ -87,4 +87,3 @@ export function BottomTabs({
     </View>
   );
 }
-

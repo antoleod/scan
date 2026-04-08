@@ -26,6 +26,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 const styles = StyleSheet.create({
   outer: {
     width: '100%',
+    minWidth: 0,
     alignItems: 'center',
     flex: 1,
   },
@@ -33,5 +34,8 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: APP_LAYOUT_MAX_WIDTH,
     flex: 1,
+    minWidth: 0,
+    minHeight: 0,
+    alignSelf: 'stretch',
   },
 });

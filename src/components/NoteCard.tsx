@@ -119,6 +119,8 @@ export function NoteCard({
       <Pressable
         onPress={onToggleExpand}
         style={({ pressed }) => ({
+          width: '100%',
+          minWidth: 0,
           borderWidth: 1,
           borderColor: palette.border,
           borderLeftWidth: 4,
@@ -274,4 +276,3 @@ export function NoteCard({
     </>
   );
 }
-

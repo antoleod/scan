@@ -38,14 +38,14 @@ export function AppHeader({
     <View style={[mainAppStyles.header, { backgroundColor: palette.bg, borderColor: palette.border, height: 52 }]}>
       <View style={[mainAppStyles.brandBlock, { gap: 10 }]}>
         <LogoMark accent={palette.accent} foreground="#000000" />
-        <Text style={{ color: palette.fg, fontSize: 15, fontWeight: '500', flex: 1 }} numberOfLines={1}>
+        <Text style={{ color: palette.fg, fontSize: 15, fontWeight: '500', flex: 1, minWidth: 0 }} numberOfLines={1}>
           Oryxen Scanner
         </Text>
       </View>
 
-      <Pressable onPress={onPressEmail} hitSlop={8} style={{ minHeight: 44, justifyContent: 'center' }}>
-        <Text style={{ color: '#999999', fontSize: 12, fontWeight: '400', textAlign: 'right' }} numberOfLines={1}>
-          {email} ›
+      <Pressable onPress={onPressEmail} hitSlop={8} style={{ minHeight: 44, justifyContent: 'center', maxWidth: '42%', flexShrink: 1 }}>
+        <Text style={{ color: '#999999', fontSize: 12, fontWeight: '400', textAlign: 'right', flexShrink: 1 }} numberOfLines={1}>
+          {email} â€º
         </Text>
       </Pressable>
     </View>
