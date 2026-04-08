@@ -102,10 +102,12 @@ export default function AuthScreen() {
 
   if (view === 'login') {
     return (
-      <LoginForm
-        onSwitchToRegister={() => setView('register')}
-        onSwitchToForgot={() => setView('forgot')}
-      />
+      <View style={styles.loginStage}>
+        <LoginForm
+          onSwitchToRegister={() => setView('register')}
+          onSwitchToForgot={() => setView('forgot')}
+        />
+      </View>
     );
   }
 
@@ -141,6 +143,14 @@ export default function AuthScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: '#070d1b',
+  },
+  loginStage: {
+    flex: 1,
+    width: '100%',
+    minWidth: 0,
+    minHeight: 0,
+    overflow: 'hidden',
     backgroundColor: '#070d1b',
   },
   content: {

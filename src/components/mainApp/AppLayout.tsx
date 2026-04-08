@@ -29,6 +29,7 @@ const styles = StyleSheet.create({
     minWidth: 0,
     alignItems: 'center',
     flex: 1,
+    overflow: 'hidden',
   },
   inner: {
     width: '100%',
@@ -36,6 +37,6 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
     minHeight: 0,
-    alignSelf: 'stretch',
+    alignSelf: 'center',
   },
 });
