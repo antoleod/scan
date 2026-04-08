@@ -1355,13 +1355,6 @@ function MainApp() {
     return enabledTypes.length > 0 ? enabledTypes : SCAN_BARCODE_TYPES;
   }, [settings.barcodeTypes]);
 
-  const statusChip = persistenceMode === 'local'
-    ? isGuest
-      ? 'Guest mode (local)'
-      : 'Local mode'
-    : user
-      ? `Firebase (${user.email || 'user'})`
-      : 'Firebase guest';
   const selectedDateLabel = selectedDate ? selectedDate.toLocaleDateString() : null;
   const tabOrder: Tab[] = ['notes', 'scan', 'history', 'settings'];
 
@@ -1393,9 +1386,8 @@ function MainApp() {
       <AppLayout>
         <AppHeader
           palette={palette}
-          statusChip={statusChip}
-          compact={isCompactLayout}
-          themeName={activeTheme}
+          email={user?.email || 'gean@oryxen.tech'}
+          onPressEmail={() => setActiveTab('settings')}
         />
 
         <KeyboardAvoidingView
@@ -1568,7 +1560,7 @@ function MainApp() {
         />
         <BottomTabs
           activeTab={activeTab}
-          palette={{ accent: palette.accent, muted: palette.muted, card: palette.card, border: palette.border }}
+          palette={{ accent: palette.accent, muted: palette.muted, bg: palette.bg, border: palette.border }}
           onChangeTab={setActiveTab}
           onAddPress={openManualEntryModal}
         />
