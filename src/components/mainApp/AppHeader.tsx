@@ -45,7 +45,7 @@ export function AppHeader({
 
       <Pressable onPress={onPressEmail} hitSlop={8} style={{ minHeight: 44, justifyContent: 'center', maxWidth: '42%', flexShrink: 1 }}>
         <Text style={{ color: '#999999', fontSize: 12, fontWeight: '400', textAlign: 'right', flexShrink: 1 }} numberOfLines={1}>
-          {email} â€º
+          {email}
         </Text>
       </Pressable>
     </View>

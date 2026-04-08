@@ -13,7 +13,6 @@ import {
   Text,
   TextInput,
   Switch,
-  useWindowDimensions,
   View
 } from 'react-native';
 import Animated, {
@@ -276,7 +275,6 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
   const { theme, themeName } = useAppTheme();
   const isWeb = Platform.OS === 'web';
   const isIOS = Platform.OS === 'ios';
-  const { height } = useWindowDimensions();
   const scanProgress = useSharedValue(0);
   const fx = useMemo(
     () => ({
@@ -782,7 +780,7 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
 
       <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={[styles.scrollContent, { minHeight: height }]}
+        contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
@@ -1071,7 +1069,7 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
 
 const styles = StyleSheet.create({
   container: { flex: 1, width: '100%', minWidth: 0, minHeight: 0, overflow: 'hidden', position: 'relative' },
-  scrollView: { flex: 1, width: '100%', minWidth: 0 },
+  scrollView: { flex: 1, width: '100%', minWidth: 0, alignSelf: 'stretch' },
   background: { ...StyleSheet.absoluteFillObject, width: '100%', height: '100%', overflow: 'hidden' },
   watermarkShell: { overflow: 'hidden' },
   watermarkContainer: { ...StyleSheet.absoluteFillObject, overflow: 'hidden' },
@@ -1095,10 +1093,11 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     width: '100%',
     minWidth: 0,
+    alignSelf: 'stretch',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 24,
   },
   shell: { width: '100%', maxWidth: 420, minWidth: 0, gap: 14, alignSelf: 'center' },
   badgeRow: { flexDirection: 'row', gap: 8 },
