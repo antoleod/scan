@@ -31,11 +31,34 @@ type NoteItem = {
 
 const colorSwatches: { key: NoteColor; color: string }[] = [
   { key: 'default', color: '#141414' },
-  { key: 'amber', color: '#f59e0b' },
-  { key: 'mint', color: '#10b981' },
-  { key: 'sky', color: '#38bdf8' },
-  { key: 'rose', color: '#f43f5e' },
+  { key: 'amber', color: '#F5C518' },
+  { key: 'mint', color: '#27AE60' },
+  { key: 'sky', color: '#2980B9' },
+  { key: 'rose', color: '#E91E8C' },
 ];
+
+const colorLabels: Record<NoteColor, string> = {
+  default: 'None',
+  amber: 'Yellow',
+  mint: 'Green',
+  sky: 'Blue',
+  rose: 'Pink',
+};
+
+function noteColorHex(color?: NoteColor) {
+  switch (color) {
+    case 'amber':
+      return '#F5C518';
+    case 'mint':
+      return '#27AE60';
+    case 'sky':
+      return '#2980B9';
+    case 'rose':
+      return '#E91E8C';
+    default:
+      return '#1E1E1E';
+  }
+}
 
 export function NoteCard({
   note,
@@ -81,6 +104,7 @@ export function NoteCard({
     const date = new Date(note.updatedAt);
     return `${date.toLocaleDateString()} · ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
   }, [note.updatedAt]);
+  const borderLeftColor = noteColorHex(note.color);
 
   const openSheet = () => setSheetVisible(true);
   const closeSheet = () => setSheetVisible(false);
@@ -97,6 +121,8 @@ export function NoteCard({
         style={({ pressed }) => ({
           borderWidth: 1,
           borderColor: palette.border,
+          borderLeftWidth: 4,
+          borderLeftColor,
           borderRadius: 12,
           backgroundColor: palette.surface,
           padding: 14,
@@ -144,6 +170,51 @@ export function NoteCard({
           </Text>
         )}
 
+        {editing ? (
+          <View style={{ marginTop: 2, paddingTop: 10, borderTopWidth: 1, borderTopColor: palette.border }}>
+            <Text style={{ color: palette.textDim, fontSize: 11, fontWeight: '500', marginBottom: 8 }}>Color</Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+              {colorSwatches.map((swatch) => {
+                const active = (note.color || 'default') === swatch.key;
+                return (
+                  <Pressable
+                    key={swatch.key}
+                    onPress={() => onSetColor(swatch.key)}
+                    hitSlop={8}
+                    style={{
+                      minWidth: 64,
+                      height: 44,
+                      borderRadius: 999,
+                      borderWidth: 1,
+                      borderColor: active ? palette.accent : palette.border,
+                      backgroundColor: active ? '#1A0A00' : palette.bg,
+                      paddingHorizontal: 12,
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 8,
+                    }}
+                  >
+                    <View
+                      style={{
+                        width: 12,
+                        height: 12,
+                        borderRadius: 99,
+                        backgroundColor: swatch.key === 'default' ? 'transparent' : swatch.color,
+                        borderWidth: 1.5,
+                        borderColor: active ? palette.accent : palette.border,
+                      }}
+                    />
+                    <Text style={{ color: active ? palette.accent : palette.textMuted, fontSize: 11, fontWeight: '500' }}>
+                      {colorLabels[swatch.key]}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+        ) : null}
+
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
           <View style={{ borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2, backgroundColor: '#1E1E1E' }}>
             <Text style={{ color: palette.textMuted, fontSize: 10, fontWeight: '600', letterSpacing: 0.4, textTransform: 'uppercase' }}>
@@ -159,36 +230,6 @@ export function NoteCard({
               <Ionicons name="ellipsis-horizontal" size={18} color="#555555" />
             </Pressable>
           </View>
-        </View>
-
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-          {colorSwatches.map((swatch) => {
-            const active = (note.color || 'default') === swatch.key;
-            return (
-              <Pressable
-                key={swatch.key}
-                onPress={() => onSetColor(swatch.key)}
-                hitSlop={8}
-                style={{
-                  width: 44,
-                  height: 44,
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-              >
-                <View
-                  style={{
-                    width: 10,
-                    height: 10,
-                    borderRadius: 99,
-                    backgroundColor: swatch.color,
-                    borderWidth: 1,
-                    borderColor: active ? palette.accent : palette.border,
-                  }}
-                />
-              </Pressable>
-            );
-          })}
         </View>
       </Pressable>
 
@@ -233,3 +274,4 @@ export function NoteCard({
     </>
   );
 }
+

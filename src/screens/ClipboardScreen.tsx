@@ -114,7 +114,7 @@ export function ClipboardScreen({ palette, onSendToNote, onSendToTemplate }: Pro
       contentContainerStyle={styles.content}
       keyboardShouldPersistTaps="handled"
     >
-      <View style={[mainAppStyles.card, { backgroundColor: palette.card, borderColor: palette.border, gap: 10 }]}>
+      <View style={[mainAppStyles.card, { backgroundColor: palette.card, borderColor: palette.border, gap: 10, width: '100%', alignSelf: 'stretch' }]}>
         <View style={styles.headerRow}>
           <Text style={{ color: palette.fg, fontWeight: '800' }}>Clipboard history</Text>
           <ClipboardPermissionBadge permState={permState} />
@@ -165,7 +165,7 @@ export function ClipboardScreen({ palette, onSendToNote, onSendToTemplate }: Pro
       </View>
 
       {filteredClipboard.length === 0 ? (
-        <View style={[mainAppStyles.card, { backgroundColor: palette.card, borderColor: palette.border, alignItems: 'center', gap: 10 }]}>
+        <View style={[mainAppStyles.card, { backgroundColor: palette.card, borderColor: palette.border, alignItems: 'center', gap: 10, width: '100%', alignSelf: 'stretch' }]}>
           <Ionicons name={entries.length === 0 ? 'clipboard-outline' : 'search-outline'} size={28} color={palette.accent} />
           <Text style={{ color: palette.fg, fontSize: 15, fontWeight: '800', textAlign: 'center' }}>{clipboardEmptyTitle}</Text>
           <Text style={{ color: palette.muted, fontSize: 12, lineHeight: 18, textAlign: 'center' }}>{clipboardEmptyText}</Text>
@@ -189,7 +189,7 @@ export function ClipboardScreen({ palette, onSendToNote, onSendToTemplate }: Pro
 
       <View style={styles.gridWrap}>
         {groupedClipboard.map(([day, dayEntries]) => (
-          <View key={day} style={{ gap: 8 }}>
+          <View key={day} style={{ gap: 8, width: '100%' }}>
             <View style={styles.dayRow}>
               <Text style={{ color: palette.muted, fontSize: 11, fontWeight: '800' }}>{day} ({dayEntries.length})</Text>
               <Pressable onPress={() => deleteClipboardDay(day).catch(() => undefined)} style={[styles.selectionBtn, { borderColor: palette.border }]}>
@@ -288,7 +288,7 @@ export function ClipboardScreen({ palette, onSendToNote, onSendToTemplate }: Pro
 export default ClipboardScreen;
 
 const styles = StyleSheet.create({
-  content: { paddingBottom: 32, gap: 10 },
+  content: { paddingBottom: 32, gap: 24, width: '100%' },
   headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' },
   searchRow: { flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 8 },
   searchInput: { flex: 1, fontSize: 13, paddingVertical: 0 },

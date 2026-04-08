@@ -1,6 +1,6 @@
 import React, { forwardRef, useEffect, useMemo, useState } from 'react';
-import { Modal, Pressable, Text, TextInput, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 
 type Palette = {
   bg: string;
@@ -71,6 +71,13 @@ export const ComposerSection = forwardRef<TextInput, {
       return groups.find((group) => group.id === activeGroupId)?.name || 'Personal';
     }, [activeGroupId, groups]);
 
+    const actionItems = [
+      { key: 'photo', label: 'Photo', icon: 'image-outline' as const, action: onAddImage, active: draftImages.length > 0 },
+      { key: 'paste', label: 'Paste', icon: 'clipboard-text-outline' as const, action: onPasteImage, active: false },
+      { key: 'save', label: 'Save', icon: 'content-save-outline' as const, action: onSave, active: false },
+      { key: 'generate', label: 'Generate', icon: 'auto-fix' as const, action: onGenerate, active: false },
+    ];
+
     return (
       <View style={{ width: '100%' }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
@@ -99,26 +106,6 @@ export const ComposerSection = forwardRef<TextInput, {
               </View>
             </Pressable>
           </View>
-
-          <Pressable
-            onPress={onGenerate}
-            disabled={generating}
-            style={({ pressed }) => ({
-              height: 32,
-              paddingHorizontal: 12,
-              borderRadius: 8,
-              backgroundColor: palette.surfaceAlt,
-              borderWidth: 1,
-              borderColor: palette.surfaceAlt,
-              justifyContent: 'center',
-              opacity: pressed || generating ? 0.84 : 1,
-            })}
-          >
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-              <Ionicons name="sparkles-outline" size={15} color={palette.accent} />
-              <Text style={{ color: palette.accent, fontSize: 13, fontWeight: '600' }}>{generating ? 'Analyzing...' : 'Generate'}</Text>
-            </View>
-          </Pressable>
         </View>
 
         <Modal animationType="fade" transparent visible={pickerVisible} onRequestClose={() => setPickerVisible(false)} statusBarTranslucent>
@@ -220,35 +207,48 @@ export const ComposerSection = forwardRef<TextInput, {
               </Pressable>
             );
           })}
+        </View>
 
-          {[
-            { key: 'photo', icon: 'image-outline' as const, action: onAddImage, active: draftImages.length > 0 },
-            { key: 'clipboard', icon: 'clipboard-outline' as const, action: onPasteImage, active: false },
-            { key: 'save', icon: 'save-outline' as const, action: onSave, active: false },
-          ].map((item) => {
-            const active = item.active;
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 10 }} contentContainerStyle={{ gap: 12, paddingRight: 8 }}>
+          {actionItems.map((item) => {
+            const active = item.active || (item.key === 'generate' && generating);
             return (
               <Pressable
                 key={item.key}
                 onPress={item.action}
-                hitSlop={6}
+                hitSlop={8}
                 style={({ pressed }) => ({
-                  width: 32,
-                  height: 32,
-                  borderRadius: 8,
-                  borderWidth: 1,
-                  borderColor: active ? palette.accent : palette.chipBorder,
-                  backgroundColor: palette.surfaceAlt,
                   alignItems: 'center',
-                  justifyContent: 'center',
+                  gap: 4,
+                  minWidth: 56,
                   opacity: pressed ? 0.84 : 1,
                 })}
               >
-                <Ionicons name={item.icon} size={15} color={active ? palette.accent : palette.textDim} />
+                <View
+                  style={{
+                    width: 44,
+                    height: 44,
+                    borderRadius: 10,
+                    backgroundColor: active ? '#1A0A00' : palette.surfaceAlt,
+                    borderWidth: 1,
+                    borderColor: active ? palette.accent : palette.chipBorder,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <MaterialCommunityIcons
+                    name={item.icon}
+                    size={20}
+                    color={active ? palette.accent : palette.textDim}
+                  />
+                </View>
+                <Text style={{ color: active ? palette.accent : palette.textDim, fontSize: 10, fontWeight: '400' }}>
+                  {item.label}
+                </Text>
               </Pressable>
             );
           })}
-        </View>
+        </ScrollView>
       </View>
     );
   }

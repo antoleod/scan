@@ -40,13 +40,22 @@ export function TabBar({
               alignItems: 'center',
               justifyContent: 'center',
               opacity: pressed ? 0.8 : 1,
-              borderBottomWidth: 2,
-              borderBottomColor: active ? palette.accent : 'transparent',
+              position: 'relative',
             })}
           >
-            <Text style={{ color: active ? palette.accent : palette.textMuted, fontSize: 13, fontWeight: active ? '600' : '500' }}>
+            <Text style={{ color: active ? palette.accent : '#666666', fontSize: 14, fontWeight: active ? '600' : '500' }}>
               {tab.label}
             </Text>
+            <View
+              style={{
+                position: 'absolute',
+                left: 0,
+                right: 0,
+                bottom: 0,
+                height: 2,
+                backgroundColor: active ? palette.accent : 'transparent',
+              }}
+            />
           </Pressable>
         );
       })}

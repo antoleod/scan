@@ -94,13 +94,25 @@ function toEntry(input: Partial<ClipEntry> & { content: string; kind?: ClipKind;
 }
 
 function normalizeEntries(entries: ClipEntry[]): ClipEntry[] {
-  return [...entries]
+  const sorted = [...entries]
     .filter((entry) => {
       if (entry.kind === 'image') return Boolean(entry.imageDataUri);
       return Boolean(normalizeText(entry.content));
     })
-    .sort((a, b) => b.capturedAt - a.capturedAt)
-    .slice(0, MAX_ENTRIES);
+    .sort((a, b) => b.capturedAt - a.capturedAt);
+
+  const seenText = new Set<string>();
+  const deduped: ClipEntry[] = [];
+  for (const entry of sorted) {
+    if (entry.kind === 'text') {
+      const key = entry.content;
+      if (seenText.has(key)) continue;
+      seenText.add(key);
+    }
+    deduped.push(entry);
+  }
+
+  return deduped.slice(0, MAX_ENTRIES);
 }
 
 function browserIsChromium(): boolean {
@@ -272,6 +284,7 @@ class ClipboardEngine {
     const normalized = normalizeText(raw);
     if (!normalized) return false;
     const sig = signature(normalized);
+    if (this.entries.some((entry) => entry.kind === 'text' && entry.content === normalized)) return false;
     if (isDuplicate(sig)) return false;
 
     const entry = toEntry({
