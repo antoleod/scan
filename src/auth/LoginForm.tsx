@@ -428,8 +428,8 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
     opacity: interpolate(glitchValue.value, [0, 0.5, 1], [1, 0.92, 1]),
   }));
   const pulseStyle = useAnimatedStyle(() => {
-    // Efecto de distorsión sutil: jitter horizontal y skew diagonal
-    // Se intensifica cerca del centro (0.5) del progreso de escaneo
+    // Subtle distortion effect: horizontal jitter and diagonal skew
+    // It intensifies near the center (0.5) of the scan progress
     const jitter = interpolate(scanProgress.value, [0, 0.45, 0.5, 0.55, 1], [0, 0, 2.5, -2.5, 0]);
     const skew = interpolate(scanProgress.value, [0, 0.45, 0.5, 0.55, 1], [0, 0, 0.04, -0.04, 0]);
 
@@ -456,7 +456,7 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
   const starsStyle = useAnimatedStyle(() => ({
     opacity: interpolate(scanProgress.value, [0, 0.2, 0.5, 0.8, 1], [0.3, 0.6, 1, 0.6, 0.3]),
     transform: [
-      { rotate: `${interpolate(scanProgress.value, [0, 1], [0, -360])}deg` }, // Rotación completa y continua
+      { rotate: `${interpolate(scanProgress.value, [0, 1], [0, -360])}deg` }, // Full continuous rotation
       { scale: interpolate(scanProgress.value, [0, 0.5, 1], [0.96, 1.06, 0.96]) }
     ],
   }));
@@ -577,17 +577,17 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
   const handleBiometricAuth = async () => {
     try {
       const authTypes = await LocalAuthentication.supportedAuthenticationTypesAsync();
-      let promptMessage = 'Sign in with Biometrics';
+      let promptMessage = 'Use biometrics';
       
       if (Platform.OS === 'ios') {
         if (authTypes.includes(LocalAuthentication.AuthenticationType.FACIAL_RECOGNITION)) {
-          promptMessage = 'Sign in with FaceID';
+          promptMessage = 'Use Face ID';
         } else if (authTypes.includes(LocalAuthentication.AuthenticationType.FINGERPRINT)) {
-          promptMessage = 'Sign in with TouchID';
+          promptMessage = 'Use Touch ID';
         }
       } else if (Platform.OS === 'android') {
         if (authTypes.includes(LocalAuthentication.AuthenticationType.FINGERPRINT)) {
-          promptMessage = 'Sign in with Fingerprint';
+          promptMessage = 'Use fingerprint';
         }
       }
 
@@ -606,7 +606,7 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
             await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
           }
         } else {
-          setAuthError('No saved credentials found for biometric login.');
+          setAuthError('No saved credentials are available for biometrics.');
         }
       }
     } catch (error) {
@@ -651,7 +651,7 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
         }
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unable to sign in right now.';
+      const message = error instanceof Error ? error.message : "Sign-in isn't available right now.";
       setAuthError(message);
       triggerShake();
     } finally {
@@ -694,7 +694,7 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
         )}
         {palette.watermark && (
           <View style={[styles.watermarkContainer, styles.watermarkVisible]} pointerEvents="none">
-            {/* Capa de Aberración: Rojo (Shift Left) */}
+            {/* Chromatic aberration layer: Red (shift left) */}
             <Animated.View style={[StyleSheet.absoluteFill, chromaticRedStyle]} pointerEvents="none">
               <View style={[styles.gridLineV, { left: '20%', backgroundColor: theme.error }]} />
               <View style={[styles.gridLineV, { left: '40%', backgroundColor: theme.error }]} />
@@ -707,7 +707,7 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
               <View style={[styles.techCircle, { bottom: -100, left: -60, width: 300, height: 300, borderColor: theme.error, opacity: 0.03 }]} />
             </Animated.View>
 
-            {/* Capa de Aberración: Azul (Shift Right) */}
+            {/* Chromatic aberration layer: Blue (shift right) */}
             <Animated.View style={[StyleSheet.absoluteFill, chromaticBlueStyle]} pointerEvents="none">
               <View style={[styles.gridLineV, { left: '20%', backgroundColor: theme.primary }]} />
               <View style={[styles.gridLineV, { left: '40%', backgroundColor: theme.primary }]} />
@@ -721,7 +721,7 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
             </Animated.View>
 
 
-            {/* Rejilla Técnica */}
+            {/* Technical grid */}
             <View style={[styles.gridLineV, { left: '20%', backgroundColor: theme.secondary }]} />
             <View style={[styles.gridLineV, { left: '40%', backgroundColor: theme.secondary }]} />
             <View style={[styles.gridLineV, { left: '60%', backgroundColor: theme.secondary }]} />
@@ -730,11 +730,11 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
             <View style={[styles.gridLineH, { top: '50%', backgroundColor: theme.secondary }]} />
             <View style={[styles.gridLineH, { top: '75%', backgroundColor: theme.secondary }]} />
 
-            {/* Círculos de Radar */}
+            {/* Radar circles */}
             <View style={[styles.techCircle, { top: -50, right: -50, width: 200, height: 200, borderColor: theme.secondary }]} />
             <View style={[styles.techCircle, { bottom: -100, left: -60, width: 300, height: 300, borderColor: theme.secondary, opacity: 0.03 }]} />
 
-            {/* Marcadores de Escaneo */}
+            {/* Scan markers */}
             <Text style={[styles.watermarkMarker, { top: '15%', left: '10%', color: theme.secondary }]}>+</Text>
             <Text style={[styles.watermarkMarker, { top: '15%', right: '10%', color: theme.secondary }]}>+</Text>
             <Text style={[styles.watermarkMarker, { bottom: '20%', left: '15%', color: theme.secondary }]}>+</Text>
@@ -817,7 +817,7 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
                 {/* Premium glow rings */}
                 <GlowRing size={150} color={theme.secondary} delay={0} dur={2800} opacity={0.22} />
                 <GlowRing size={118} color={theme.primary} delay={700} dur={2200} opacity={0.18} />
-                {/* Círculo de Estrellas Europeas */}
+                {/* Circle of European stars */}
                 <Animated.View style={[styles.starsContainer, starsStyle]}>
                   {Array.from({ length: 12 }).map((_, i) => {
                     const angle = (i * 30) * (Math.PI / 180);

@@ -198,7 +198,7 @@ export function BarcodeModal({
                   ? 'Both encodings carry the exact same value.'
                   : plan.codeType === 'pi'
                     ? 'PI values are rendered as Code128.'
-                    : 'Ready to display and reuse.'}
+                    : 'Ready to display or reuse.'}
               </Text>
             </View>
 

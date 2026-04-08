@@ -1442,6 +1442,7 @@ function MainApp() {
             <HistoryTab
               palette={palette}
               filteredHistory={filteredHistory}
+              historyCount={history.length}
               query={query}
               filterType={filterType}
               dateFilter={dateFilter}
@@ -1459,6 +1460,7 @@ function MainApp() {
               onEditItem={openEditItemModal}
               onDeleteItem={deleteHistoryItem}
               onOpenBarcode={openBarcodePreview}
+              onOpenScanner={() => setActiveTab('scan')}
               visibleScanType={visibleScanType}
             />
           ) : activeTab === 'notes' ? (

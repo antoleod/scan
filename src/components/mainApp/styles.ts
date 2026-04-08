@@ -78,13 +78,13 @@ export const mainAppStyles = StyleSheet.create({
     justifyContent: 'center',
   },
   rowButtons: { flexDirection: 'row', gap: 10, marginTop: 10, flexWrap: 'wrap' },
-  btn: { paddingHorizontal: 14, paddingVertical: 10, borderRadius: 10, borderWidth: 1, borderColor: 'transparent' },
+  btn: { paddingHorizontal: 14, paddingVertical: 10, borderRadius: 10, borderWidth: 1, borderColor: 'transparent', minHeight: 44, justifyContent: 'center' },
   btnContent: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
   btnText: { color: '#fff', fontWeight: '700' },
-  smallBtn: { borderWidth: 1, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8 },
+  smallBtn: { borderWidth: 1, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, minHeight: 44, justifyContent: 'center' },
   actionBtn: { minWidth: 104 },
-  smallActionBtn: { minWidth: 0, paddingHorizontal: 10, paddingVertical: 10 },
-  scanPrimaryBtn: { minWidth: 0, alignSelf: 'flex-start' },
+  smallActionBtn: { minWidth: 0, paddingHorizontal: 10, paddingVertical: 10, minHeight: 44 },
+  scanPrimaryBtn: { minWidth: 0, alignSelf: 'flex-start', minHeight: 44 },
   scanFallbackCard: {
     borderWidth: 1,
     borderRadius: 16,
@@ -122,8 +122,8 @@ export const mainAppStyles = StyleSheet.create({
   filterRow: { flexDirection: 'row', gap: 8, marginBottom: 4, marginTop: 10, flexWrap: 'wrap', width: '100%', maxWidth: '100%' },
   filterBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, width: '100%', maxWidth: '100%', overflow: 'hidden' },
   filterPrimaryRow: { flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1, minWidth: 0, overflow: 'hidden' },
-  filterChip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, flexShrink: 1, minWidth: 0 },
-  filterChipCompact: { paddingHorizontal: 10, paddingVertical: 7, borderRadius: 14, flexShrink: 1, minWidth: 0 },
+  filterChip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, flexShrink: 1, minWidth: 0, minHeight: 44, justifyContent: 'center' },
+  filterChipCompact: { paddingHorizontal: 10, paddingVertical: 7, borderRadius: 14, flexShrink: 1, minWidth: 0, minHeight: 44, justifyContent: 'center' },
   filterChipNoGrow: { flexGrow: 0 },
   listContent: { paddingBottom: 18, width: '100%' },
   historyItemHeader: {
@@ -154,6 +154,7 @@ export const mainAppStyles = StyleSheet.create({
     paddingHorizontal: 4,
     borderRadius: 12,
     position: 'relative',
+    minHeight: 44,
   },
   footerAddBtn: {
     flex: 1,
@@ -189,7 +190,10 @@ export const mainAppStyles = StyleSheet.create({
     borderTopWidth: 1,
   },
   selectionBtn: {
-    padding: 8,
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   modalBackdrop: {
     flex: 1,
@@ -310,8 +314,8 @@ export const mainAppStyles = StyleSheet.create({
     marginBottom: 12,
   },
   modalCloseBtn: {
-    width: 34,
-    height: 34,
+    width: 44,
+    height: 44,
     borderRadius: 17,
     alignItems: 'center',
     justifyContent: 'center',
@@ -427,6 +431,8 @@ export const mainAppStyles = StyleSheet.create({
     borderRadius: 10,
     paddingHorizontal: 10,
     paddingVertical: 8,
+    minHeight: 44,
+    justifyContent: 'center',
   },
   previewModal: {
     width: '100%',

@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { Easing, interpolate, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
@@ -19,13 +19,19 @@ const BRACKET = 22;
 export function ScanViewfinder({
   torchEnabled,
   onToggleTorch,
+  isDesktop = false,
 }: {
   torchEnabled: boolean;
   onToggleTorch: () => void;
+  isDesktop?: boolean;
 }) {
   const lineProgress = useSharedValue(0);
   const pulse = useSharedValue(0);
   const glow = useSharedValue(0);
+  const viewWidth = isDesktop ? 320 : VIEW_W;
+  const viewHeight = isDesktop ? 252 : VIEW_H;
+  const flashSize = isDesktop ? 44 : 36;
+  const hintFontSize = isDesktop ? 13 : 12;
 
   React.useEffect(() => {
     lineProgress.value = withRepeat(withTiming(1, { duration: 1250, easing: Easing.inOut(Easing.cubic) }), -1, true);
@@ -34,7 +40,7 @@ export function ScanViewfinder({
   }, [lineProgress, pulse, glow]);
 
   const lineStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: interpolate(lineProgress.value, [0, 1], [VIEW_H * 0.08, VIEW_H * 0.88]) }],
+    transform: [{ translateY: interpolate(lineProgress.value, [0, 1], [viewHeight * 0.08, viewHeight * 0.88]) }],
     opacity: interpolate(lineProgress.value, [0, 0.1, 0.5, 0.9, 1], [0.2, 1, 1, 1, 0.2]),
   }));
 
@@ -51,9 +57,9 @@ export function ScanViewfinder({
   return (
     <View style={styles.root} pointerEvents="box-none">
       <View style={styles.overlayTop} pointerEvents="none" />
-      <View style={styles.middle} pointerEvents="none">
+      <View style={[styles.middle, { height: viewHeight }]} pointerEvents="none">
         <View style={styles.overlaySide} />
-        <Animated.View style={[styles.viewfinder, pulseStyle]}>
+        <Animated.View style={[styles.viewfinder, { width: viewWidth, height: viewHeight }, pulseStyle]}>
           <Animated.View style={[styles.glowRing, glowStyle]} />
           <View style={styles.grid} />
           <View style={[styles.corner, styles.tl]} />
@@ -67,12 +73,12 @@ export function ScanViewfinder({
       </View>
       <View style={styles.overlayBottom} pointerEvents="none" />
 
-      <Pressable style={styles.flash} onPress={onToggleTorch}>
+      <Pressable style={[styles.flash, { width: flashSize, height: flashSize, borderRadius: flashSize / 2 }]} onPress={onToggleTorch}>
         <Ionicons name={torchEnabled ? 'flash' : 'flash-outline'} size={18} color={C.hintText} />
       </Pressable>
 
       <View style={styles.hintPill} pointerEvents="none">
-        <Text style={styles.hintText}>Apunta el código al recuadro</Text>
+        <Text style={[styles.hintText, { fontSize: hintFontSize }]}>Apunta el codigo al recuadro</Text>
       </View>
     </View>
   );
@@ -88,7 +94,6 @@ const styles = StyleSheet.create({
   },
   middle: {
     flexDirection: 'row',
-    height: VIEW_H,
   },
   overlaySide: {
     flex: 1,
@@ -99,8 +104,6 @@ const styles = StyleSheet.create({
     backgroundColor: C.overlay,
   },
   viewfinder: {
-    width: VIEW_W,
-    height: VIEW_H,
     position: 'relative',
   },
   glowRing: {
@@ -177,9 +180,6 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 14,
     right: 14,
-    width: 36,
-    height: 36,
-    borderRadius: 999,
     backgroundColor: C.flashBg,
     alignItems: 'center',
     justifyContent: 'center',

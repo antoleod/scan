@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { CameraView } from 'expo-camera';
 import type { BarcodeType } from 'expo-camera';
@@ -89,8 +89,9 @@ export function ScanTab({
   laserDuration: number;
   onBarcodeScanned: (data: string) => void;
 }) {
-  const { height } = useWindowDimensions();
-  const cameraHeight = Math.max(320, Math.round(height * 0.65));
+  const { height, width } = useWindowDimensions();
+  const isDesktop = width >= 1024;
+  const cameraHeight = isDesktop ? Math.max(420, Math.round(height * 0.58)) : Math.max(320, Math.round(height * 0.65));
   const [toastVisible, setToastVisible] = React.useState(false);
   const lastCameraEventRef = React.useRef<{ data: string; ts: number }>({ data: '', ts: 0 });
   const toastY = useSharedValue(60);
@@ -123,9 +124,9 @@ export function ScanTab({
   }));
 
   return (
-    <ScrollView style={styles.root} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false} bounces>
+    <ScrollView style={styles.root} contentContainerStyle={[styles.scrollContent, isDesktop ? styles.scrollContentDesktop : null]} showsVerticalScrollIndicator={false} bounces>
       <ScanFeedbackBanner feedback={scanFeedback} palette={{ accent: C.accent }} />
-      <Animated.View style={[styles.toastTop, toastStyle]}>
+      <Animated.View style={[styles.toastTop, isDesktop ? styles.toastTopDesktop : null, toastStyle]}>
         <Text style={styles.toastTitle}>Scanning is taking longer than expected</Text>
         <Text style={styles.toastSubtitle}>Capture a photo to extract the code quickly.</Text>
         <Pressable style={styles.toastBtn} onPress={onTakePicture} disabled={manualCaptureBusy}>
@@ -141,7 +142,7 @@ export function ScanTab({
           </Pressable>
         </View>
       ) : (
-        <View style={[styles.cameraArea, { height: cameraHeight }]}>
+        <View style={[styles.cameraArea, isDesktop ? styles.cameraAreaDesktop : null, { height: cameraHeight }]}>
           <CameraView
             ref={cameraRef}
             style={[styles.camera, isCompactLayout ? styles.cameraCompact : null]}
@@ -161,11 +162,11 @@ export function ScanTab({
               onBarcodeScanned(event.data);
             }}
           />
-          <ScanViewfinder torchEnabled={torchEnabled} onToggleTorch={onToggleTorch} />
+          <ScanViewfinder torchEnabled={torchEnabled} onToggleTorch={onToggleTorch} isDesktop={isDesktop} />
         </View>
       )}
 
-      <View style={styles.bottomPanel}>
+      <View style={[styles.bottomPanel, isDesktop ? styles.bottomPanelDesktop : null]}>
         <View style={styles.scanStatusRow}>
           <View style={[styles.scanDot, { backgroundColor: cameraActive ? '#22c55e' : C.muted }]} />
           <Text style={styles.scanStatusText}>{cameraActive ? (scanState === 'scanning' || scanState === 'detecting' ? 'Scanning active' : 'Scanner ready') : 'Scanner paused'}</Text>
@@ -213,6 +214,10 @@ const styles = StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
   },
+  scrollContentDesktop: {
+    paddingHorizontal: 12,
+    paddingBottom: 18,
+  },
   permissionBox: {
     flex: 1,
     alignItems: 'center',
@@ -231,6 +236,8 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 10,
     backgroundColor: C.accent,
+    minHeight: 44,
+    justifyContent: 'center',
   },
   allowBtnText: {
     color: '#fff',
@@ -241,6 +248,11 @@ const styles = StyleSheet.create({
     width: '100%',
     backgroundColor: '#000',
     overflow: 'hidden',
+  },
+  cameraAreaDesktop: {
+    alignSelf: 'center',
+    maxWidth: 920,
+    borderRadius: 20,
   },
   camera: {
     ...StyleSheet.absoluteFillObject,
@@ -253,6 +265,14 @@ const styles = StyleSheet.create({
     backgroundColor: C.panel,
     paddingTop: 12,
     paddingBottom: 14,
+  },
+  bottomPanelDesktop: {
+    alignSelf: 'center',
+    width: '100%',
+    maxWidth: 920,
+    marginTop: 12,
+    borderRadius: 20,
+    overflow: 'hidden',
   },
   scanStatusRow: {
     flexDirection: 'row',
@@ -282,6 +302,11 @@ const styles = StyleSheet.create({
     padding: 12,
     gap: 8,
   },
+  toastTopDesktop: {
+    alignSelf: 'center',
+    width: '100%',
+    maxWidth: 920,
+  },
   modeRow: {
     flexDirection: 'row',
     gap: 8,
@@ -299,6 +324,7 @@ const styles = StyleSheet.create({
     backgroundColor: C.chip,
     borderWidth: 1,
     borderColor: C.border,
+    minHeight: 44,
   },
   modeBtnActive: {
     backgroundColor: C.accent,
@@ -344,9 +370,9 @@ const styles = StyleSheet.create({
     lineHeight: 15,
   },
   previewClearBtn: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     borderWidth: 1,
     borderColor: C.border,
     alignItems: 'center',
@@ -369,6 +395,8 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 8,
+    minHeight: 44,
+    justifyContent: 'center',
   },
   toastBtnText: {
     color: C.accent,
@@ -376,3 +404,4 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 });
+

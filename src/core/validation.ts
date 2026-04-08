@@ -4,7 +4,7 @@ export const isValidEmail = (email: string): boolean => {
 };
 
 export const isValidIdentifier = (input: string): boolean => {
-    // Valida si es un email o un nombre de usuario alfanumérico de al menos 3 caracteres
+    // Validates whether the value is an email or an alphanumeric username with at least 3 characters
     return isValidEmail(input) || /^[a-zA-Z0-9._-]{3,}$/.test(input);
 };
 
