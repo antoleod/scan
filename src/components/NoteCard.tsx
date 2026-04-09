@@ -59,7 +59,7 @@ function noteColorHex(color?: NoteColor, fallback = 'transparent'): string {
 const SWIPE_WIDTH = 180;
 const SWIPE_THRESHOLD = 60;
 
-// ─── Action pill (footer) ────────────────────────────────────────────────────
+// ─── Footer action pill ──────────────────────────────────────────────────────
 
 function ActionPill({
   icon,
@@ -175,14 +175,16 @@ export function NoteCard({
 }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
 
-  // ── Swipe state (all refs to stay current inside PanResponder) ──────────
-  const translateX = useRef(new Animated.Value(0)).current;
-  const swipeOffsetRef = useRef(0);   // last snapped position (0 or -SWIPE_WIDTH)
-  const swipeOpenRef  = useRef(false);
+  // swipeOpen as both ref (for PanResponder closures) and state (to re-render chevron)
+  const [swipeOpen, setSwipeOpen] = useState(false);
+  const swipeOpenRef   = useRef(false);
+  const swipeOffsetRef = useRef(0);   // last snapped position: 0 or -SWIPE_WIDTH
+  const translateX     = useRef(new Animated.Value(0)).current;
 
   const closeSwipe = useCallback(() => {
     swipeOffsetRef.current = 0;
-    swipeOpenRef.current = false;
+    swipeOpenRef.current   = false;
+    setSwipeOpen(false);
     Animated.spring(translateX, {
       toValue: 0,
       useNativeDriver: true,
@@ -193,7 +195,8 @@ export function NoteCard({
 
   const openSwipe = useCallback(() => {
     swipeOffsetRef.current = -SWIPE_WIDTH;
-    swipeOpenRef.current = true;
+    swipeOpenRef.current   = true;
+    setSwipeOpen(true);
     Animated.spring(translateX, {
       toValue: -SWIPE_WIDTH,
       useNativeDriver: true,
@@ -202,6 +205,12 @@ export function NoteCard({
     }).start();
   }, [translateX]);
 
+  const toggleSwipe = useCallback(() => {
+    if (swipeOpenRef.current) closeSwipe();
+    else openSwipe();
+  }, [closeSwipe, openSwipe]);
+
+  // PanResponder — works for touch on mobile; on PC use the chevron toggle instead
   const panResponder = useMemo(
     () =>
       PanResponder.create({
@@ -210,7 +219,6 @@ export function NoteCard({
           const isHorizontal =
             Math.abs(gs.dx) > 8 && Math.abs(gs.dx) > Math.abs(gs.dy) * 1.5;
           if (!isHorizontal) return false;
-          // When open, capture both directions; when closed, only leftward swipes
           return swipeOpenRef.current ? true : gs.dx < 0;
         },
         onPanResponderGrant: () => {
@@ -222,11 +230,8 @@ export function NoteCard({
         },
         onPanResponderRelease: (_, gs) => {
           const raw = swipeOffsetRef.current + gs.dx;
-          if (raw < -SWIPE_THRESHOLD) {
-            openSwipe();
-          } else {
-            closeSwipe();
-          }
+          if (raw < -SWIPE_THRESHOLD) openSwipe();
+          else closeSwipe();
         },
         onPanResponderTerminate: () => closeSwipe(),
       }),
@@ -248,15 +253,16 @@ export function NoteCard({
   const borderLeftColor = noteColorHex(note.color, palette.border);
 
   // ── Swipe action handlers ────────────────────────────────────────────────
-  const handleReminder = () => { closeSwipe(); onSetReminder(); };
-  const handleArchive  = () => { closeSwipe(); onArchive(); };
+  const handleReminder  = () => { closeSwipe(); onSetReminder(); };
+  const handleArchive   = () => { closeSwipe(); onArchive(); };
   const handleDeleteTap = () => { closeSwipe(); setConfirmDelete(true); };
 
   return (
     <>
-      {/* Outer container — clamps card while revealing swipe actions */}
+      {/* Outer container — clips card so the slide-left reveals the action panel */}
       <View style={{ borderRadius: 14, overflow: 'hidden' }}>
-        {/* ── Swipe actions (sit behind the card) ── */}
+
+        {/* ── Swipe actions (positioned behind the card on the right) ── */}
         <View
           style={{
             position: 'absolute',
@@ -267,12 +273,12 @@ export function NoteCard({
             flexDirection: 'row',
           }}
         >
-          <SwipeAction bg="#2563eb" icon="alarm-outline"   label="Recordar" onPress={handleReminder} />
-          <SwipeAction bg="#7c3aed" icon="archive-outline" label="Archivar"  onPress={handleArchive} />
-          <SwipeAction bg="#dc2626" icon="trash-outline"   label="Eliminar"  onPress={handleDeleteTap} roundRight />
+          <SwipeAction bg="#2563eb" icon="alarm-outline"   label="Remind"  onPress={handleReminder} />
+          <SwipeAction bg="#7c3aed" icon="archive-outline" label="Archive" onPress={handleArchive} />
+          <SwipeAction bg="#dc2626" icon="trash-outline"   label="Delete"  onPress={handleDeleteTap} roundRight />
         </View>
 
-        {/* ── Animated card ── */}
+        {/* ── Animated card — slides left to reveal actions ── */}
         <Animated.View
           style={{ transform: [{ translateX }] }}
           {...panResponder.panHandlers}
@@ -369,10 +375,10 @@ export function NoteCard({
               </Text>
             )}
 
-            {/* ── Color picker (editing mode) ── */}
+            {/* ── Color picker (editing mode only) ── */}
             {editing ? (
               <View style={{ paddingTop: 10, borderTopWidth: 1, borderTopColor: palette.border, gap: 8 }}>
-                <Text style={{ color: palette.textDim, fontSize: 11, fontWeight: '600' }}>Color de la nota</Text>
+                <Text style={{ color: palette.textDim, fontSize: 11, fontWeight: '600' }}>Note color</Text>
                 <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
                   {colorSwatches.map((swatch) => {
                     const active = (note.color ?? 'default') === swatch.key;
@@ -427,13 +433,13 @@ export function NoteCard({
                 {note.archived ? (
                   <View style={{ borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2, backgroundColor: palette.surfaceAlt }}>
                     <Text style={{ color: palette.textMuted, fontSize: 10, fontWeight: '700', letterSpacing: 0.5, textTransform: 'uppercase' }}>
-                      archivada
+                      archived
                     </Text>
                   </View>
                 ) : null}
               </View>
 
-              {/* Action buttons */}
+              {/* Right side: edit save/cancel OR action pills + chevron toggle */}
               {editing ? (
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
                   <Pressable
@@ -453,9 +459,33 @@ export function NoteCard({
                 </View>
               ) : (
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                  <ActionPill icon="copy-outline"         label="Copiar"     color="#0891b2" onPress={onCopy} />
-                  <ActionPill icon="share-social-outline" label="Compartir"  color="#7c3aed" onPress={onShare} />
-                  <ActionPill icon="create-outline"       label="Editar"     color="#059669" onPress={onStartEdit} />
+                  <ActionPill icon="copy-outline"         label="Copy"  color="#0891b2" onPress={onCopy} />
+                  <ActionPill icon="share-social-outline" label="Share" color="#7c3aed" onPress={onShare} />
+                  <ActionPill icon="create-outline"       label="Edit"  color="#059669" onPress={onStartEdit} />
+
+                  {/* Chevron toggle — reliable on PC; also works on mobile alongside swipe */}
+                  <Pressable
+                    onPress={toggleSwipe}
+                    hitSlop={6}
+                    style={({ pressed }) => ({
+                      width: 28,
+                      height: 28,
+                      borderRadius: 999,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      backgroundColor: pressed
+                        ? `${palette.textDim}22`
+                        : swipeOpen
+                          ? `${palette.textDim}14`
+                          : 'transparent',
+                    })}
+                  >
+                    <Ionicons
+                      name={swipeOpen ? 'chevron-forward-outline' : 'chevron-back-outline'}
+                      size={14}
+                      color={palette.textDim}
+                    />
+                  </Pressable>
                 </View>
               )}
             </View>
@@ -481,23 +511,23 @@ export function NoteCard({
           >
             <View style={{ alignSelf: 'center', width: 42, height: 4, borderRadius: 99, backgroundColor: palette.chipBorder }} />
             <Text style={{ color: palette.textBody, fontSize: 15, fontWeight: '600', textAlign: 'center' }}>
-              ¿Eliminar esta nota?
+              Delete this note?
             </Text>
             <Text style={{ color: palette.textMuted, fontSize: 13, textAlign: 'center' }}>
-              Esta acción no se puede deshacer.
+              This action cannot be undone.
             </Text>
             <View style={{ flexDirection: 'row', gap: 10 }}>
               <Pressable
                 onPress={() => setConfirmDelete(false)}
                 style={{ flex: 1, minHeight: 44, borderRadius: 12, borderWidth: 1, borderColor: palette.border, alignItems: 'center', justifyContent: 'center' }}
               >
-                <Text style={{ color: palette.textBody, fontSize: 13, fontWeight: '600' }}>Cancelar</Text>
+                <Text style={{ color: palette.textBody, fontSize: 13, fontWeight: '600' }}>Cancel</Text>
               </Pressable>
               <Pressable
                 onPress={() => { setConfirmDelete(false); onDelete(); }}
                 style={{ flex: 1, minHeight: 44, borderRadius: 12, backgroundColor: '#dc2626', alignItems: 'center', justifyContent: 'center' }}
               >
-                <Text style={{ color: '#fff', fontSize: 13, fontWeight: '700' }}>Eliminar</Text>
+                <Text style={{ color: '#fff', fontSize: 13, fontWeight: '700' }}>Delete</Text>
               </Pressable>
             </View>
           </Pressable>
