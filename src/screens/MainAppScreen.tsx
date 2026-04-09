@@ -30,7 +30,7 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 
 import { AppSettings, BootStatus, PersistenceMode, ScanRecord, ScanState, TemplateRule } from '../types';
 import { defaultSettings, loadSettings, saveSettings } from '../core/settings';
-import { addHistoryUnique, clearHistory, loadHistory, saveHistory, historyKey, normalizeHistoryType, createHistoryId } from '../core/history';
+import { addHistoryUnique, clearHistory, loadHistory, markHistoryDeleted, saveHistory, historyKey, normalizeHistoryType, createHistoryId } from '../core/history';
 import { loadTemplates, saveTemplate, saveTemplates } from '../core/templates';
 import { addPendingCapture, clearPendingCaptures, loadPendingCaptures, removePendingCapture, updatePendingCapture, type PendingCaptureRecord } from '../core/captures';
 import { diag } from '../core/diagnostics';
@@ -67,6 +67,7 @@ import { SelectionFooter } from '../components/mainApp/SelectionFooter';
 import { SettingsTab } from '../components/mainApp/tabs/SettingsTab';
 import { hardDeleteAllNotes, hardDeleteAllTemplates, saveNotes as saveWorkNotes, saveTemplates as saveNoteTemplates } from '../core/notes';
 import { clearClipboardEntries } from '../core/clipboard';
+import { loadDeletedHistoryKeys } from '../core/historyDeletions';
 
 type Tab = 'scan' | 'history' | 'notes' | 'settings';
 type DateFilter = 'ALL' | 'TODAY' | 'WEEK' | 'MONTH';
@@ -189,7 +190,7 @@ function MainApp() {
   const laserAnim = useRef(new Animated.Value(0)).current;
   const entryDraftRef = useRef<EntryDraftSnapshot | null>(null);
   const entryOpenLockRef = useRef(false);
-  const deletedHistoryIdsRef = useRef<Set<string>>(new Set());
+  const deletedHistoryKeysRef = useRef<Set<string>>(new Set());
 
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const isCompactLayout = width < 390 || height < 780;
@@ -291,6 +292,7 @@ function MainApp() {
         setHistory(finalHistory);
         setTemplates(loadedTemplates || []);
         setPendingCaptures(loadedCaptures || []);
+        deletedHistoryKeysRef.current = await loadDeletedHistoryKeys();
 
         const rt = await Promise.race([initFirebaseRuntime(), timeout]);
         setPersistenceMode(rt.enabled ? 'firebase' : 'local');
@@ -1029,7 +1031,7 @@ function MainApp() {
 
     subscribeToScans((serverScans) => {
       setHistory((current) => {
-        const filtered = serverScans.filter((s) => !deletedHistoryIdsRef.current.has(s.id));
+        const filtered = serverScans.filter((s) => !deletedHistoryKeysRef.current.has(historyKey(s)));
         const localKeys = new Set(current.map((x) => historyKey(x)));
         const newFromServer = filtered.filter((s) => !localKeys.has(historyKey(s)));
         if (!newFromServer.length) return current;
@@ -1065,6 +1067,7 @@ function MainApp() {
 
     await clearHistory();
     await saveHistory([]);
+    deletedHistoryKeysRef.current = new Set();
     setHistory([]);
     setSelection(new Set());
     await diag.info('history.cleared');
@@ -1093,6 +1096,7 @@ function MainApp() {
     await clearHistory();
     await saveHistory([]);
     await clearPendingCaptures();
+    deletedHistoryKeysRef.current = new Set();
     setHistory([]);
     setPendingCaptures([]);
     setSelection(new Set());
@@ -1318,7 +1322,9 @@ function MainApp() {
   }
 
   async function deleteHistoryItem(item: ScanRecord) {
-    deletedHistoryIdsRef.current.add(item.id);
+    const key = historyKey(item);
+    deletedHistoryKeysRef.current.add(key);
+    await markHistoryDeleted(item);
     const next = history.filter((entry) => entry.id !== item.id);
     setHistory(next);
     setSelection((current) => {

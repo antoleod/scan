@@ -13,8 +13,21 @@ service cloud.firestore {
       return request.resource.data.keys().hasOnly(allowed);
     }
 
-    function noteValid() {
+    function noteTombstoneValid() {
       return hasOnlyKeys([
+        'id',
+        'deletedAt',
+        'uid',
+        'updatedAtServer'
+      ])
+      && request.resource.data.id is string
+      && request.resource.data.deletedAt is number
+      && request.resource.data.uid == request.auth.uid;
+    }
+
+    function noteValid() {
+      return noteTombstoneValid() || (
+        hasOnlyKeys([
         'id',
         'kind',
         'category',
@@ -43,7 +56,8 @@ service cloud.firestore {
       && (!('groupId' in request.resource.data) || request.resource.data.groupId is string)
       && (!('color' in request.resource.data) || request.resource.data.color in ['default', 'amber', 'mint', 'sky', 'rose'])
       && (!('archived' in request.resource.data) || request.resource.data.archived is bool)
-      && (!('deletedAt' in request.resource.data) || request.resource.data.deletedAt is number);
+      && (!('deletedAt' in request.resource.data) || request.resource.data.deletedAt is number)
+      );
     }
 
     function templateValid() {

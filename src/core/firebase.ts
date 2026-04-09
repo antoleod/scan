@@ -32,6 +32,7 @@ import { ScanRecord } from '../types';
 import type { NoteItem, NoteTemplate } from './notes';
 import { diag } from './diagnostics';
 import { loadDeletedNoteKeys, noteStorageKey } from './noteDeletions';
+import { loadDeletedHistoryKeys, markDeletedHistoryKey } from './historyDeletions';
 
 const REQUIRED_FIREBASE_ENV = [
   'EXPO_PUBLIC_FIREBASE_API_KEY',
@@ -247,9 +248,13 @@ export async function syncScansWithFirebase(local: ScanRecord[]) {
 
   const uid = user.uid;
   const scansRef = collection(rt.db, 'users', uid, 'scans');
+  const deletedKeys = await loadDeletedHistoryKeys();
 
   let pushed = 0;
   for (const scan of local.filter((x) => x.status === 'pending')) {
+    if (deletedKeys.has(`${String(scan.codeValue || scan.codeNormalized || '').trim()}::${normalizeScanType(scan.type)}`)) {
+      continue;
+    }
     const docId = `${scan.profileId}_${scan.codeNormalized}_${new Date(scan.date).getTime()}`.replace(/[^A-Za-z0-9_-]/g, '_');
     await setDoc(doc(scansRef, docId), { ...scan, uid, updatedAt: serverTimestamp() }, { merge: true });
     pushed += 1;
@@ -259,6 +264,8 @@ export async function syncScansWithFirebase(local: ScanRecord[]) {
   const server: ScanRecord[] = [];
   snap.forEach((d) => {
     const x = d.data() as ScanRecord;
+    const key = `${String(x.codeValue || x.codeNormalized || '').trim()}::${normalizeScanType(x.type)}`;
+    if (x.deletedAt || deletedKeys.has(key)) return;
     if (!x.id) x.id = d.id;
     server.push(x);
   });
@@ -278,13 +285,19 @@ export async function deleteScanFromFirebase(scan: ScanRecord): Promise<void> {
   const scansRef = collection(rt.db, 'users', user.uid, 'scans');
   const snap = await getDocs(query(scansRef));
   const targetKey = `${String(scan.codeValue || scan.codeNormalized || '').trim()}::${normalizeScanType(scan.type)}`;
+  await markDeletedHistoryKey(targetKey);
   const deletions: Promise<unknown>[] = [];
 
   snap.forEach((d) => {
     const data = d.data() as ScanRecord;
     const rowKey = `${String(data.codeValue || data.codeNormalized || '').trim()}::${normalizeScanType(data.type)}`;
     if (d.id === scan.id || String(data.id || '') === scan.id || rowKey === targetKey) {
-      deletions.push(deleteDoc(doc(scansRef, d.id)));
+      deletions.push(setDoc(doc(scansRef, d.id), {
+        id: data.id || d.id,
+        deletedAt: Date.now(),
+        uid: user.uid,
+        updatedAt: serverTimestamp(),
+      }, { merge: true }));
     }
   });
 
@@ -304,6 +317,7 @@ export async function subscribeToScans(
     const scans: ScanRecord[] = [];
     snap.forEach((d) => {
       const x = d.data() as ScanRecord;
+      if (x.deletedAt) return;
       scans.push({ ...x, id: x.id || d.id });
     });
     callback(scans);
