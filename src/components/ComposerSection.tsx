@@ -161,6 +161,8 @@ export const ComposerSection = forwardRef<TextInput, {
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             {actionItems.map((item) => {
               const active = item.active;
+              const iconColor = item.key === 'save' ? '#7CFF6B' : active ? palette.accent : palette.textDim;
+              const borderColor = item.key === 'save' && !active ? '#2E7D32' : active ? palette.accent : palette.chipBorder;
               return (
                 <View key={item.key} style={{ alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
                   {hoveredAction === item.key ? (
@@ -196,13 +198,13 @@ export const ComposerSection = forwardRef<TextInput, {
                       borderRadius: 10,
                       backgroundColor: palette.surfaceAlt,
                       borderWidth: 1,
-                      borderColor: active ? palette.accent : palette.chipBorder,
+                      borderColor,
                       alignItems: 'center',
                       justifyContent: 'center',
                       opacity: pressed ? 0.84 : 1,
                     })}
                   >
-                    <MaterialCommunityIcons name={item.icon} size={isCompact ? 17 : 18} color={active ? palette.accent : palette.textDim} />
+                    <MaterialCommunityIcons name={item.icon} size={isCompact ? 17 : 18} color={iconColor} />
                   </Pressable>
                 </View>
               );

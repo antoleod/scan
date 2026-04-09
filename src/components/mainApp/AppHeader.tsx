@@ -51,6 +51,7 @@ function SyncChip({
 }) {
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const [, setTick] = useState(0);
+  const [pressed, setPressed] = useState(false);
 
   useEffect(() => {
     if (!lastSyncedAt) return;
@@ -65,15 +66,6 @@ function SyncChip({
     return () => clearInterval(id);
   }, [lastSyncedAt]);
 
-  if (persistenceMode === 'local') {
-    return (
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-        <Ionicons name="cloud-offline-outline" size={14} color={muted} />
-        <Text style={{ color: muted, fontSize: 11 }}>local</Text>
-      </View>
-    );
-  }
-
   if (syncBusy) {
     return (
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
@@ -84,11 +76,11 @@ function SyncChip({
   }
 
   return (
-    <Pressable onPress={onPress} hitSlop={10} style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+    <Pressable onPress={onPress} hitSlop={10} onPressIn={() => setPressed(true)} onPressOut={() => setPressed(false)} style={{ flexDirection: 'row', alignItems: 'center', gap: 4, opacity: pressed ? 0.85 : 1 }}>
       <Animated.View style={{ opacity: fadeAnim, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-        <Ionicons name="checkmark-circle-outline" size={14} color={accent} />
+        <Ionicons name="sync-circle-outline" size={14} color={accent} />
         <Text style={{ color: muted, fontSize: 11 }}>
-          {lastSyncedAt ? formatSyncTime(lastSyncedAt) : 'sin sync'}
+          {persistenceMode === 'firebase' ? (lastSyncedAt ? formatSyncTime(lastSyncedAt) : 'auto sync') : 'local'}
         </Text>
       </Animated.View>
     </Pressable>

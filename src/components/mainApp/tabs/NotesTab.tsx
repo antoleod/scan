@@ -184,7 +184,7 @@ export function NotesTab({ palette }: { palette: Palette }) {
   const [shareNote, setShareNote] = useState<NoteItem | null>(null);
   const [generatorVisible, setGeneratorVisible] = useState(false);
   const [detailNote, setDetailNote] = useState<NoteItem | null>(null);
-  const [versionNote, setVersionNote] = useState<NoteItem | null>(null);
+  const [versionNoteId, setVersionNoteId] = useState<string | null>(null);
   const { toast, show: showToast, hide: hideToast } = useToast();
   const [searchText, setSearchText] = useState('');
   const [searchCategory, setSearchCategory] = useState<'all' | string>('all');
@@ -601,6 +601,15 @@ export function NotesTab({ palette }: { palette: Palette }) {
     setTemplateBody('');
   }
 
+  function createTemplateFromSuggestion(text: string, category: NoteCategory) {
+    setWorkspaceTab('templates');
+    setEditingTemplateId(null);
+    setTemplateName(text.slice(0, 40) || 'Generated template');
+    setTemplateTo('');
+    setTemplateSubject(category === 'work' ? 'Work update' : 'General note');
+    setTemplateBody(text);
+  }
+
   async function createOutlookEventFromContent(raw: string) {
     const dt = parseFollowUpDate(raw);
     if (!dt) return;
@@ -963,7 +972,7 @@ export function NotesTab({ palette }: { palette: Palette }) {
                             onCopy={() => forceCopyToClipboard(note.text).catch(() => undefined)}
                             onSaveToDevice={() => saveNoteToDevice(note).catch(() => undefined)}
                             onShare={() => setShareNote(note)}
-                            onOpenVersions={() => setVersionNote(note)}
+                            onOpenVersions={() => setVersionNoteId(note.id)}
                             onSetReminder={() => createQuickReminderFromNote(note).catch(() => undefined)}
                             onArchive={() => toggleArchived(note.id).then(setNotes)}
                             onDelete={() => removeNote(note.id).then(setNotes)}
@@ -1208,6 +1217,7 @@ export function NotesTab({ palette }: { palette: Palette }) {
           setFilter('all');
           if (result.inserted) showToast('Note created');
         }}
+        onCreateTemplate={({ text, category }) => createTemplateFromSuggestion(text, category)}
       />
       </ScrollView>
 
@@ -1233,47 +1243,88 @@ export function NotesTab({ palette }: { palette: Palette }) {
       />
 
       {/* ── Toast ── */}
-      <Modal animationType="fade" transparent visible={Boolean(versionNote)} onRequestClose={() => setVersionNote(null)} statusBarTranslucent>
-        <Pressable style={mainAppStyles.modalBackdrop} onPress={() => setVersionNote(null)}>
+      {(() => {
+        const versionNote = versionNoteId ? notes.find((n) => n.id === versionNoteId) ?? null : null;
+        const versions = versionNote
+          ? [
+              { id: `${versionNote.id}_current`, title: versionNote.title, text: versionNote.text, createdAt: versionNote.updatedAt, isCurrent: true as const },
+              ...((versionNote.versions || []).map((entry) => ({ ...entry, isCurrent: false as const }))),
+            ]
+          : [];
+
+        if (!versionNote) return null;
+
+        return (
+      <Modal animationType="fade" transparent visible={Boolean(versionNote)} onRequestClose={() => setVersionNoteId(null)} statusBarTranslucent>
+        <Pressable style={mainAppStyles.modalBackdrop} onPress={() => setVersionNoteId(null)}>
           <Pressable style={[mainAppStyles.modalForm, { backgroundColor: palette.card, borderColor: palette.border, maxWidth: 640 }]} onPress={() => null}>
             <View style={mainAppStyles.modalHeader}>
               <Text style={[mainAppStyles.sectionTitle, { color: palette.fg }]}>Note versions</Text>
-              <Pressable style={[mainAppStyles.modalCloseBtn, { borderColor: palette.border }]} onPress={() => setVersionNote(null)}>
+              <Pressable style={[mainAppStyles.modalCloseBtn, { borderColor: palette.border }]} onPress={() => setVersionNoteId(null)}>
                 <Ionicons name="close" size={18} color={palette.fg} />
               </Pressable>
             </View>
-            {versionNote?.versions?.length ? (
+            {versions.length ? (
               <View style={{ gap: 10 }}>
-                {versionNote.versions.map((version) => (
-                  <View key={version.id} style={{ borderWidth: 1, borderColor: palette.border, borderRadius: 12, padding: 12, gap: 10 }}>
+                {versions.map((version) => (
+                  <View key={version.id} style={{ borderWidth: 1, borderColor: palette.border, borderRadius: 12, padding: 12, gap: 10, backgroundColor: version.isCurrent ? palette.bg : palette.card }}>
                     <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                      <Text style={{ color: palette.fg, fontWeight: '700', fontSize: 13 }} numberOfLines={1}>
-                        {new Date(version.createdAt).toLocaleString()}
-                      </Text>
+                      <View style={{ flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                        <Ionicons
+                          name={version.isCurrent ? 'ellipse' : 'git-branch-outline'}
+                          size={12}
+                          color={version.isCurrent ? palette.accent : palette.muted}
+                        />
+                        <Text style={{ color: palette.fg, fontWeight: '700', fontSize: 13 }} numberOfLines={1}>
+                          {version.isCurrent ? 'Current version' : new Date(version.createdAt).toLocaleString()}
+                        </Text>
+                      </View>
                       <View style={{ flexDirection: 'row', gap: 8 }}>
                         <Pressable
-                          style={[styles.previewBtn, { borderColor: palette.border }]}
+                          style={[styles.previewBtn, { borderColor: palette.border, flexDirection: 'row', gap: 8, alignItems: 'center', paddingHorizontal: 16, minWidth: 104 }]}
                           onPress={() => {
                             if (!versionNote) return;
+                            if (version.isCurrent) return;
                             createBranchFromNoteVersion(versionNote.id, version.id).then(setNotes).catch(() => undefined);
                           }}
                         >
+                          <Ionicons name="git-branch-outline" size={14} color={palette.fg} />
                           <Text style={{ color: palette.fg, fontSize: 12, fontWeight: '700' }}>Branch</Text>
                         </Pressable>
                         <Pressable
-                          style={[styles.previewBtn, { backgroundColor: palette.accent, borderColor: palette.accent }]}
+                          style={[styles.previewBtn, { backgroundColor: palette.accent, borderColor: palette.accent, flexDirection: 'row', gap: 8, alignItems: 'center', paddingHorizontal: 16, minWidth: 104 }]}
                           onPress={() => {
-                            if (!versionNote) return;
-                            mergeNoteVersion(versionNote.id, version.id).then((next) => { setNotes(next); setVersionNote(next.find((n) => n.id === versionNote.id) ?? null); }).catch(() => undefined);
+                            if (!versionNote || version.isCurrent) return;
+                            mergeNoteVersion(versionNote.id, version.id).then((next) => { setNotes(next); setVersionNoteId(versionNote.id); }).catch(() => undefined);
                           }}
                         >
+                          <Ionicons name="git-merge-outline" size={14} color="#000" />
                           <Text style={{ color: '#000', fontSize: 12, fontWeight: '800' }}>Merge</Text>
                         </Pressable>
                       </View>
                     </View>
-                    <Text style={{ color: palette.muted, fontSize: 12, lineHeight: 18 }} numberOfLines={4}>
-                      {version.text}
-                    </Text>
+                    <View style={{ borderWidth: 1, borderColor: palette.border, borderRadius: 10, overflow: 'hidden' }}>
+                      <View style={{ flexDirection: 'row' }}>
+                        <View style={{ flex: 1, padding: 10, gap: 6, borderRightWidth: 1, borderRightColor: palette.border, backgroundColor: palette.card }}>
+                      <Text style={{ color: palette.muted, fontSize: 10, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 }}>Current</Text>
+                      <Text style={{ color: palette.muted, fontSize: 11, lineHeight: 16 }}>
+                        {new Date(versionNote.updatedAt).toLocaleString()}
+                      </Text>
+                      <Text style={{ color: palette.fg, fontSize: 12, lineHeight: 18 }} numberOfLines={4}>
+                        {versionNote?.text || '-'}
+                      </Text>
+                    </View>
+                    <View style={{ flex: 1, padding: 10, gap: 6, backgroundColor: palette.card }}>
+                      <Text style={{ color: palette.accent, fontSize: 10, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 }}>Mirror</Text>
+                      <Text style={{ color: palette.muted, fontSize: 11, lineHeight: 16 }}>
+                        {version.isCurrent ? new Date(version.createdAt).toLocaleString() : new Date(version.createdAt).toLocaleString()}
+                      </Text>
+                      <Text style={{ color: palette.fg, fontSize: 12, lineHeight: 18 }} numberOfLines={4}>
+                        {version.text}
+                      </Text>
+                        </View>
+                      </View>
+                    </View>
                   </View>
                 ))}
               </View>
@@ -1283,6 +1334,8 @@ export function NotesTab({ palette }: { palette: Palette }) {
           </Pressable>
         </Pressable>
       </Modal>
+        );
+      })()}
 
       <Toast toast={toast} onHide={hideToast} />
 

@@ -40,6 +40,7 @@ import {
 import { isDeviceOnline } from '../core/network';
 import { loadSettings } from '../core/settings';
 import { isValidIdentifier } from '../core/validation';
+import { useCtrlEnterSave } from '../hooks/useCtrlEnterSave';
 import { useAuth } from './useAuth';
 
 const fullBrandingText = 'ORYXEN TECH \u00b7 ORYXEN SCANNER \u00b7 SECURE TRAIL';
@@ -656,6 +657,10 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
       setIsLoading(false);
     }
   };
+
+  useCtrlEnterSave(() => {
+    void handleSignIn();
+  }, true);
 
   const handleGuestAccess = async () => {
     enterAsGuest();

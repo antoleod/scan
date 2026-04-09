@@ -180,9 +180,22 @@ export function NoteCard({
   onDoubleTap?: () => void;
 }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const heartPulse = useRef(new Animated.Value(1)).current;
 
   // Double-tap detection
   const lastTapRef = useRef<number>(0);
+
+  useEffect(() => {
+    if (!note.attachments?.length) return;
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(heartPulse, { toValue: 1.12, duration: 700, useNativeDriver: true }),
+        Animated.timing(heartPulse, { toValue: 1, duration: 700, useNativeDriver: true }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [heartPulse, note.attachments?.length]);
 
   // swipeOpen as both ref (for PanResponder closures) and state (to re-render chevron)
   const [swipeOpen, setSwipeOpen] = useState(false);
@@ -277,7 +290,7 @@ export function NoteCard({
   return (
     <>
       {/* Outer container — clips card so the slide-left reveals the action panel */}
-      <View style={{ borderRadius: 14, overflow: 'hidden' }}>
+      <View style={{ borderRadius: 14, overflow: 'hidden', position: 'relative' }}>
 
         {/* ── Swipe actions (positioned behind the card on the right) ── */}
         <View
@@ -288,6 +301,7 @@ export function NoteCard({
             bottom: 0,
             width: SWIPE_WIDTH,
             flexDirection: 'row',
+            zIndex: 1,
           }}
         >
           <SwipeAction bg="#2563eb" icon="alarm-outline"   label="Remind"  onPress={handleReminder} />
@@ -297,7 +311,8 @@ export function NoteCard({
 
         {/* ── Animated card — slides left to reveal actions ── */}
         <Animated.View
-          style={{ transform: [{ translateX }] }}
+          pointerEvents="box-none"
+          style={{ transform: [{ translateX }], zIndex: 2 }}
           {...panResponder.panHandlers}
         >
           <Pressable
@@ -374,11 +389,26 @@ export function NoteCard({
 
             {/* ── Image attachment thumbnail ── */}
             {firstAttachment ? (
-              <Pressable onPress={() => onOpenImage(firstAttachment)}>
+              <Pressable onPress={() => onOpenImage(firstAttachment)} style={{ position: 'relative' }}>
                 <Image
                   source={{ uri: firstAttachment }}
                   style={{ width: '100%', height: 120, borderRadius: 10, backgroundColor: palette.surfaceAlt }}
                   resizeMode="cover"
+                />
+                <Animated.View
+                  pointerEvents="none"
+                  style={{
+                    position: 'absolute',
+                    inset: 0,
+                    borderRadius: 10,
+                    borderWidth: 1,
+                    borderColor: 'rgba(255,122,89,0.52)',
+                    backgroundColor: 'rgba(255,122,89,0.10)',
+                    opacity: heartPulse.interpolate({
+                      inputRange: [1, 1.12],
+                      outputRange: [0.18, 0.38],
+                    }),
+                  }}
                 />
               </Pressable>
             ) : null}

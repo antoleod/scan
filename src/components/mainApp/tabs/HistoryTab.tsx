@@ -11,7 +11,8 @@ import { MiniCalendar } from '../../SearchFilterBar';
 type Palette = { bg: string; fg: string; accent: string; muted: string; card: string; border: string };
 type DateFilter = 'ALL' | 'TODAY' | 'WEEK' | 'MONTH';
 
-const PRIMARY_FILTERS = ['ALL', 'PI', 'RITM', 'REQ', 'INC'];
+const PRIMARY_FILTERS = ['ALL', 'INC'];
+const HIDDEN_BY_DEFAULT = ['PI', 'RITM', 'REQ'];
 
 function formatType(type: string) {
   return String(type || '').trim().toUpperCase() || 'OTHER';
@@ -96,10 +97,10 @@ export function HistoryTab({
 
   const allFilterTypes = useMemo(() => {
     const discovered = Array.from(new Set(filteredHistory.map((item) => formatType(visibleScanType(item.type)))));
-    return Array.from(new Set([...PRIMARY_FILTERS, ...discovered]));
+    return Array.from(new Set([...PRIMARY_FILTERS, ...HIDDEN_BY_DEFAULT, ...discovered]));
   }, [filteredHistory, visibleScanType]);
 
-  const hiddenFilters = useMemo(() => allFilterTypes.filter((type) => !PRIMARY_FILTERS.includes(type)), [allFilterTypes]);
+  const hiddenFilters = useMemo(() => allFilterTypes.filter((type) => !PRIMARY_FILTERS.includes(type) && type !== 'ALL'), [allFilterTypes]);
   const emptyStateTitle = historyCount === 0 ? 'Scan a code to get started' : 'No results';
   const emptyStateText = historyCount === 0
     ? 'Your history appears here after you scan or paste a code.'
@@ -338,7 +339,7 @@ export function HistoryTab({
               </Pressable>
             </View>
             <ScrollView contentContainerStyle={mainAppStyles.moreSheetGrid}>
-              {hiddenFilters.map((type) => (
+              {filterType === 'ALL' ? hiddenFilters.map((type) => (
                 <Pressable
                   key={type}
                   onPress={() => {
@@ -349,7 +350,9 @@ export function HistoryTab({
                 >
                   <Text style={{ color: filterType === type ? '#fff' : palette.fg, fontSize: 12, fontWeight: '700' }}>{type}</Text>
                 </Pressable>
-              ))}
+              )) : (
+                <Text style={{ color: palette.muted, fontSize: 11 }}>Open ALL to reveal PI, RITM, and REQ.</Text>
+              )}
             </ScrollView>
           </Pressable>
         </Pressable>
@@ -388,8 +391,9 @@ export function HistoryTab({
               </Pressable>
               <Pressable
                 style={({ pressed }) => [{ flex: 1, borderRadius: 10, minHeight: 40, alignItems: 'center', justifyContent: 'center', backgroundColor: '#b91c1c', opacity: pressed ? 0.82 : 1 }]}
-                onPress={() => {
-                  if (deleteTarget) void onDeleteItem(deleteTarget);
+                onPress={async () => {
+                  if (!deleteTarget) return;
+                  await onDeleteItem(deleteTarget);
                   setDeleteTarget(null);
                 }}
               >

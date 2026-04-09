@@ -6,9 +6,11 @@ import {
   ScrollView,
   Text,
   TextInput,
+  Platform,
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useCtrlEnterSave } from '../hooks/useCtrlEnterSave';
 
 type NoteCategory = 'general' | 'work';
 type NoteColor   = 'default' | 'amber' | 'mint' | 'sky' | 'rose';
@@ -87,12 +89,18 @@ export function NoteDetailModal({
     }
   }, [visible, note?.id]);
 
+  const hasChanges = Boolean(note) && (
+    localTitle.trim() !== (note?.title ?? '') ||
+    localText.trim() !== (note?.text ?? '').trim()
+  );
+
+  useCtrlEnterSave(() => {
+    if (!note || !hasChanges) return;
+    onSave(note.id, localTitle, localText);
+  }, visible && Boolean(note) && hasChanges);
+
   // Early return MUST come after all hooks
   if (!note) return null;
-
-  const hasChanges =
-    localTitle.trim() !== (note.title ?? '') ||
-    localText.trim()  !== note.text.trim();
 
   const handleClose = () => {
     Keyboard.dismiss();
@@ -229,6 +237,14 @@ export function NoteDetailModal({
                 paddingBottom: localTitle ? 8 : 0,
                 marginBottom: localTitle ? 4 : 0,
               }}
+              onKeyPress={(event) => {
+                if (Platform.OS !== 'web') return;
+                const nativeEvent = event.nativeEvent as { key?: string; ctrlKey?: boolean; metaKey?: boolean };
+                if ((nativeEvent.ctrlKey || nativeEvent.metaKey) && nativeEvent.key === 'Enter') {
+                  event.preventDefault?.();
+                  handleClose();
+                }
+              }}
             />
 
             {/* Body */}
@@ -245,6 +261,14 @@ export function NoteDetailModal({
                 lineHeight: 24,
                 textAlignVertical: 'top',
                 minHeight: 180,
+              }}
+              onKeyPress={(event) => {
+                if (Platform.OS !== 'web') return;
+                const nativeEvent = event.nativeEvent as { key?: string; ctrlKey?: boolean; metaKey?: boolean };
+                if ((nativeEvent.ctrlKey || nativeEvent.metaKey) && nativeEvent.key === 'Enter') {
+                  event.preventDefault?.();
+                  handleClose();
+                }
               }}
             />
 

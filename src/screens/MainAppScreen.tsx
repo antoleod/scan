@@ -237,7 +237,7 @@ function MainApp() {
     setScanState('scanning');
     const detectingTimer = setTimeout(() => {
       setScanState((current) => (current === 'scanning' ? 'detecting' : current));
-    }, 700);
+    }, 350);
     const timeoutTimer = setTimeout(() => {
       setScanState((current) => {
         if (current === 'success') return current;
@@ -245,8 +245,8 @@ function MainApp() {
       });
       setTimeout(() => {
         setScanState((current) => (current === 'timeout' ? 'manual_capture_ready' : current));
-      }, 120);
-    }, 2500);
+      }, 80);
+    }, 1600);
 
     scanTimersRef.current.detecting = detectingTimer;
     scanTimersRef.current.timeout = timeoutTimer;
@@ -455,12 +455,12 @@ function MainApp() {
     if (!payload) return;
     const now = Date.now();
     const last = autoCaptureRef.current;
-    if (last && last.payload === payload && now - last.ts < 1500) return;
+    if (last && last.payload === payload && now - last.ts < 900) return;
     autoCaptureRef.current = { payload, ts: now };
 
     try {
       const picture = await cameraRef.current.takePictureAsync({
-        quality: 0.45,
+        quality: 0.6,
         base64: false,
         exif: false,
         skipProcessing: true,
@@ -691,7 +691,7 @@ function MainApp() {
     setScanState('saving_photo');
 
     try {
-      const results = await scanFromURLAsync(uri, [...IMAGE_SCAN_BARCODE_TYPES]);
+      const results = await scanFromURLAsync(uri, ['qr', ...IMAGE_SCAN_BARCODE_TYPES.filter((type) => type !== 'qr')]);
       const payload = results.find((item) => String(item.data || '').trim())?.data;
       if (!payload) {
         setScanState('error');
@@ -717,7 +717,7 @@ function MainApp() {
 
     try {
       const picture = await cameraRef.current.takePictureAsync({
-        quality: 0.65,
+        quality: 0.72,
         base64: false,
         exif: false,
         skipProcessing: true,
@@ -728,7 +728,7 @@ function MainApp() {
         throw new Error('Could not take picture.');
       }
 
-      const results = await scanFromURLAsync(picture.uri, [...IMAGE_SCAN_BARCODE_TYPES]);
+      const results = await scanFromURLAsync(picture.uri, ['qr', ...IMAGE_SCAN_BARCODE_TYPES.filter((type) => type !== 'qr')]);
       const payload = results.find((item) => String(item.data || '').trim())?.data;
       const expectedType = results[0]?.type === 'qr' ? 'QR' : results.length > 0 ? 'BARCODE' : 'unknown';
 
@@ -747,14 +747,14 @@ function MainApp() {
       }
 
       setScanState('saved');
-      scanCooldownRef.current = Date.now() + 1200;
-      restartScannerSessionSoon(1300);
+      scanCooldownRef.current = Date.now() + 700;
+      restartScannerSessionSoon(700);
       showFeedback('success', payload ? 'Photo saved and extracted' : 'Photo saved locally');
     } catch (error) {
       setScanState('error');
       await diag.warn('capture.save.error', { message: String(error) });
       Alert.alert('Error', `Could not save the photo: ${String(error)}`);
-      restartScannerSessionSoon(1000);
+      restartScannerSessionSoon(700);
     } finally {
       setManualCaptureBusy(false);
     }

@@ -258,12 +258,14 @@ export function SmartNoteGeneratorModal({
   palette,
   onClose,
   onSelect,
+  onCreateTemplate,
 }: {
   visible: boolean;
   palette: Palette;
   onClose: () => void;
   /** Called with the chosen note text + category. The parent creates the note. */
   onSelect: (suggestion: SmartSuggestion) => void;
+  onCreateTemplate: (suggestion: SmartSuggestion) => void;
 }) {
   const [keyword, setKeyword] = useState('');
   const [suggestions, setSuggestions] = useState<SmartSuggestion[]>([]);
@@ -492,18 +494,32 @@ export function SmartNoteGeneratorModal({
                     <Text style={{ color: palette.textBody, fontSize: 13, flex: 1, lineHeight: 18 }}>
                       {s.text}
                     </Text>
-                    <View style={{
-                      paddingHorizontal: 6,
-                      paddingVertical: 2,
-                      borderRadius: 4,
-                      backgroundColor: `${catColor(s.category)}18`,
-                    }}>
-                      <Text style={{ color: catColor(s.category), fontSize: 9, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.4 }}>
-                        {s.category}
-                      </Text>
-                    </View>
-                  </Pressable>
-                ))}
+                      <View style={{
+                        paddingHorizontal: 6,
+                        paddingVertical: 2,
+                        borderRadius: 4,
+                        backgroundColor: `${catColor(s.category)}18`,
+                      }}>
+                        <Text style={{ color: catColor(s.category), fontSize: 9, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.4 }}>
+                          {s.category}
+                        </Text>
+                      </View>
+                      <Pressable
+                        onPress={() => onCreateTemplate(s)}
+                        hitSlop={8}
+                        style={({ pressed }) => ({
+                          paddingHorizontal: 8,
+                          paddingVertical: 4,
+                          borderRadius: 999,
+                          borderWidth: 1,
+                          borderColor: palette.border,
+                          backgroundColor: pressed ? `${palette.accent}14` : palette.surface,
+                        })}
+                      >
+                        <Text style={{ color: palette.textDim, fontSize: 10, fontWeight: '700' }}>Template</Text>
+                      </Pressable>
+                    </Pressable>
+                  ))}
               </>
             )}
           </ScrollView>
