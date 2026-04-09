@@ -39,6 +39,7 @@ import {
 } from '../../../core/notes';
 import { ClipboardEntry } from '../../../core/clipboard.types';
 import { addClipboardEntryUnique, addClipboardImageUnique, loadClipboardEntries, removeClipboardEntriesByDay, removeClipboardEntriesByIds, updateClipboardEntryCategory } from '../../../core/clipboard';
+import { loadDeletedNoteKeys, markDeletedNoteKey, noteStorageKey } from '../../../core/noteDeletions';
 import { ClipboardScreen } from '../../../screens/ClipboardScreen';
 import { mainAppStyles } from '../styles';
 import { TabBar } from '../../TabBar';
@@ -136,6 +137,20 @@ function mergeNotesByNewest(local: NoteItem[], incoming: NoteItem[]): NoteItem[]
   return Array.from(map.values()).sort((a, b) => (a.pinned === b.pinned ? b.updatedAt - a.updatedAt : a.pinned ? -1 : 1));
 }
 
+function noteKey(note: Pick<NoteItem, 'id' | 'groupId'>): string {
+  return noteStorageKey(note.id, note.groupId ? 'group' : 'personal', note.groupId);
+}
+
+function mergeNotesRespectingDeletes(current: NoteItem[], incoming: NoteItem[], deletedKeys: Set<string>): NoteItem[] {
+  const deletedFromServer = new Set<string>();
+  for (const item of incoming) {
+    if (item.deletedAt) deletedFromServer.add(noteKey(item));
+  }
+  const filteredCurrent = current.filter((item) => !item.deletedAt && !deletedKeys.has(noteKey(item)) && !deletedFromServer.has(noteKey(item)));
+  const filteredIncoming = incoming.filter((item) => !item.deletedAt && !deletedKeys.has(noteKey(item)));
+  return mergeNotesByNewest(filteredCurrent, filteredIncoming);
+}
+
 function mergeTemplatesByNewest(local: NoteTemplate[], incoming: NoteTemplate[]): NoteTemplate[] {
   const map = new Map<string, NoteTemplate>();
   for (const item of local) map.set(item.id, item);
@@ -219,13 +234,16 @@ export function NotesTab({ palette }: { palette: Palette }) {
   // Ref to avoid auto-pushing notes back to Firebase when they just arrived from the server.
   const serverUpdateRef = useRef(false);
   const notesSyncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const deletedNoteIdsRef = useRef<Set<string>>(new Set());
+  const deletedNoteKeysRef = useRef<Set<string>>(new Set());
 
   const autoCategory = useMemo(() => detectAutoCategory(draftText), [draftText]);
   const activeCategory = manualCategory || autoCategory;
 
   async function handleRemoveNote(id: string): Promise<NoteItem[]> {
-    deletedNoteIdsRef.current.add(id);
+    const existing = notes.find((item) => item.id === id);
+    const key = noteKey(existing ?? { id, groupId: undefined });
+    deletedNoteKeysRef.current.add(key);
+    await markDeletedNoteKey(key);
     return removeNote(id);
   }
 
@@ -251,6 +269,9 @@ export function NotesTab({ palette }: { palette: Palette }) {
       setTemplates(t);
     }).catch(() => undefined);
     loadClipboardEntries().then(setClipboardItems).catch(() => undefined);
+    loadDeletedNoteKeys().then((keys) => {
+      deletedNoteKeysRef.current = new Set([...deletedNoteKeysRef.current, ...keys]);
+    }).catch(() => undefined);
   }, []);
 
   // Real-time cross-device sync via Firestore onSnapshot.
@@ -260,8 +281,7 @@ export function NotesTab({ palette }: { palette: Palette }) {
     subscribeToNotes(({ notes: serverNotes, templates: serverTemplates }) => {
       serverUpdateRef.current = true;
       setNotes((current) => {
-        const filteredNotes = serverNotes.filter((n) => !deletedNoteIdsRef.current.has(n.id));
-        const merged = mergeNotesByNewest(current, filteredNotes);
+        const merged = mergeNotesRespectingDeletes(current, serverNotes, deletedNoteKeysRef.current);
         saveLocalNotes(merged).catch(() => undefined);
         return merged;
       });
@@ -298,7 +318,7 @@ export function NotesTab({ palette }: { palette: Palette }) {
     subscribeToSharedGroups(setGroups).then((u) => { groupsUnsub = u; }).catch(() => undefined);
     subscribeToSharedGroupNotes((sharedNotes) => {
       serverUpdateRef.current = true;
-      setNotes((current) => mergeNotesByNewest(current, sharedNotes.filter((n) => !deletedNoteIdsRef.current.has(n.id))));
+      setNotes((current) => mergeNotesRespectingDeletes(current, sharedNotes, deletedNoteKeysRef.current));
     }).then((u) => { notesUnsub = u; }).catch(() => undefined);
     return () => { groupsUnsub?.(); notesUnsub?.(); };
   }, [user?.uid]);

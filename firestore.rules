@@ -28,6 +28,7 @@ service cloud.firestore {
         'pinned',
         'createdAt',
         'updatedAt',
+        'deletedAt',
         'uid',
         'updatedAtServer'
       ])
@@ -41,7 +42,8 @@ service cloud.firestore {
       && request.resource.data.uid == request.auth.uid
       && (!('groupId' in request.resource.data) || request.resource.data.groupId is string)
       && (!('color' in request.resource.data) || request.resource.data.color in ['default', 'amber', 'mint', 'sky', 'rose'])
-      && (!('archived' in request.resource.data) || request.resource.data.archived is bool);
+      && (!('archived' in request.resource.data) || request.resource.data.archived is bool)
+      && (!('deletedAt' in request.resource.data) || request.resource.data.deletedAt is number);
     }
 
     function templateValid() {

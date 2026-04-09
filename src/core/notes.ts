@@ -12,6 +12,7 @@ import {
   upsertSharedGroupNote,
 } from './firebase';
 import { diag } from './diagnostics';
+import { clearDeletedNoteKeys, loadDeletedNoteKeys, markDeletedNoteKey, noteStorageKey } from './noteDeletions';
 
 const NOTES_KEY = '@barra_notes_v1';
 const TEMPLATES_KEY = '@barra_note_templates_v1';
@@ -43,6 +44,7 @@ export interface NoteItem {
   pinned: boolean;
   createdAt: number;
   updatedAt: number;
+  deletedAt?: number;
 }
 
 export type TemplateKind = 'email' | 'appointment';
@@ -70,6 +72,7 @@ function normalizeText(value: string) {
 
 function normalizeNotes(items: NoteItem[]): NoteItem[] {
   return [...items].sort((a, b) => {
+    if (Boolean(a.deletedAt) !== Boolean(b.deletedAt)) return a.deletedAt ? 1 : -1;
     if (Boolean(a.archived) !== Boolean(b.archived)) return a.archived ? 1 : -1;
     if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
     return b.updatedAt - a.updatedAt;
@@ -80,6 +83,7 @@ export async function loadNotes(): Promise<NoteItem[]> {
   const raw = await AsyncStorage.getItem(NOTES_KEY);
   if (!raw) return [];
   try {
+    const deletedKeys = await loadDeletedNoteKeys();
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
     return normalizeNotes(
@@ -107,8 +111,12 @@ export async function loadNotes(): Promise<NoteItem[]> {
           pinned: Boolean(item?.pinned),
           createdAt: Number(item?.createdAt || Date.now()),
           updatedAt: Number(item?.updatedAt || Date.now()),
+          deletedAt: typeof item?.deletedAt === 'number' ? Number(item.deletedAt) : undefined,
         }))
-        .filter((item) => item.text.trim().length > 0 || (item.kind === 'image' && item.imageBase64)),
+        .filter((item) => {
+          const key = noteStorageKey(item.id, item.groupId ? 'group' : 'personal', item.groupId);
+          return (item.text.trim().length > 0 || (item.kind === 'image' && item.imageBase64)) && !item.deletedAt && !deletedKeys.has(key);
+        }),
     );
   } catch {
     return [];
@@ -297,12 +305,12 @@ export async function removeNote(id: string): Promise<NoteItem[]> {
   const existing = current.find((item) => item.id === id);
   const next = current.filter((item) => item.id !== id);
   const normalized = normalizeNotes(next);
+  await markDeletedNoteKey(noteStorageKey(id, existing?.groupId ? 'group' : 'personal', existing?.groupId));
   await saveNotes(normalized);
   try {
+    await deleteNoteFromFirebase(id);
     if (existing?.groupId) {
       await deleteSharedGroupNote(existing.groupId, id);
-    } else {
-      await deleteNoteFromFirebase(id);
     }
   } catch (error) {
     await diag.warn('notes.delete.remote.error', { message: String(error), noteId: id });
@@ -425,6 +433,7 @@ export async function clearNotes(): Promise<void> {
   await AsyncStorage.setItem(NOTES_KEY, JSON.stringify([]));
   // Mark as initialized to avoid demo reseeding after user clears everything.
   await AsyncStorage.setItem(NOTES_SEEDED_KEY, '1');
+  await clearDeletedNoteKeys();
   try {
     await clearNotesInFirebase();
   } catch (error) {
@@ -435,6 +444,7 @@ export async function clearNotes(): Promise<void> {
 export async function hardDeleteAllNotes(): Promise<void> {
   await AsyncStorage.setItem(NOTES_KEY, JSON.stringify([]));
   await AsyncStorage.setItem(NOTES_SEEDED_KEY, '1');
+  await clearDeletedNoteKeys();
   try {
     await clearNotesInFirebase();
   } catch {
@@ -601,7 +611,11 @@ export async function refreshNotesFromCloudSilently(): Promise<{ notes: NoteItem
   try {
     const result = await fetchNotesFromFirebase();
     const sharedNotes = await fetchSharedGroupNotesForCurrentUser();
-    const notes = normalizeNotes([...result.serverNotes, ...sharedNotes]).slice(0, 3000);
+    const deletedKeys = await loadDeletedNoteKeys();
+    const notes = normalizeNotes([...result.serverNotes, ...sharedNotes].filter((item) => {
+      const key = noteStorageKey(item.id, item.groupId ? 'group' : 'personal', item.groupId);
+      return !item.deletedAt && !deletedKeys.has(key);
+    })).slice(0, 3000);
     const templates = result.serverTemplates.slice(0, 300);
     await AsyncStorage.setItem(NOTES_KEY, JSON.stringify(notes));
     await AsyncStorage.setItem(TEMPLATES_KEY, JSON.stringify(templates));
