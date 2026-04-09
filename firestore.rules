@@ -19,6 +19,9 @@ service cloud.firestore {
         'kind',
         'category',
         'text',
+        'groupId',
+        'color',
+        'archived',
         'imageBase64',
         'imageMimeType',
         'attachments',
@@ -35,7 +38,10 @@ service cloud.firestore {
       && request.resource.data.pinned is bool
       && request.resource.data.createdAt is number
       && request.resource.data.updatedAt is number
-      && request.resource.data.uid == request.auth.uid;
+      && request.resource.data.uid == request.auth.uid
+      && (!('groupId' in request.resource.data) || request.resource.data.groupId is string)
+      && (!('color' in request.resource.data) || request.resource.data.color in ['default', 'amber', 'mint', 'sky', 'rose'])
+      && (!('archived' in request.resource.data) || request.resource.data.archived is bool);
     }
 
     function templateValid() {
@@ -43,6 +49,7 @@ service cloud.firestore {
         'id',
         'name',
         'kind',
+        'to',
         'subject',
         'body',
         'location',
@@ -59,7 +66,10 @@ service cloud.firestore {
       && request.resource.data.body is string
       && request.resource.data.createdAt is number
       && request.resource.data.updatedAt is number
-      && request.resource.data.uid == request.auth.uid;
+      && request.resource.data.uid == request.auth.uid
+      && (!('to' in request.resource.data) || request.resource.data.to is string)
+      && (!('location' in request.resource.data) || request.resource.data.location is string)
+      && (!('durationMinutes' in request.resource.data) || request.resource.data.durationMinutes is number);
     }
 
     function scanValid() {

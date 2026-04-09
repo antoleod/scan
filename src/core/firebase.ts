@@ -326,21 +326,23 @@ export async function upsertNoteInFirebase(note: NoteItem): Promise<void> {
   }
   const user = rt.auth.currentUser;
   if (!user) throw new Error('No authenticated session to save note.');
-  // Keep payload aligned with current Firestore Rules allow-list.
-  const payload = {
+  const payload: Record<string, unknown> = {
     id: note.id,
     kind: note.kind,
     category: note.category,
     text: note.text,
-    imageBase64: note.imageBase64,
-    imageMimeType: note.imageMimeType,
-    attachments: note.attachments,
     pinned: Boolean(note.pinned),
     createdAt: Number(note.createdAt || Date.now()),
     updatedAt: Number(note.updatedAt || Date.now()),
     uid: user.uid,
     updatedAtServer: serverTimestamp(),
   };
+  if (note.groupId !== undefined) payload.groupId = note.groupId;
+  if (note.color !== undefined) payload.color = note.color;
+  if (note.archived !== undefined) payload.archived = note.archived;
+  if (note.imageBase64 !== undefined) payload.imageBase64 = note.imageBase64;
+  if (note.imageMimeType !== undefined) payload.imageMimeType = note.imageMimeType;
+  if (note.attachments !== undefined) payload.attachments = note.attachments;
   await setDoc(
     doc(rt.db, 'users', user.uid, 'notes', note.id),
     payload,
