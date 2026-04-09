@@ -1205,6 +1205,7 @@ export function NotesTab({ palette }: { palette: Palette }) {
           setNotes(next);
           showToast('Note updated');
         }}
+        onSetColor={(color) => { if (detailNote) setNoteColor(detailNote.id, color).then((n) => { setNotes(n); setDetailNote((prev) => prev ? n.find((x) => x.id === prev.id) ?? null : null); }); }}
         onTogglePinned={(id) => togglePinned(id).then((n) => { setNotes(n); setDetailNote((prev) => prev?.id === id ? n.find((x) => x.id === id) ?? null : prev); })}
         onArchive={(id) => toggleArchived(id).then(setNotes)}
         onDelete={(id) => removeNote(id).then(setNotes)}

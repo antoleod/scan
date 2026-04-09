@@ -8,7 +8,6 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { useCtrlEnterSave } from '../hooks/useCtrlEnterSave';
 import { Ionicons } from '@expo/vector-icons';
 
 type NoteCategory = 'general' | 'work';
@@ -39,6 +38,14 @@ type Palette = {
   chipBorder: string;
 };
 
+const colorSwatches: { key: NoteColor; hex: string; label: string }[] = [
+  { key: 'default', hex: 'transparent', label: 'None'   },
+  { key: 'amber',   hex: '#F5C518',     label: 'Yellow' },
+  { key: 'mint',    hex: '#27AE60',     label: 'Green'  },
+  { key: 'sky',     hex: '#2980B9',     label: 'Blue'   },
+  { key: 'rose',    hex: '#E91E8C',     label: 'Pink'   },
+];
+
 // ─── NoteDetailModal ──────────────────────────────────────────────────────────
 
 export function NoteDetailModal({
@@ -47,6 +54,7 @@ export function NoteDetailModal({
   palette,
   onClose,
   onSave,
+  onSetColor,
   onTogglePinned,
   onArchive,
   onDelete,
@@ -57,8 +65,8 @@ export function NoteDetailModal({
   visible: boolean;
   palette: Palette;
   onClose: () => void;
-  /** Called when the user changes title or body; parent should persist. */
   onSave: (id: string, title: string, text: string) => void;
+  onSetColor?: (color: NoteColor) => void;
   onTogglePinned: (id: string) => void;
   onArchive: (id: string) => void;
   onDelete: (id: string) => void;
@@ -79,6 +87,7 @@ export function NoteDetailModal({
     }
   }, [visible, note?.id]);
 
+  // Early return MUST come after all hooks
   if (!note) return null;
 
   const hasChanges =
@@ -96,15 +105,12 @@ export function NoteDetailModal({
     onClose();
   };
 
-  // Ctrl+Enter / Cmd+Enter → save & close (active only while modal is open)
-  useCtrlEnterSave(handleClose, visible);
-
   const createdAt = note.createdAt
     ? new Date(note.createdAt).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
     : null;
   const updatedAt = new Date(note.updatedAt).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
 
-  const catColor  = note.category === 'work' ? '#2563eb' : '#059669';
+  const catColor = note.category === 'work' ? '#2563eb' : '#059669';
 
   return (
     <Modal
@@ -156,8 +162,8 @@ export function NoteDetailModal({
 
             {/* Action icons */}
             <ToolBtn icon={note.pinned ? 'bookmark' : 'bookmark-outline'} color={note.pinned ? '#2563eb' : palette.textDim} onPress={() => onTogglePinned(note.id)} />
-            <ToolBtn icon="copy-outline"    color={palette.textDim} onPress={() => onCopy(localText)} />
-            <ToolBtn icon="share-social-outline" color={palette.textDim} onPress={() => onShare(note.id)} />
+            <ToolBtn icon="copy-outline"          color={palette.textDim} onPress={() => onCopy(localText)} />
+            <ToolBtn icon="share-social-outline"  color={palette.textDim} onPress={() => onShare(note.id)} />
             <ToolBtn icon={note.archived ? 'archive' : 'archive-outline'} color={palette.textDim} onPress={() => { onArchive(note.id); onClose(); }} />
 
             {/* Delete */}
@@ -241,6 +247,54 @@ export function NoteDetailModal({
                 minHeight: 180,
               }}
             />
+
+            {/* ── Color picker ── */}
+            {onSetColor ? (
+              <View style={{ paddingTop: 12, borderTopWidth: 1, borderTopColor: palette.border, gap: 8 }}>
+                <Text style={{ color: palette.textDim, fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                  Note color
+                </Text>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                  {colorSwatches.map((swatch) => {
+                    const active = (note.color ?? 'default') === swatch.key;
+                    return (
+                      <Pressable
+                        key={swatch.key}
+                        onPress={() => onSetColor(swatch.key)}
+                        hitSlop={8}
+                        style={({ pressed }) => ({
+                          minWidth: 64,
+                          height: 36,
+                          borderRadius: 999,
+                          borderWidth: active ? 2 : 1,
+                          borderColor: active ? palette.accent : palette.border,
+                          backgroundColor: pressed ? `${palette.accent}10` : palette.surfaceAlt,
+                          paddingHorizontal: 10,
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: 6,
+                        })}
+                      >
+                        <View
+                          style={{
+                            width: 10,
+                            height: 10,
+                            borderRadius: 99,
+                            backgroundColor: swatch.hex === 'transparent' ? 'transparent' : swatch.hex,
+                            borderWidth: swatch.hex === 'transparent' ? 1 : 0,
+                            borderColor: palette.border,
+                          }}
+                        />
+                        <Text style={{ color: active ? palette.accent : palette.textMuted, fontSize: 11, fontWeight: '600' }}>
+                          {swatch.label}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+            ) : null}
 
             {/* Metadata footer */}
             <View style={{ borderTopWidth: 1, borderTopColor: palette.border, paddingTop: 12, gap: 4 }}>
