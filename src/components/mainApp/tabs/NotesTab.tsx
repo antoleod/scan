@@ -22,6 +22,8 @@ import {
   NoteTemplate,
   addRichNoteUnique,
   addTemplate,
+  createBranchFromNoteVersion,
+  mergeNoteVersion,
   updateTemplate,
   ensureWorkNotesAndEmailTemplates,
   removeNote,
@@ -182,6 +184,7 @@ export function NotesTab({ palette }: { palette: Palette }) {
   const [shareNote, setShareNote] = useState<NoteItem | null>(null);
   const [generatorVisible, setGeneratorVisible] = useState(false);
   const [detailNote, setDetailNote] = useState<NoteItem | null>(null);
+  const [versionNote, setVersionNote] = useState<NoteItem | null>(null);
   const { toast, show: showToast, hide: hideToast } = useToast();
   const [searchText, setSearchText] = useState('');
   const [searchCategory, setSearchCategory] = useState<'all' | string>('all');
@@ -467,6 +470,20 @@ export function NotesTab({ palette }: { palette: Palette }) {
 
   async function addImageToDraft() {
     const picked = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.9, base64: false });
+    if (picked.canceled || !picked.assets?.length) return;
+    const uri = picked.assets[0].uri;
+    setDraftImages((current) => Array.from(new Set([uri, ...current])).slice(0, 6));
+  }
+
+  async function takePhotoToDraft() {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== 'granted') return;
+    const picked = await ImagePicker.launchCameraAsync({
+      mediaTypes: ['images'],
+      quality: 0.72,
+      base64: false,
+      exif: false,
+    });
     if (picked.canceled || !picked.assets?.length) return;
     const uri = picked.assets[0].uri;
     setDraftImages((current) => Array.from(new Set([uri, ...current])).slice(0, 6));
@@ -830,6 +847,7 @@ export function NotesTab({ palette }: { palette: Palette }) {
                 onChangeText={setDraftText}
                 onGenerate={() => setGeneratorVisible(true)}
                 onAddImage={() => addImageToDraft().catch(() => undefined)}
+                onTakePhoto={() => takePhotoToDraft().catch(() => undefined)}
                 onPasteImage={() => pasteImageFromClipboardToDraft().catch(() => undefined)}
                 onSave={() => saveDraftAsNote().catch(() => undefined)}
                 onSetCategory={setManualCategory}
@@ -945,6 +963,7 @@ export function NotesTab({ palette }: { palette: Palette }) {
                             onCopy={() => forceCopyToClipboard(note.text).catch(() => undefined)}
                             onSaveToDevice={() => saveNoteToDevice(note).catch(() => undefined)}
                             onShare={() => setShareNote(note)}
+                            onOpenVersions={() => setVersionNote(note)}
                             onSetReminder={() => createQuickReminderFromNote(note).catch(() => undefined)}
                             onArchive={() => toggleArchived(note.id).then(setNotes)}
                             onDelete={() => removeNote(note.id).then(setNotes)}
@@ -1214,6 +1233,57 @@ export function NotesTab({ palette }: { palette: Palette }) {
       />
 
       {/* ── Toast ── */}
+      <Modal animationType="fade" transparent visible={Boolean(versionNote)} onRequestClose={() => setVersionNote(null)} statusBarTranslucent>
+        <Pressable style={mainAppStyles.modalBackdrop} onPress={() => setVersionNote(null)}>
+          <Pressable style={[mainAppStyles.modalForm, { backgroundColor: palette.card, borderColor: palette.border, maxWidth: 640 }]} onPress={() => null}>
+            <View style={mainAppStyles.modalHeader}>
+              <Text style={[mainAppStyles.sectionTitle, { color: palette.fg }]}>Note versions</Text>
+              <Pressable style={[mainAppStyles.modalCloseBtn, { borderColor: palette.border }]} onPress={() => setVersionNote(null)}>
+                <Ionicons name="close" size={18} color={palette.fg} />
+              </Pressable>
+            </View>
+            {versionNote?.versions?.length ? (
+              <View style={{ gap: 10 }}>
+                {versionNote.versions.map((version) => (
+                  <View key={version.id} style={{ borderWidth: 1, borderColor: palette.border, borderRadius: 12, padding: 12, gap: 10 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                      <Text style={{ color: palette.fg, fontWeight: '700', fontSize: 13 }} numberOfLines={1}>
+                        {new Date(version.createdAt).toLocaleString()}
+                      </Text>
+                      <View style={{ flexDirection: 'row', gap: 8 }}>
+                        <Pressable
+                          style={[styles.previewBtn, { borderColor: palette.border }]}
+                          onPress={() => {
+                            if (!versionNote) return;
+                            createBranchFromNoteVersion(versionNote.id, version.id).then(setNotes).catch(() => undefined);
+                          }}
+                        >
+                          <Text style={{ color: palette.fg, fontSize: 12, fontWeight: '700' }}>Branch</Text>
+                        </Pressable>
+                        <Pressable
+                          style={[styles.previewBtn, { backgroundColor: palette.accent, borderColor: palette.accent }]}
+                          onPress={() => {
+                            if (!versionNote) return;
+                            mergeNoteVersion(versionNote.id, version.id).then((next) => { setNotes(next); setVersionNote(next.find((n) => n.id === versionNote.id) ?? null); }).catch(() => undefined);
+                          }}
+                        >
+                          <Text style={{ color: '#000', fontSize: 12, fontWeight: '800' }}>Merge</Text>
+                        </Pressable>
+                      </View>
+                    </View>
+                    <Text style={{ color: palette.muted, fontSize: 12, lineHeight: 18 }} numberOfLines={4}>
+                      {version.text}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            ) : (
+              <Text style={{ color: palette.muted, fontSize: 12 }}>No versions yet.</Text>
+            )}
+          </Pressable>
+        </Pressable>
+      </Modal>
+
       <Toast toast={toast} onHide={hideToast} />
 
       {/* ── Barra flotante de selección múltiple ── */}

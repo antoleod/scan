@@ -36,6 +36,7 @@ type NoteItem = {
   archived?: boolean;
   color?: NoteColor;
   attachments?: string[];
+  versions?: { id: string; title?: string; text: string; createdAt: number }[];
   updatedAt: number;
 };
 
@@ -146,6 +147,7 @@ export function NoteCard({
   onCopy,
   onSaveToDevice: _onSaveToDevice,
   onShare,
+  onOpenVersions,
   onSetReminder,
   onArchive,
   onDelete,
@@ -169,6 +171,7 @@ export function NoteCard({
   onCopy: () => void;
   onSaveToDevice: () => void;
   onShare: () => void;
+  onOpenVersions?: () => void;
   onSetReminder: () => void;
   onArchive: () => void;
   onDelete: () => void;
@@ -327,9 +330,16 @@ export function NoteCard({
           >
             {/* ── Header: date + bookmark / selection circle ── */}
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-              <Text style={{ color: palette.textDim, fontSize: 11, flex: 1 }} numberOfLines={1}>
-                {updatedAt}
-              </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1, minWidth: 0 }}>
+                {onOpenVersions ? (
+                  <Pressable onPress={onOpenVersions} hitSlop={8} style={{ width: 24, height: 24, alignItems: 'center', justifyContent: 'center' }}>
+                    <Ionicons name="git-branch-outline" size={14} color={palette.textDim} />
+                  </Pressable>
+                ) : null}
+                <Text style={{ color: palette.textDim, fontSize: 11, flex: 1 }} numberOfLines={1}>
+                  {updatedAt}
+                </Text>
+              </View>
               {selected !== undefined ? (
                 <View style={{
                   width: 24, height: 24, borderRadius: 12,

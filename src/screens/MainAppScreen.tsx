@@ -1000,6 +1000,14 @@ function MainApp() {
     }
   }
 
+  function queueAutoSync() {
+    if (!user || persistenceMode !== 'firebase') return;
+    if (autoSyncTimerRef.current) clearTimeout(autoSyncTimerRef.current);
+    autoSyncTimerRef.current = setTimeout(() => {
+      syncNow(false).catch(() => undefined);
+    }, 350);
+  }
+
   // Push pending local scans to Firebase. Guard prevents loop: after push all become 'sent'.
   useEffect(() => {
     if (!user || persistenceMode !== 'firebase') return;
@@ -1272,6 +1280,7 @@ function MainApp() {
       }
       setHistory(result.history);
       await diag.info('history.manual.added', { type: record.type, source: record.source });
+      queueAutoSync();
     } else if (entryEditId) {
       const normalized = normalizeCodeValue(value);
       const officeCode = entryOffice.trim();
@@ -1299,6 +1308,7 @@ function MainApp() {
       );
       setHistory(next);
       await saveHistory(next);
+      queueAutoSync();
     }
 
     resetEntryModal();
@@ -1313,6 +1323,7 @@ function MainApp() {
       return nextSelection;
     });
     await saveHistory(next);
+    queueAutoSync();
   }
 
   async function toggleUsed(id: string) {
@@ -1325,6 +1336,7 @@ function MainApp() {
     );
     setHistory(next);
     await saveHistory(next);
+    queueAutoSync();
   }
 
   async function markSelectedUsed() {
@@ -1338,6 +1350,7 @@ function MainApp() {
     setHistory(next);
     await saveHistory(next);
     setSelection(new Set());
+    queueAutoSync();
   }
 
   const filteredHistory = useMemo(() => {

@@ -1,5 +1,5 @@
 import React, { forwardRef, useEffect, useMemo, useState } from 'react';
-import { Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { Modal, Platform, Pressable, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useCtrlEnterSave } from '../hooks/useCtrlEnterSave';
 
@@ -34,6 +34,7 @@ export const ComposerSection = forwardRef<TextInput, {
   onChangeText: (value: string) => void;
   onGenerate: () => void;
   onAddImage: () => void;
+  onTakePhoto: () => void;
   onPasteImage: () => void;
   onSave: () => void;
   onSetCategory: (category: NoteCategory) => void;
@@ -51,6 +52,7 @@ export const ComposerSection = forwardRef<TextInput, {
       onChangeText,
       onGenerate,
       onAddImage,
+      onTakePhoto,
       onPasteImage,
       onSave,
       onSetCategory,
@@ -60,6 +62,9 @@ export const ComposerSection = forwardRef<TextInput, {
   ) {
     const [inputHeight, setInputHeight] = useState(96);
     const [pickerVisible, setPickerVisible] = useState(false);
+    const [hoveredAction, setHoveredAction] = useState<string | null>(null);
+    const { width } = useWindowDimensions();
+    const isCompact = width < 520;
 
     // Ctrl+Enter / Cmd+Enter → save (only when there's something to save)
     useCtrlEnterSave(onSave, Boolean(draftText.trim() || draftImages.length > 0));
@@ -76,39 +81,132 @@ export const ComposerSection = forwardRef<TextInput, {
     }, [activeGroupId, groups]);
 
     const actionItems = [
-      { key: 'photo', label: 'Photo', icon: 'image-outline' as const, action: onAddImage, active: draftImages.length > 0 },
+      { key: 'camera', label: 'Camera', icon: 'camera-outline' as const, action: onTakePhoto, active: false },
+      { key: 'photo', label: 'Gallery', icon: 'image-outline' as const, action: onAddImage, active: draftImages.length > 0 },
       { key: 'paste', label: 'Paste', icon: 'clipboard-text-outline' as const, action: onPasteImage, active: false },
       { key: 'save', label: 'Save', icon: 'content-save-outline' as const, action: onSave, active: false },
-      { key: 'generate', label: 'Generate', icon: 'auto-fix' as const, action: onGenerate, active: false },
+      { key: 'generate', label: 'Generate', icon: 'auto-fix' as const, action: onGenerate, active: Boolean(generating) },
     ];
 
     return (
       <View style={{ width: '100%' }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1, minWidth: 0 }}>
-            <Text style={{ color: palette.textMuted, fontSize: 12, fontWeight: '500' }}>Group:</Text>
-            <Pressable
-              onPress={() => setPickerVisible(true)}
-              hitSlop={8}
+        <View
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: isCompact ? 10 : 16,
+            minWidth: 0,
+          }}
+        >
+          <Pressable
+            onPress={() => setPickerVisible(true)}
+            hitSlop={8}
               style={({ pressed }) => ({
-                height: 28,
+                height: 40,
                 paddingHorizontal: 12,
-                borderRadius: 8,
-                borderWidth: 1,
-                borderColor: '#333333',
-                backgroundColor: palette.surfaceAlt,
-                justifyContent: 'center',
-                opacity: pressed ? 0.82 : 1,
-                minWidth: 0,
-              })}
-            >
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                <Text style={{ color: palette.textBody, fontSize: 13, fontWeight: '500' }} numberOfLines={1}>
-                  {activeGroupLabel}
-                </Text>
-                <Ionicons name="chevron-down" size={13} color={palette.textMuted} />
-              </View>
-            </Pressable>
+                borderRadius: 10,
+              borderWidth: 1,
+              borderColor: palette.chipBorder,
+              backgroundColor: palette.surfaceAlt,
+              justifyContent: 'center',
+              opacity: pressed ? 0.82 : 1,
+              minWidth: 0,
+            })}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Text style={{ color: palette.textBody, fontSize: 13, fontWeight: '600' }} numberOfLines={1}>
+                Group: {activeGroupLabel}
+              </Text>
+              <Ionicons name="chevron-down" size={13} color={palette.textMuted} />
+            </View>
+          </Pressable>
+
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, minWidth: 0 }}>
+            {([
+              { key: 'general', label: 'General' },
+              { key: 'work', label: 'Work' },
+            ] as const).map((item, index) => {
+              const active = activeCategory === item.key;
+              return (
+                <Pressable
+                  key={item.key}
+                  onPress={() => onSetCategory(item.key)}
+                  hitSlop={6}
+                  style={({ pressed }) => ({
+                    height: 40,
+                    minWidth: isCompact ? 72 : 84,
+                    paddingHorizontal: isCompact ? 12 : 14,
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    borderTopLeftRadius: index === 0 ? 10 : 0,
+                    borderBottomLeftRadius: index === 0 ? 10 : 0,
+                    borderTopRightRadius: index === 1 ? 10 : 0,
+                    borderBottomRightRadius: index === 1 ? 10 : 0,
+                    borderWidth: 1,
+                    borderColor: active ? palette.accent : palette.chipBorder,
+                    backgroundColor: active ? palette.accent : palette.surfaceAlt,
+                    opacity: pressed ? 0.88 : 1,
+                    marginLeft: index === 0 ? 0 : -1,
+                  })}
+                >
+                  <Text style={{ color: active ? '#111111' : palette.textMuted, fontSize: 12, fontWeight: active ? '700' : '600' }}>
+                    {item.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            {actionItems.map((item) => {
+              const active = item.active;
+              return (
+                <View key={item.key} style={{ alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
+                  {hoveredAction === item.key ? (
+                    <View
+                      pointerEvents="none"
+                      style={{
+                        position: 'absolute',
+                        top: -30,
+                        left: '50%',
+                        transform: [{ translateX: -34 }],
+                        minWidth: 68,
+                        paddingHorizontal: 8,
+                        paddingVertical: 4,
+                        borderRadius: 8,
+                        backgroundColor: '#111111',
+                        borderWidth: 1,
+                        borderColor: palette.chipBorder,
+                        zIndex: 20,
+                      }}
+                    >
+                      <Text style={{ color: palette.textBody, fontSize: 11, fontWeight: '600', textAlign: 'center' }}>{item.label}</Text>
+                    </View>
+                  ) : null}
+                  <Pressable
+                    accessibilityLabel={item.label}
+                    onPress={item.action}
+                    hitSlop={6}
+                    onHoverIn={() => setHoveredAction(item.key)}
+                    onHoverOut={() => setHoveredAction((current) => (current === item.key ? null : current))}
+                    style={({ pressed }) => ({
+                      width: isCompact ? 36 : 38,
+                      height: isCompact ? 36 : 38,
+                      borderRadius: 10,
+                      backgroundColor: palette.surfaceAlt,
+                      borderWidth: 1,
+                      borderColor: active ? palette.accent : palette.chipBorder,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      opacity: pressed ? 0.84 : 1,
+                    })}
+                  >
+                    <MaterialCommunityIcons name={item.icon} size={isCompact ? 17 : 18} color={active ? palette.accent : palette.textDim} />
+                  </Pressable>
+                </View>
+              );
+            })}
           </View>
         </View>
 
@@ -158,6 +256,14 @@ export const ComposerSection = forwardRef<TextInput, {
           ref={ref}
           value={draftText}
           onChangeText={onChangeText}
+          onKeyPress={(event) => {
+            if (Platform.OS !== 'web') return;
+            const nativeEvent = event.nativeEvent as { key?: string; ctrlKey?: boolean; metaKey?: boolean };
+            if ((nativeEvent.ctrlKey || nativeEvent.metaKey) && nativeEvent.key === 'Enter') {
+              event.preventDefault?.();
+              onSave();
+            }
+          }}
           multiline
           placeholder="Type here. Auto-save is always on."
           placeholderTextColor={palette.textMuted}
@@ -183,76 +289,6 @@ export const ComposerSection = forwardRef<TextInput, {
           }}
         />
 
-        <View style={{ marginTop: 10, flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
-          {([
-            { key: 'general', label: 'General' },
-            { key: 'work', label: 'Work' },
-          ] as const).map((item) => {
-            const active = activeCategory === item.key;
-            return (
-              <Pressable
-                key={item.key}
-                onPress={() => onSetCategory(item.key)}
-                hitSlop={6}
-                style={({ pressed }) => ({
-                  height: 32,
-                  paddingHorizontal: 14,
-                  borderRadius: 99,
-                  justifyContent: 'center',
-                  borderWidth: 1,
-                  borderColor: active ? palette.accent : palette.chipBorder,
-                  backgroundColor: active ? palette.accent : palette.surfaceAlt,
-                  opacity: pressed ? 0.84 : 1,
-                })}
-              >
-                <Text style={{ color: active ? '#000000' : palette.textMuted, fontSize: 12, fontWeight: active ? '600' : '500' }}>
-                  {item.label}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
-
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 10 }} contentContainerStyle={{ gap: 12, paddingRight: 8 }}>
-          {actionItems.map((item) => {
-            const active = item.active || (item.key === 'generate' && generating);
-            return (
-              <Pressable
-                key={item.key}
-                onPress={item.action}
-                hitSlop={8}
-                style={({ pressed }) => ({
-                  alignItems: 'center',
-                  gap: 4,
-                  minWidth: 56,
-                  opacity: pressed ? 0.84 : 1,
-                })}
-              >
-                <View
-                  style={{
-                    width: 44,
-                    height: 44,
-                    borderRadius: 10,
-                    backgroundColor: active ? '#1A0A00' : palette.surfaceAlt,
-                    borderWidth: 1,
-                    borderColor: active ? palette.accent : palette.chipBorder,
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}
-                >
-                  <MaterialCommunityIcons
-                    name={item.icon}
-                    size={20}
-                    color={active ? palette.accent : palette.textDim}
-                  />
-                </View>
-                <Text style={{ color: active ? palette.accent : palette.textDim, fontSize: 10, fontWeight: '400' }}>
-                  {item.label}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
       </View>
     );
   }

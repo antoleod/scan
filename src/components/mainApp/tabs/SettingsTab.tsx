@@ -207,6 +207,12 @@ export function SettingsTab({
       const words = Array.from({ length: count }, () => randomFrom(PASSWORD_WORDS));
       const first = words[0];
       const second = words[1];
+      if (count === 2) {
+        const simpleFirst = first[0].toUpperCase() + first.slice(1);
+        const simpleSecond = second[0].toUpperCase() + second.slice(1);
+        setPassPhrase(`${simpleFirst}-${simpleSecond}!${currentYear}`);
+        return;
+      }
       const shownSecond = stylizeSeed(second);
       const merged = mergeMemorableWords(first, second);
       const extras = words.slice(2).map((word) => word[0].toUpperCase() + word.slice(1)).join('');

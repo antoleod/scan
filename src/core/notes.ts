@@ -20,6 +20,12 @@ const TEMPLATES_PURGED_KEY = '@barra_templates_purged_v1';
 
 export type NoteKind = 'text' | 'image';
 export type NoteCategory = 'general' | 'work';
+export type NoteVersion = {
+  id: string;
+  title?: string;
+  text: string;
+  createdAt: number;
+};
 
 export interface NoteItem {
   id: string;
@@ -33,6 +39,7 @@ export interface NoteItem {
   imageBase64?: string;
   imageMimeType?: string;
   attachments?: string[];
+  versions?: NoteVersion[];
   pinned: boolean;
   createdAt: number;
   updatedAt: number;
@@ -89,6 +96,14 @@ export async function loadNotes(): Promise<NoteItem[]> {
           imageBase64: typeof item?.imageBase64 === 'string' ? item.imageBase64 : undefined,
           imageMimeType: typeof item?.imageMimeType === 'string' ? item.imageMimeType : undefined,
           attachments: Array.isArray(item?.attachments) ? item.attachments.map((v: unknown) => String(v || '')).filter(Boolean).slice(0, 8) : undefined,
+          versions: Array.isArray(item?.versions)
+            ? item.versions.map((version: unknown) => ({
+              id: String((version as { id?: unknown })?.id || makeId('ver')),
+              title: typeof (version as { title?: unknown })?.title === 'string' ? String((version as { title?: unknown }).title) : undefined,
+              text: String((version as { text?: unknown })?.text || ''),
+              createdAt: Number((version as { createdAt?: unknown })?.createdAt || Date.now()),
+            })).filter((version: { text: string }) => version.text.trim().length > 0)
+            : undefined,
           pinned: Boolean(item?.pinned),
           createdAt: Number(item?.createdAt || Date.now()),
           updatedAt: Number(item?.updatedAt || Date.now()),
@@ -143,6 +158,32 @@ function isDuplicateImage(notes: NoteItem[], base64: string) {
   return notes.some((item) => item.kind === 'image' && item.imageBase64 === base64);
 }
 
+function sameNoteContent(a: NoteItem, b: NoteItem) {
+  if (a.kind !== b.kind) return false;
+  if (normalizeText(a.text).toLowerCase() !== normalizeText(b.text).toLowerCase()) return false;
+  if ((a.imageBase64 || '') !== (b.imageBase64 || '')) return false;
+  if ((a.imageMimeType || '') !== (b.imageMimeType || '')) return false;
+  if (!sameAttachments(a.attachments || [], b.attachments || [])) return false;
+  return true;
+}
+
+function hasDuplicateNote(notes: NoteItem[], candidate: NoteItem, excludeId?: string) {
+  return notes.some((item) => item.id !== excludeId && sameNoteContent(item, candidate));
+}
+
+function pushVersion(item: NoteItem): NoteItem {
+  const version = {
+    id: makeId('ver'),
+    title: item.title,
+    text: item.text,
+    createdAt: item.updatedAt,
+  };
+  return {
+    ...item,
+    versions: [version, ...(item.versions || [])].slice(0, 12),
+  };
+}
+
 export async function addNoteUnique(
   text: string,
   category: NoteCategory = 'general',
@@ -182,29 +223,26 @@ export async function addRichNoteUnique(
   if (!trimmed && normalizedAttachments.length === 0) return { notes: await loadNotes(), inserted: false };
 
   const current = await loadNotes();
-  if (current.some((item) =>
-    item.kind === 'text' &&
-    normalizeText(item.text).toLowerCase() === normalizeText(trimmed || 'Attachment note').toLowerCase() &&
-    sameAttachments(item.attachments || [], normalizedAttachments)
-  )) {
+  const candidate: NoteItem = {
+    id: 'candidate',
+    kind: 'text',
+    category,
+    text: trimmed || 'Attachment note',
+    groupId: groupId?.trim() || undefined,
+    color: 'default',
+    archived: false,
+    attachments: normalizedAttachments.length ? normalizedAttachments : undefined,
+    pinned: false,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+  };
+  if (hasDuplicateNote(current, candidate)) {
     return { notes: current, inserted: false };
   }
 
   const now = Date.now();
   const next: NoteItem[] = [
-    {
-      id: makeId('note'),
-      kind: 'text',
-      category,
-      text: trimmed || 'Attachment note',
-      groupId: groupId?.trim() || undefined,
-      color: 'default',
-      archived: false,
-      attachments: normalizedAttachments.length ? normalizedAttachments : undefined,
-      pinned: false,
-      createdAt: now,
-      updatedAt: now,
-    },
+    { ...candidate, id: makeId('note'), createdAt: now, updatedAt: now },
     ...current,
   ];
 
@@ -279,12 +317,53 @@ export async function updateNoteText(id: string, text: string): Promise<NoteItem
   const next = current.map((item) =>
     item.id === id ? { ...item, text: nextText, updatedAt: Date.now() } : item,
   );
+  const updatedItem = next.find((item) => item.id === id);
+  if (updatedItem && hasDuplicateNote(current, updatedItem, id)) {
+    return normalizeNotes(current);
+  }
   await saveNotes(next);
   const updated = next.find((item) => item.id === id);
   if (updated) await pushNoteIfAuthenticated(updated);
   if (updated?.groupId) {
     await upsertSharedGroupNote(updated.groupId, updated);
   }
+  return normalizeNotes(next);
+}
+
+export async function createBranchFromNoteVersion(noteId: string, versionId?: string): Promise<NoteItem[]> {
+  const current = await loadNotes();
+  const source = current.find((item) => item.id === noteId);
+  if (!source) return current;
+  const version = versionId ? source.versions?.find((item) => item.id === versionId) : source.versions?.[0];
+  if (!version) return current;
+  const now = Date.now();
+  const branch: NoteItem = {
+    ...source,
+    id: makeId('note'),
+    title: version.title,
+    text: version.text,
+    versions: [],
+    createdAt: now,
+    updatedAt: now,
+  };
+  const next = [branch, ...current];
+  await saveNotes(next);
+  await pushNoteIfAuthenticated(branch);
+  return normalizeNotes(next);
+}
+
+export async function mergeNoteVersion(noteId: string, versionId: string): Promise<NoteItem[]> {
+  const current = await loadNotes();
+  const next = current.map((item) => {
+    if (item.id !== noteId) return item;
+    const version = item.versions?.find((entry) => entry.id === versionId);
+    if (!version) return item;
+    return { ...pushVersion(item), title: version.title, text: version.text, updatedAt: Date.now() };
+  });
+  await saveNotes(next);
+  const updated = next.find((item) => item.id === noteId);
+  if (updated) await pushNoteIfAuthenticated(updated);
+  if (updated?.groupId) await upsertSharedGroupNote(updated.groupId, updated);
   return normalizeNotes(next);
 }
 
