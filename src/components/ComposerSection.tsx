@@ -1,6 +1,7 @@
 import React, { forwardRef, useEffect, useMemo, useState } from 'react';
 import { Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { useCtrlEnterSave } from '../hooks/useCtrlEnterSave';
 
 type Palette = {
   bg: string;
@@ -59,6 +60,9 @@ export const ComposerSection = forwardRef<TextInput, {
   ) {
     const [inputHeight, setInputHeight] = useState(96);
     const [pickerVisible, setPickerVisible] = useState(false);
+
+    // Ctrl+Enter / Cmd+Enter → save (only when there's something to save)
+    useCtrlEnterSave(onSave, Boolean(draftText.trim() || draftImages.length > 0));
 
     useEffect(() => {
       if (!draftText.trim()) {

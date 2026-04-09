@@ -9,8 +9,14 @@ import { useClipboard } from '../clipboard/useClipboard';
 import { addRichNoteUnique } from '../core/notes';
 import { ClipEntry } from '../core/clipboard.types';
 import { removeClipboardEntriesByDay, removeClipboardEntriesByIds, updateClipboardEntryCategory } from '../core/clipboard';
+import { MiniCalendar } from '../components/SearchFilterBar';
 
 type Palette = { bg: string; fg: string; accent: string; muted: string; card: string; border: string };
+
+// MiniCalendar requires a Palette with these fields; build a bridge object inline
+function toCal(p: Palette) {
+  return { bg: p.bg, accent: p.accent, border: p.border, surface: p.card, surfaceAlt: p.bg, textBody: p.fg, textDim: p.muted, textMuted: p.muted, chipBorder: p.border };
+}
 
 type Props = {
   palette: Palette;
@@ -35,14 +41,20 @@ export function ClipboardScreen({ palette, onSendToNote, onSendToTemplate }: Pro
   const desktopColumns = width >= 1600 ? 3 : width >= 1200 ? 2 : 1;
   const { entries, permState, captureNow, capturePastedText, importScreenshot } = useClipboard();
   const [searchText, setSearchText] = useState('');
+  const [dateFilter, setDateFilter] = useState<string | null>(null);
+  const [calendarOpen, setCalendarOpen] = useState(false);
   const [selectedClipboardIds, setSelectedClipboardIds] = useState<Set<string>>(new Set());
   const [previewEntry, setPreviewEntry] = useState<ClipEntry | null>(null);
   const [lastTap, setLastTap] = useState<{ id: string; ts: number } | null>(null);
 
   const filteredClipboard = useMemo(() => {
     const q = searchText.trim().toLowerCase();
-    return q ? entries.filter((entry) => `${entry.content} ${entry.category}`.toLowerCase().includes(q)) : entries;
-  }, [entries, searchText]);
+    let list = q ? entries.filter((entry) => `${entry.content} ${entry.category}`.toLowerCase().includes(q)) : entries;
+    if (dateFilter) {
+      list = list.filter((entry) => new Date(entry.capturedAt).toISOString().slice(0, 10) === dateFilter);
+    }
+    return list;
+  }, [entries, searchText, dateFilter]);
 
   const groupedClipboard = useMemo(() => {
     const map = new Map<string, ClipEntry[]>();
@@ -139,12 +151,46 @@ export function ClipboardScreen({ palette, onSendToNote, onSendToTemplate }: Pro
           <View style={[mainAppStyles.filterChipCompact, { borderColor: palette.border, borderWidth: 1 }]}>
             <Text style={{ color: palette.muted, fontSize: 11, fontWeight: '700' }}>{filteredClipboard.length} items</Text>
           </View>
-          {searchText ? (
-            <Pressable onPress={() => setSearchText('')} hitSlop={8}>
+          {/* Calendar filter button */}
+          <Pressable
+            onPress={() => setCalendarOpen(true)}
+            hitSlop={8}
+            style={{
+              width: 32, height: 32, borderRadius: 8, borderWidth: 1,
+              borderColor: dateFilter ? palette.accent : palette.border,
+              backgroundColor: dateFilter ? `${palette.accent}22` : 'transparent',
+              alignItems: 'center', justifyContent: 'center',
+            }}
+          >
+            <Ionicons name="calendar-outline" size={15} color={dateFilter ? palette.accent : palette.muted} />
+          </Pressable>
+          {(searchText || dateFilter) ? (
+            <Pressable onPress={() => { setSearchText(''); setDateFilter(null); }} hitSlop={8}>
               <Ionicons name="close-circle" size={15} color={palette.muted} />
             </Pressable>
           ) : null}
         </View>
+        {/* Active date chip */}
+        {dateFilter ? (
+          <Pressable
+            onPress={() => setDateFilter(null)}
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 5, alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 99, borderWidth: 1, borderColor: palette.accent, backgroundColor: `${palette.accent}18` }}
+          >
+            <Ionicons name="calendar" size={11} color={palette.accent} />
+            <Text style={{ color: palette.accent, fontSize: 11, fontWeight: '700' }}>
+              {new Date(dateFilter + 'T12:00:00').toLocaleDateString('en', { day: 'numeric', month: 'short', year: 'numeric' })}
+            </Text>
+            <Ionicons name="close" size={11} color={palette.accent} />
+          </Pressable>
+        ) : null}
+        {calendarOpen ? (
+          <MiniCalendar
+            selected={dateFilter}
+            palette={toCal(palette)}
+            onSelect={(ymd) => { setDateFilter(ymd); }}
+            onClose={() => setCalendarOpen(false)}
+          />
+        ) : null}
         {selectedClipboardIds.size ? (
           <View style={styles.selectionRow}>
             <Text style={{ color: palette.muted, fontSize: 11 }}>{selectedClipboardIds.size} selected</Text>

@@ -16,12 +16,12 @@ type Palette = {
 
 type FilterKey = 'all' | 'work' | 'pinned' | 'archived';
 
-// ─── Mini Calendar ──────────────────────────────────────────────────────────
+// ─── Mini Calendar (exported so Clipboard & History can reuse it) ────────────
 
-const DAYS_SHORT = ['Lu', 'Ma', 'Mi', 'Ju', 'Vi', 'Sá', 'Do'];
+const DAYS_SHORT = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'];
 const MONTHS = [
-  'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
-  'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
 ];
 
 function toYMD(d: Date): string {
@@ -32,7 +32,7 @@ function buildCalendar(year: number, month: number): (Date | null)[][] {
   const first = new Date(year, month, 1);
   // Monday-based week: 0=Mon … 6=Sun
   let startDow = first.getDay(); // 0=Sun
-  startDow = startDow === 0 ? 6 : startDow - 1; // convert to Mon=0
+  startDow = startDow === 0 ? 6 : startDow - 1;
 
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const cells: (Date | null)[] = Array(startDow).fill(null);
@@ -44,7 +44,7 @@ function buildCalendar(year: number, month: number): (Date | null)[][] {
   return rows;
 }
 
-function MiniCalendar({
+export function MiniCalendar({
   selected,
   palette,
   onSelect,
@@ -152,14 +152,14 @@ function MiniCalendar({
                 onPress={() => onSelect(null)}
                 style={{ flex: 1, minHeight: 40, borderRadius: 10, borderWidth: 1, borderColor: palette.border, alignItems: 'center', justifyContent: 'center' }}
               >
-                <Text style={{ color: palette.textBody, fontSize: 13, fontWeight: '600' }}>Limpiar</Text>
+                <Text style={{ color: palette.textBody, fontSize: 13, fontWeight: '600' }}>Clear</Text>
               </Pressable>
             ) : null}
             <Pressable
               onPress={onClose}
               style={{ flex: 1, minHeight: 40, borderRadius: 10, backgroundColor: palette.accent, alignItems: 'center', justifyContent: 'center' }}
             >
-              <Text style={{ color: '#000', fontSize: 13, fontWeight: '700' }}>Cerrar</Text>
+              <Text style={{ color: '#000', fontSize: 13, fontWeight: '700' }}>Close</Text>
             </Pressable>
           </View>
         </Pressable>
@@ -168,7 +168,7 @@ function MiniCalendar({
   );
 }
 
-// ─── SearchFilterBar ─────────────────────────────────────────────────────────
+// ─── SearchFilterBar ──────────────────────────────────────────────────────────
 
 export function SearchFilterBar({
   palette,
@@ -192,14 +192,14 @@ export function SearchFilterBar({
   const [calendarOpen, setCalendarOpen] = useState(false);
 
   const filters: { key: FilterKey; label: string }[] = [
-    { key: 'all', label: 'Todas' },
-    { key: 'work', label: 'Trabajo' },
-    { key: 'pinned', label: 'Fijadas' },
-    { key: 'archived', label: 'Archivadas' },
+    { key: 'all',      label: 'All' },
+    { key: 'work',     label: 'Work' },
+    { key: 'pinned',   label: 'Pinned' },
+    { key: 'archived', label: 'Archived' },
   ];
 
   const dateLabel = dateFilter
-    ? new Date(dateFilter + 'T12:00:00').toLocaleDateString('es', { day: 'numeric', month: 'short' })
+    ? new Date(dateFilter + 'T12:00:00').toLocaleDateString('en', { day: 'numeric', month: 'short' })
     : null;
 
   return (
@@ -211,7 +211,7 @@ export function SearchFilterBar({
           <TextInput
             value={value}
             onChangeText={onChange}
-            placeholder="Buscar notas…"
+            placeholder="Search notes…"
             placeholderTextColor={palette.textMuted}
             style={{
               height: 40,

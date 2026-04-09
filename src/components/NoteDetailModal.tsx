@@ -8,6 +8,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { useCtrlEnterSave } from '../hooks/useCtrlEnterSave';
 import { Ionicons } from '@expo/vector-icons';
 
 type NoteCategory = 'general' | 'work';
@@ -94,6 +95,9 @@ export function NoteDetailModal({
     onDelete(note.id);
     onClose();
   };
+
+  // Ctrl+Enter / Cmd+Enter → save & close (active only while modal is open)
+  useCtrlEnterSave(handleClose, visible);
 
   const createdAt = note.createdAt
     ? new Date(note.createdAt).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })

@@ -6,6 +6,7 @@ import * as Clipboard from 'expo-clipboard';
 import { ScanRecord } from '../../../types';
 import { HistorySort } from '../../../core/smartSearch';
 import { mainAppStyles } from '../styles';
+import { MiniCalendar } from '../../SearchFilterBar';
 
 type Palette = { bg: string; fg: string; accent: string; muted: string; card: string; border: string };
 type DateFilter = 'ALL' | 'TODAY' | 'WEEK' | 'MONTH';
@@ -68,7 +69,22 @@ export function HistoryTab({
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [moreVisible, setMoreVisible] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<ScanRecord | null>(null);
+  const [calendarOpen, setCalendarOpen] = useState(false);
+  const [calendarDate, setCalendarDate] = useState<string | null>(null);
   const editLockRef = useRef(false);
+
+  // Palette bridge for MiniCalendar (which expects the extended Palette type)
+  const calPalette = {
+    bg: palette.bg, accent: palette.accent, border: palette.border,
+    surface: palette.card, surfaceAlt: palette.bg,
+    textBody: palette.fg, textDim: palette.muted, textMuted: palette.muted,
+    chipBorder: palette.border,
+  };
+
+  // Filter history by specific calendar date (on top of parent-level filtering)
+  const displayHistory = calendarDate
+    ? filteredHistory.filter((item) => item.date === calendarDate)
+    : filteredHistory;
   const columns = width >= 1600 ? 3 : width >= 1100 ? 2 : 1;
   const showActionLabels = width >= 1200;
 
@@ -102,7 +118,7 @@ export function HistoryTab({
   return (
     <View style={[mainAppStyles.screen, mainAppStyles.screenLocked, { alignSelf: 'center', maxWidth: width >= 1280 ? 1280 : 1200, minWidth: 0 }]}>
       <FlatList
-        data={filteredHistory}
+        data={displayHistory}
         numColumns={columns}
         key={`history-grid-${columns}`}
         keyExtractor={(item) => item.id}
@@ -150,16 +166,34 @@ export function HistoryTab({
               </Pressable>
 
               <Pressable
-                style={[mainAppStyles.filterChipCompact, selectedDateLabel ? { backgroundColor: palette.accent } : { borderColor: palette.border, borderWidth: 1 }]}
-                onPress={onOpenDatePicker}
+                style={[mainAppStyles.filterChipCompact, (selectedDateLabel || calendarDate) ? { backgroundColor: palette.accent } : { borderColor: palette.border, borderWidth: 1 }]}
+                onPress={() => setCalendarOpen(true)}
               >
                 <View style={mainAppStyles.compactAction}>
-                  <Ionicons name="calendar-outline" size={14} color={selectedDateLabel ? '#fff' : palette.fg} />
-                  <Text style={{ color: selectedDateLabel ? '#fff' : palette.fg, fontSize: 11, fontWeight: '700' }}>
-                    {selectedDateLabel || (dateFilter === 'TODAY' ? 'Today' : dateFilter === 'WEEK' ? 'Week' : 'Date')}
+                  <Ionicons name="calendar-outline" size={14} color={(selectedDateLabel || calendarDate) ? '#fff' : palette.fg} />
+                  <Text style={{ color: (selectedDateLabel || calendarDate) ? '#fff' : palette.fg, fontSize: 11, fontWeight: '700' }}>
+                    {calendarDate
+                      ? new Date(calendarDate + 'T12:00:00').toLocaleDateString('en', { day: 'numeric', month: 'short' })
+                      : selectedDateLabel || (dateFilter === 'TODAY' ? 'Today' : dateFilter === 'WEEK' ? 'Week' : 'Date')}
                   </Text>
                 </View>
               </Pressable>
+              {calendarDate ? (
+                <Pressable
+                  onPress={() => setCalendarDate(null)}
+                  style={[mainAppStyles.filterChipCompact, { borderColor: palette.border, borderWidth: 1 }]}
+                >
+                  <Ionicons name="close" size={12} color={palette.fg} />
+                </Pressable>
+              ) : null}
+              {calendarOpen ? (
+                <MiniCalendar
+                  selected={calendarDate}
+                  palette={calPalette}
+                  onSelect={(ymd) => { setCalendarDate(ymd); setCalendarOpen(false); }}
+                  onClose={() => setCalendarOpen(false)}
+                />
+              ) : null}
             </View>
           </View>
         )}
