@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
   Animated,
   Easing,
@@ -156,6 +157,7 @@ function MainApp() {
   const [officeScanVisible, setOfficeScanVisible] = useState(false);
   const [barcodeModalCodeType, setBarcodeModalCodeType] = useState<CodeType | null>(null);
   const [syncBusy, setSyncBusy] = useState(false);
+  const [lastSyncedAt, setLastSyncedAt] = useState<number | null>(null);
   const [scanFeedback, setScanFeedback] = useState<{ type: 'success' | 'duplicate' | 'error'; message: string } | null>(null);
   const [scanState, setScanState] = useState<ScanState>('idle');
   const [cameraReady, setCameraReady] = useState(false);
@@ -981,6 +983,7 @@ function MainApp() {
       await saveWorkNotes(notesSnap.serverNotes);
       await saveNoteTemplates(notesSnap.serverTemplates);
 
+      setLastSyncedAt(Date.now());
       await diag.info('firebase.sync.ok', { pushed: result.pushed, total: merged.length });
       if (showAlert) {
         Alert.alert(
@@ -1388,6 +1391,10 @@ function MainApp() {
           palette={palette}
           email={user?.email || 'gean@oryxen.tech'}
           onPressEmail={() => setActiveTab('settings')}
+          syncBusy={syncBusy}
+          lastSyncedAt={lastSyncedAt}
+          persistenceMode={persistenceMode}
+          onSyncNow={() => syncNow(false)}
         />
 
         <KeyboardAvoidingView
@@ -1397,7 +1404,13 @@ function MainApp() {
         >
           <View style={styles.tabViewport} {...webPanHandlers}>
           {bootStatus !== 'ready' ? (
-            <View style={styles.center}><Text style={{ color: palette.fg }}>{bootStatus === 'booting' ? 'Loading...' : 'Boot error'}</Text></View>
+            <View style={styles.center}>
+              {bootStatus === 'booting' ? (
+                <ActivityIndicator size="large" color={palette.accent} />
+              ) : (
+                <Text style={{ color: palette.fg }}>Boot error</Text>
+              )}
+            </View>
           ) : activeTab === 'scan' ? (
             <ScanTab
               palette={palette}

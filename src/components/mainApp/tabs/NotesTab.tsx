@@ -1,9 +1,5 @@
-<<<<<<< HEAD
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-=======
-﻿import React, { useEffect, useMemo, useRef, useState } from 'react';
->>>>>>> 3fe73b75a067a31bf53cd2e5de4e72afe5e8745d
-import { Image, Linking, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
+import { Image, Linking, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import * as ImagePicker from 'expo-image-picker';
@@ -13,12 +9,9 @@ import * as Sharing from 'expo-sharing';
 
 import {
   subscribeToNotes,
-<<<<<<< HEAD
-  syncNotesWithFirebase,
-=======
   subscribeToSharedGroups,
   subscribeToSharedGroupNotes,
->>>>>>> 3fe73b75a067a31bf53cd2e5de4e72afe5e8745d
+  syncNotesWithFirebase,
   upsertSharedGroupNote,
   type SharedNoteGroup,
 } from '../../../core/firebase';
@@ -188,6 +181,8 @@ export function NotesTab({ palette }: { palette: Palette }) {
   const [selectedClipboardIds, setSelectedClipboardIds] = useState<Set<string>>(new Set());
   const [lastNoteTap, setLastNoteTap] = useState<{ id: string; ts: number } | null>(null);
   const [lastTap, setLastTap] = useState<{ id: string; ts: number } | null>(null);
+  const [selectedNoteIds, setSelectedNoteIds] = useState<Set<string>>(new Set());
+  const [dateFilter, setDateFilter] = useState<string | null>(null);
   const draftInputRef = useRef<React.ElementRef<typeof TextInput> | null>(null);
   const templateInputRef = useRef<React.ElementRef<typeof TextInput> | null>(null);
 
@@ -242,7 +237,6 @@ export function NotesTab({ palette }: { palette: Palette }) {
     return () => { unsub?.(); };
   }, [user?.uid]);
 
-<<<<<<< HEAD
   // Auto-push notes to Firebase when they change locally (debounced, skips server-initiated updates).
   useEffect(() => {
     if (!user) return;
@@ -258,7 +252,7 @@ export function NotesTab({ palette }: { palette: Palette }) {
       if (notesSyncTimerRef.current) clearTimeout(notesSyncTimerRef.current);
     };
   }, [notes, templates, user?.uid]);
-=======
+
   // Live shared groups + their notes (cross-device / multi-user).
   useEffect(() => {
     if (!user) return;
@@ -266,11 +260,11 @@ export function NotesTab({ palette }: { palette: Palette }) {
     let notesUnsub: (() => void) | null = null;
     subscribeToSharedGroups(setGroups).then((u) => { groupsUnsub = u; }).catch(() => undefined);
     subscribeToSharedGroupNotes((sharedNotes) => {
+      serverUpdateRef.current = true;
       setNotes((current) => mergeNotesByNewest(current, sharedNotes));
     }).then((u) => { notesUnsub = u; }).catch(() => undefined);
     return () => { groupsUnsub?.(); notesUnsub?.(); };
   }, [user?.uid]);
->>>>>>> 3fe73b75a067a31bf53cd2e5de4e72afe5e8745d
 
   useEffect(() => {
     AsyncStorage.getItem(DRAFT_KEY).then((raw) => {
@@ -430,8 +424,14 @@ export function NotesTab({ palette }: { palette: Palette }) {
     if (filter === 'pinned') next = next.filter((n) => n.pinned);
     if (filter === 'archived') next = next.filter((n) => n.archived);
     if (filter !== 'archived') next = next.filter((n) => !n.archived);
+    if (dateFilter) {
+      next = next.filter((n) => {
+        const d = new Date(n.updatedAt);
+        return d.toISOString().slice(0, 10) === dateFilter;
+      });
+    }
     return next;
-  }, [notes, searchText, searchCategory, filter, activeGroupId]);
+  }, [notes, searchText, searchCategory, filter, activeGroupId, dateFilter]);
 
   const filteredTemplates = useMemo(() => {
     const q = templateSearch.trim().toLowerCase();
@@ -727,6 +727,39 @@ export function NotesTab({ palette }: { palette: Palette }) {
     setSelectedClipboardIds(new Set());
   }
 
+  function toggleNoteSelection(id: string) {
+    setSelectedNoteIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+
+  function enterSelectionMode(id: string) {
+    setSelectedNoteIds(new Set([id]));
+  }
+
+  async function deleteSelectedNotes() {
+    const count = selectedNoteIds.size;
+    Alert.alert(
+      'Eliminar notas',
+      `¿Eliminar ${count} nota${count > 1 ? 's' : ''}? Esta acción no se puede deshacer.`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Eliminar', style: 'destructive', onPress: async () => {
+            let current = notes;
+            for (const id of selectedNoteIds) {
+              current = await removeNote(id);
+            }
+            setNotes(current);
+            setSelectedNoteIds(new Set());
+          },
+        },
+      ],
+    );
+  }
+
   const notesEmptyTitle = notes.length === 0 ? 'Create your first note' : 'No results';
   const notesEmptyText = notes.length === 0
     ? 'Write something in the editor, then save it to get started.'
@@ -744,32 +777,35 @@ export function NotesTab({ palette }: { palette: Palette }) {
     bg: palette.bg,
     accent: palette.accent,
     border: palette.border,
-    surface: '#141414',
-    surfaceAlt: '#1A1A1A',
-    textBody: '#DDDDDD',
-    textDim: '#555555',
-    textMuted: '#888888',
-    textPrimary: '#FFFFFF',
-    chipBorder: '#2A2A2A',
+    surface: palette.card,
+    surfaceAlt: palette.card,
+    textBody: palette.fg,
+    textDim: palette.muted,
+    textMuted: palette.muted,
+    textPrimary: palette.fg,
+    chipBorder: palette.border,
   };
 
   return (
-    <ScrollView
-      style={mainAppStyles.screen}
-      contentContainerStyle={[styles.content, { alignItems: 'stretch' }]}
-      keyboardShouldPersistTaps="handled"
-    >
+    <View style={{ flex: 1 }}>
+      {/* ── Tab bar fijo ── */}
+      <TabBar
+        activeTab={workspaceTab}
+        palette={uiPalette}
+        onChangeTab={(tab) => { setWorkspaceTab(tab); setSelectedNoteIds(new Set()); }}
+        tabs={[
+          { key: 'notes', label: 'Notes' },
+          { key: 'templates', label: 'Templates' },
+          { key: 'clipboard', label: 'Clipboard' },
+        ]}
+      />
+
+      <ScrollView
+        style={mainAppStyles.screen}
+        contentContainerStyle={[styles.content, { alignItems: 'stretch' }]}
+        keyboardShouldPersistTaps="handled"
+      >
       <View style={[styles.workspace, { width: '100%', minWidth: 0, alignSelf: 'stretch' }]}>
-        <TabBar
-          activeTab={workspaceTab}
-          palette={uiPalette}
-          onChangeTab={setWorkspaceTab}
-          tabs={[
-            { key: 'notes', label: 'Notes' },
-            { key: 'templates', label: 'Templates' },
-            { key: 'clipboard', label: 'Clipboard' },
-          ]}
-        />
 
         {workspaceTab === 'notes' ? (
           <>
@@ -825,8 +861,10 @@ export function NotesTab({ palette }: { palette: Palette }) {
                 value={searchText}
                 count={filteredNotes.length}
                 filter={filter}
+                dateFilter={dateFilter}
                 onChange={setSearchText}
                 onChangeFilter={setFilter}
+                onChangeDateFilter={setDateFilter}
               />
 
               {filteredNotes.length === 0 ? (
@@ -878,7 +916,12 @@ export function NotesTab({ palette }: { palette: Palette }) {
                             expanded={expanded}
                             editing={editing}
                             editingText={editingText}
-                            onToggleExpand={() => setExpandedNoteId(expanded ? null : note.id)}
+                            selected={selectedNoteIds.size > 0 ? selectedNoteIds.has(note.id) : undefined}
+                            onToggleExpand={() => {
+                              if (selectedNoteIds.size > 0) { toggleNoteSelection(note.id); return; }
+                              setExpandedNoteId(expanded ? null : note.id);
+                            }}
+                            onLongPress={() => enterSelectionMode(note.id)}
                             onStartEdit={() => {
                               setEditingNoteId(note.id);
                               setEditingText(note.text);
@@ -891,9 +934,11 @@ export function NotesTab({ palette }: { palette: Palette }) {
                             }}
                             onTogglePinned={() => togglePinned(note.id).then(setNotes)}
                             onOpenImage={setPreviewNoteImageUri}
+                            onCopy={() => forceCopyToClipboard(note.text).catch(() => undefined)}
                             onSaveToDevice={() => saveNoteToDevice(note).catch(() => undefined)}
                             onShare={() => setShareNote(note)}
                             onSetReminder={() => createQuickReminderFromNote(note).catch(() => undefined)}
+                            onArchive={() => toggleArchived(note.id).then(setNotes)}
                             onDelete={() => removeNote(note.id).then(setNotes)}
                             onSetColor={(color) => setNoteColor(note.id, color).then(setNotes)}
                           />
@@ -967,22 +1012,62 @@ export function NotesTab({ palette }: { palette: Palette }) {
               </View>
             ) : null}
             {filteredTemplates.length > 0 ? (
-              <>
+              <View style={{ gap: 8 }}>
                 {filteredTemplates.map((template) => (
-                <View key={template.id} style={[styles.compactCard, { borderColor: palette.border, backgroundColor: palette.bg, width: '100%' }]}>
-                  <Text style={{ color: palette.fg, fontWeight: '800' }} numberOfLines={1}>{template.name}</Text>
-                  <Text style={{ color: palette.muted, fontSize: 11 }} numberOfLines={1}>{template.to || '(No recipients)'}</Text>
-                  <Text style={{ color: palette.muted, fontSize: 11 }} numberOfLines={1}>{template.subject || '(No subject)'}</Text>
-                  <View style={styles.editorActions}>
-                    <Pressable onPress={() => startEditingTemplate(template)}><Ionicons name="create-outline" size={16} color={palette.fg} /></Pressable>
-                    <Pressable onPress={() => forceCopyToClipboard(buildTemplateShareText(template)).catch(() => undefined)}><Ionicons name="copy-outline" size={16} color={palette.fg} /></Pressable>
-                    <Pressable onPress={() => { const text = buildTemplateShareText(template); void Linking.openURL(`https://wa.me/?text=${encodeURIComponent(text)}`); }}><Ionicons name="share-social-outline" size={16} color={palette.fg} /></Pressable>
-                    <Pressable onPress={() => { const body = buildTemplateShareText(template); void Linking.openURL(`mailto:${encodeURIComponent(template.to || '')}?subject=${encodeURIComponent(template.subject || template.name)}&body=${encodeURIComponent(body)}`); }}><Ionicons name="mail-outline" size={16} color={palette.fg} /></Pressable>
-                    <Pressable onPress={() => removeTemplate(template.id).then(setTemplates)}><Ionicons name="trash-outline" size={16} color="#ef4444" /></Pressable>
+                  <View key={template.id} style={{ borderWidth: 1, borderColor: palette.border, borderRadius: 12, backgroundColor: palette.card, overflow: 'hidden' }}>
+                    {/* Header */}
+                    <View style={{ paddingHorizontal: 14, paddingTop: 12, paddingBottom: 8, gap: 3 }}>
+                      <Text style={{ color: palette.fg, fontWeight: '700', fontSize: 14 }} numberOfLines={1}>{template.name}</Text>
+                      {template.to ? (
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                          <Ionicons name="mail-outline" size={11} color={palette.muted} />
+                          <Text style={{ color: palette.muted, fontSize: 11 }} numberOfLines={1}>{template.to}</Text>
+                        </View>
+                      ) : null}
+                      {template.subject ? (
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                          <Ionicons name="document-text-outline" size={11} color={palette.muted} />
+                          <Text style={{ color: palette.muted, fontSize: 11 }} numberOfLines={1}>{template.subject}</Text>
+                        </View>
+                      ) : null}
+                    </View>
+                    {/* Body preview */}
+                    {template.body ? (
+                      <View style={{ paddingHorizontal: 14, paddingBottom: 10 }}>
+                        <Text style={{ color: palette.muted, fontSize: 12, lineHeight: 17 }} numberOfLines={2}>{template.body}</Text>
+                      </View>
+                    ) : null}
+                    {/* Actions */}
+                    <View style={{ flexDirection: 'row', borderTopWidth: 1, borderTopColor: palette.border }}>
+                      {[
+                        { icon: 'create-outline' as const,      label: 'Editar',     color: palette.fg,  onPress: () => startEditingTemplate(template) },
+                        { icon: 'copy-outline' as const,        label: 'Copiar',     color: palette.fg,  onPress: () => forceCopyToClipboard(buildTemplateShareText(template)).catch(() => undefined) },
+                        { icon: 'logo-whatsapp' as const,       label: 'WhatsApp',   color: '#25D366',   onPress: () => { const t = buildTemplateShareText(template); void Linking.openURL(`https://wa.me/?text=${encodeURIComponent(t)}`); } },
+                        { icon: 'mail-outline' as const,        label: 'Email',      color: palette.accent, onPress: () => { const b = buildTemplateShareText(template); void Linking.openURL(`mailto:${encodeURIComponent(template.to || '')}?subject=${encodeURIComponent(template.subject || template.name)}&body=${encodeURIComponent(b)}`); } },
+                        { icon: 'trash-outline' as const,       label: 'Eliminar',   color: '#ef4444',   onPress: () => removeTemplate(template.id).then(setTemplates) },
+                      ].map((action, idx, arr) => (
+                        <Pressable
+                          key={action.label}
+                          onPress={action.onPress}
+                          style={({ pressed }) => ({
+                            flex: 1,
+                            minHeight: 44,
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: 2,
+                            borderRightWidth: idx < arr.length - 1 ? 1 : 0,
+                            borderRightColor: palette.border,
+                            backgroundColor: pressed ? palette.border : 'transparent',
+                          })}
+                        >
+                          <Ionicons name={action.icon} size={15} color={action.color} />
+                          <Text style={{ color: action.color, fontSize: 9, fontWeight: '600', letterSpacing: 0.2 }}>{action.label}</Text>
+                        </Pressable>
+                      ))}
+                    </View>
                   </View>
-                </View>
                 ))}
-              </>
+              </View>
             ) : null}
             </View>
           </>
@@ -996,7 +1081,6 @@ export function NotesTab({ palette }: { palette: Palette }) {
           />
         ) : null}
       </View>
-
 
       <Modal animationType="fade" transparent visible={Boolean(previewEntry)} onRequestClose={() => setPreviewEntry(null)} statusBarTranslucent>
         <Pressable style={mainAppStyles.modalBackdrop} onPress={() => setPreviewEntry(null)}>
@@ -1083,7 +1167,45 @@ export function NotesTab({ palette }: { palette: Palette }) {
           </Pressable>
         </Pressable>
       </Modal>
-    </ScrollView>
+      </ScrollView>
+
+      {/* ── Barra flotante de selección múltiple ── */}
+      {selectedNoteIds.size > 0 ? (
+        <View style={{
+          position: 'absolute', bottom: 0, left: 0, right: 0,
+          backgroundColor: palette.card,
+          borderTopWidth: 1, borderTopColor: palette.border,
+          flexDirection: 'row', alignItems: 'center',
+          paddingHorizontal: 16, paddingVertical: 12, gap: 12,
+        }}>
+          <Pressable
+            onPress={() => setSelectedNoteIds(new Set())}
+            style={{ width: 36, height: 36, borderRadius: 18, borderWidth: 1, borderColor: palette.border, alignItems: 'center', justifyContent: 'center' }}
+          >
+            <Ionicons name="close" size={18} color={palette.muted} />
+          </Pressable>
+          <Text style={{ flex: 1, color: palette.fg, fontWeight: '600', fontSize: 14 }}>
+            {selectedNoteIds.size} seleccionada{selectedNoteIds.size > 1 ? 's' : ''}
+          </Text>
+          <Pressable
+            onPress={() => {
+              const all = new Set(filteredNotes.map((n) => n.id));
+              setSelectedNoteIds(all);
+            }}
+            style={{ paddingHorizontal: 12, height: 36, borderRadius: 10, borderWidth: 1, borderColor: palette.border, alignItems: 'center', justifyContent: 'center' }}
+          >
+            <Text style={{ color: palette.fg, fontSize: 13, fontWeight: '600' }}>Todas</Text>
+          </Pressable>
+          <Pressable
+            onPress={() => deleteSelectedNotes().catch(() => undefined)}
+            style={{ paddingHorizontal: 16, height: 36, borderRadius: 10, backgroundColor: '#C0392B', flexDirection: 'row', alignItems: 'center', gap: 6 }}
+          >
+            <Ionicons name="trash-outline" size={16} color="#fff" />
+            <Text style={{ color: '#fff', fontSize: 13, fontWeight: '700' }}>Eliminar</Text>
+          </Pressable>
+        </View>
+      ) : null}
+    </View>
   );
 }
 

@@ -348,7 +348,41 @@ export async function upsertNoteInFirebase(note: NoteItem): Promise<void> {
   );
 }
 
-<<<<<<< HEAD
+export async function upsertTemplateInFirebase(template: NoteTemplate): Promise<void> {
+  const rt = await initFirebaseRuntime();
+  if (!rt.enabled || !rt.auth || !rt.db) {
+    throw new Error(buildFirebaseDisabledErrorMessage(rt));
+  }
+  const user = rt.auth.currentUser;
+  if (!user) throw new Error('No authenticated session to save template.');
+  const payload = {
+    id: template.id,
+    name: template.name,
+    kind: template.kind,
+    subject: template.subject,
+    body: template.body,
+    location: template.location || '',
+    durationMinutes: Number(template.durationMinutes || 30),
+    createdAt: Number(template.createdAt || Date.now()),
+    updatedAt: Number(template.updatedAt || Date.now()),
+    uid: user.uid,
+    updatedAtServer: serverTimestamp(),
+  };
+  await setDoc(
+    doc(rt.db, 'users', user.uid, 'noteTemplates', template.id),
+    payload,
+    { merge: true }
+  );
+}
+
+export async function syncNotesWithFirebase(localNotes: NoteItem[], localTemplates: NoteTemplate[]) {
+  const rt = await initFirebaseRuntime();
+  if (!rt.enabled || !rt.auth || !rt.db) {
+    throw new Error(buildFirebaseDisabledErrorMessage(rt));
+  }
+  const user = rt.auth.currentUser;
+  if (!user) throw new Error('No authenticated session to sync notes.');
+
   const uid = user.uid;
   const notesRef = collection(rt.db, 'users', uid, 'notes');
   const templatesRef = collection(rt.db, 'users', uid, 'noteTemplates');
@@ -412,34 +446,6 @@ export async function upsertNoteInFirebase(note: NoteItem): Promise<void> {
   const serverTemplates = Array.from(mergedTemplatesMap.values());
 
   return { pushedNotes, pushedTemplates, serverNotes, serverTemplates };
-=======
-export async function upsertTemplateInFirebase(template: NoteTemplate): Promise<void> {
-  const rt = await initFirebaseRuntime();
-  if (!rt.enabled || !rt.auth || !rt.db) {
-    throw new Error(buildFirebaseDisabledErrorMessage(rt));
-  }
-  const user = rt.auth.currentUser;
-  if (!user) throw new Error('No authenticated session to save template.');
-  // Keep payload aligned with current Firestore Rules allow-list.
-  const payload = {
-    id: template.id,
-    name: template.name,
-    kind: template.kind,
-    subject: template.subject,
-    body: template.body,
-    location: template.location || '',
-    durationMinutes: Number(template.durationMinutes || 30),
-    createdAt: Number(template.createdAt || Date.now()),
-    updatedAt: Number(template.updatedAt || Date.now()),
-    uid: user.uid,
-    updatedAtServer: serverTimestamp(),
-  };
-  await setDoc(
-    doc(rt.db, 'users', user.uid, 'noteTemplates', template.id),
-    payload,
-    { merge: true }
-  );
->>>>>>> 3fe73b75a067a31bf53cd2e5de4e72afe5e8745d
 }
 
 export async function fetchNotesFromFirebase() {
