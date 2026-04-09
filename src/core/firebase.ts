@@ -39,6 +39,10 @@ const REQUIRED_FIREBASE_ENV = [
   'EXPO_PUBLIC_FIREBASE_APP_ID',
 ] as const;
 
+function normalizeScanType(type: string): string {
+  return String(type || '').trim().toUpperCase();
+}
+
 const OPTIONAL_FIREBASE_ENV = [
   'EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET',
   'EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID',
@@ -259,6 +263,31 @@ export async function syncScansWithFirebase(local: ScanRecord[]) {
   });
 
   return { pushed, server };
+}
+
+export async function deleteScanFromFirebase(scan: ScanRecord): Promise<void> {
+  const rt = await initFirebaseRuntime();
+  if (!rt.enabled || !rt.auth || !rt.db) {
+    throw new Error(buildFirebaseDisabledErrorMessage(rt));
+  }
+
+  const user = rt.auth.currentUser;
+  if (!user) throw new Error('No authenticated session to delete scan.');
+
+  const scansRef = collection(rt.db, 'users', user.uid, 'scans');
+  const snap = await getDocs(query(scansRef));
+  const targetKey = `${String(scan.codeValue || scan.codeNormalized || '').trim()}::${normalizeScanType(scan.type)}`;
+  const deletions: Promise<unknown>[] = [];
+
+  snap.forEach((d) => {
+    const data = d.data() as ScanRecord;
+    const rowKey = `${String(data.codeValue || data.codeNormalized || '').trim()}::${normalizeScanType(data.type)}`;
+    if (d.id === scan.id || String(data.id || '') === scan.id || rowKey === targetKey) {
+      deletions.push(deleteDoc(doc(scansRef, d.id)));
+    }
+  });
+
+  await Promise.all(deletions);
 }
 
 // Real-time listener for scan changes (cross-device sync).

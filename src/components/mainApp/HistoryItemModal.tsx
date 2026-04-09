@@ -87,8 +87,9 @@ export function HistoryItemModal({
 
             <ScrollView
               keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+              style={Platform.OS === 'web' ? ({ scrollbarWidth: 'none', msOverflowStyle: 'none' } as any) : { flex: 1 }}
               contentContainerStyle={{ gap: 12, paddingBottom: 16 }}
-              style={{ flex: 1 }}
             >
               <View style={mainAppStyles.formSection}>
                 <Text style={[mainAppStyles.formLabel, { color: palette.fg }]}>Ticket</Text>

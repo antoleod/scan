@@ -38,6 +38,7 @@ import { lightThemes, themes, ThemeName } from '../theme/theme';
 import { SCAN_BARCODE_TYPES, type CodeType, normalizeCodeValue } from '../core/codeStrategy';
 import {
   clearScansInFirebase,
+  deleteScanFromFirebase,
   initFirebaseRuntime,
   recheckFirebaseRuntime,
   subscribeToScans,
@@ -188,6 +189,7 @@ function MainApp() {
   const laserAnim = useRef(new Animated.Value(0)).current;
   const entryDraftRef = useRef<EntryDraftSnapshot | null>(null);
   const entryOpenLockRef = useRef(false);
+  const deletedHistoryIdsRef = useRef<Set<string>>(new Set());
 
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const isCompactLayout = width < 390 || height < 780;
@@ -1027,8 +1029,9 @@ function MainApp() {
 
     subscribeToScans((serverScans) => {
       setHistory((current) => {
+        const filtered = serverScans.filter((s) => !deletedHistoryIdsRef.current.has(s.id));
         const localKeys = new Set(current.map((x) => historyKey(x)));
-        const newFromServer = serverScans.filter((s) => !localKeys.has(historyKey(s)));
+        const newFromServer = filtered.filter((s) => !localKeys.has(historyKey(s)));
         if (!newFromServer.length) return current;
         const merged = [
           ...current.map((x) => (x.status === 'pending' ? { ...x, status: 'sent' as const } : x)),
@@ -1315,6 +1318,7 @@ function MainApp() {
   }
 
   async function deleteHistoryItem(item: ScanRecord) {
+    deletedHistoryIdsRef.current.add(item.id);
     const next = history.filter((entry) => entry.id !== item.id);
     setHistory(next);
     setSelection((current) => {
@@ -1323,6 +1327,9 @@ function MainApp() {
       return nextSelection;
     });
     await saveHistory(next);
+    if (persistenceMode === 'firebase') {
+      await deleteScanFromFirebase(item).catch(() => undefined);
+    }
     queueAutoSync();
   }
 
@@ -1367,8 +1374,9 @@ function MainApp() {
 
   const cameraBarcodeTypes = useMemo(() => {
     const enabledTypes = settings.barcodeTypes || SCAN_BARCODE_TYPES;
-    // Ensure at least one type is active for the scanner to work.
-    return enabledTypes.length > 0 ? enabledTypes : SCAN_BARCODE_TYPES;
+    const mergedTypes = ['qr', ...enabledTypes.filter((type) => type !== 'qr')] as BarcodeType[];
+    // Keep QR always enabled for live camera detection, even if preferences change.
+    return mergedTypes.length > 0 ? mergedTypes : SCAN_BARCODE_TYPES;
   }, [settings.barcodeTypes]);
 
   const selectedDateLabel = selectedDate ? selectedDate.toLocaleDateString() : null;

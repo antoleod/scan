@@ -100,6 +100,25 @@ function analyzeSmartContent(text: string, imageRefs: string[]): SmartResult {
   return { ticketNumber, userName, location, configurationItem, followUp, summary, timeWorked };
 }
 
+type DiffLine = { type: 'same' | 'add' | 'remove'; line: string };
+function computeLineDiff(oldText: string, newText: string): DiffLine[] {
+  const a = oldText ? oldText.split('\n') : [];
+  const b = newText ? newText.split('\n') : [];
+  const m = a.length, n = b.length;
+  const dp: number[][] = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
+  for (let i = 1; i <= m; i++)
+    for (let j = 1; j <= n; j++)
+      dp[i][j] = a[i - 1] === b[j - 1] ? dp[i - 1][j - 1] + 1 : Math.max(dp[i - 1][j], dp[i][j - 1]);
+  const result: DiffLine[] = [];
+  let i = m, j = n;
+  while (i > 0 || j > 0) {
+    if (i > 0 && j > 0 && a[i - 1] === b[j - 1]) { result.unshift({ type: 'same', line: a[i - 1] }); i--; j--; }
+    else if (j > 0 && (i === 0 || dp[i][j - 1] >= dp[i - 1][j])) { result.unshift({ type: 'add', line: b[j - 1] }); j--; }
+    else { result.unshift({ type: 'remove', line: a[i - 1] }); i--; }
+  }
+  return result;
+}
+
 function chunk<T>(items: T[], columns: number): T[][] {
   if (columns <= 1) return items.map((item) => [item]);
   const rows: T[][] = [];
@@ -185,6 +204,7 @@ export function NotesTab({ palette }: { palette: Palette }) {
   const [generatorVisible, setGeneratorVisible] = useState(false);
   const [detailNote, setDetailNote] = useState<NoteItem | null>(null);
   const [versionNoteId, setVersionNoteId] = useState<string | null>(null);
+  const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
   const { toast, show: showToast, hide: hideToast } = useToast();
   const [searchText, setSearchText] = useState('');
   const [searchCategory, setSearchCategory] = useState<'all' | string>('all');
@@ -199,9 +219,15 @@ export function NotesTab({ palette }: { palette: Palette }) {
   // Ref to avoid auto-pushing notes back to Firebase when they just arrived from the server.
   const serverUpdateRef = useRef(false);
   const notesSyncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const deletedNoteIdsRef = useRef<Set<string>>(new Set());
 
   const autoCategory = useMemo(() => detectAutoCategory(draftText), [draftText]);
   const activeCategory = manualCategory || autoCategory;
+
+  async function handleRemoveNote(id: string): Promise<NoteItem[]> {
+    deletedNoteIdsRef.current.add(id);
+    return removeNote(id);
+  }
 
   async function readClipboardTextBestEffort(): Promise<string> {
     if (Platform.OS === 'web' && typeof navigator !== 'undefined' && navigator.clipboard?.readText) {
@@ -234,7 +260,8 @@ export function NotesTab({ palette }: { palette: Palette }) {
     subscribeToNotes(({ notes: serverNotes, templates: serverTemplates }) => {
       serverUpdateRef.current = true;
       setNotes((current) => {
-        const merged = mergeNotesByNewest(current, serverNotes);
+        const filteredNotes = serverNotes.filter((n) => !deletedNoteIdsRef.current.has(n.id));
+        const merged = mergeNotesByNewest(current, filteredNotes);
         saveLocalNotes(merged).catch(() => undefined);
         return merged;
       });
@@ -271,7 +298,7 @@ export function NotesTab({ palette }: { palette: Palette }) {
     subscribeToSharedGroups(setGroups).then((u) => { groupsUnsub = u; }).catch(() => undefined);
     subscribeToSharedGroupNotes((sharedNotes) => {
       serverUpdateRef.current = true;
-      setNotes((current) => mergeNotesByNewest(current, sharedNotes));
+      setNotes((current) => mergeNotesByNewest(current, sharedNotes.filter((n) => !deletedNoteIdsRef.current.has(n.id))));
     }).then((u) => { notesUnsub = u; }).catch(() => undefined);
     return () => { groupsUnsub?.(); notesUnsub?.(); };
   }, [user?.uid]);
@@ -784,7 +811,7 @@ export function NotesTab({ palette }: { palette: Palette }) {
           text: 'Delete', style: 'destructive', onPress: async () => {
             let current = notes;
             for (const id of selectedNoteIds) {
-              current = await removeNote(id);
+              current = await handleRemoveNote(id);
             }
             setNotes(current);
             setSelectedNoteIds(new Set());
@@ -835,7 +862,9 @@ export function NotesTab({ palette }: { palette: Palette }) {
       />
 
       <ScrollView
-        style={mainAppStyles.screen}
+        style={[mainAppStyles.screen, Platform.OS === 'web' ? ({ scrollbarWidth: 'none', msOverflowStyle: 'none' } as any) : null]}
+        contentInsetAdjustmentBehavior="automatic"
+        showsVerticalScrollIndicator={false}
         contentContainerStyle={[styles.content, { alignItems: 'stretch' }]}
         keyboardShouldPersistTaps="handled"
       >
@@ -975,7 +1004,7 @@ export function NotesTab({ palette }: { palette: Palette }) {
                             onOpenVersions={() => setVersionNoteId(note.id)}
                             onSetReminder={() => createQuickReminderFromNote(note).catch(() => undefined)}
                             onArchive={() => toggleArchived(note.id).then(setNotes)}
-                            onDelete={() => removeNote(note.id).then(setNotes)}
+                            onDelete={() => handleRemoveNote(note.id).then(setNotes)}
                             onSetColor={(color) => setNoteColor(note.id, color).then(setNotes)}
                             onDoubleTap={() => setDetailNote(note)}
                           />
@@ -1237,7 +1266,7 @@ export function NotesTab({ palette }: { palette: Palette }) {
         onSetColor={(color) => { if (detailNote) setNoteColor(detailNote.id, color).then((n) => { setNotes(n); setDetailNote((prev) => prev ? n.find((x) => x.id === prev.id) ?? null : null); }); }}
         onTogglePinned={(id) => togglePinned(id).then((n) => { setNotes(n); setDetailNote((prev) => prev?.id === id ? n.find((x) => x.id === id) ?? null : prev); })}
         onArchive={(id) => toggleArchived(id).then(setNotes)}
-        onDelete={(id) => removeNote(id).then(setNotes)}
+        onDelete={(id) => handleRemoveNote(id).then(setNotes)}
         onCopy={(text) => forceCopyToClipboard(text).catch(() => undefined)}
         onShare={(id) => { const n = notes.find((x) => x.id === id); if (n) setShareNote(n); setDetailNote(null); }}
       />
@@ -1253,19 +1282,45 @@ export function NotesTab({ palette }: { palette: Palette }) {
           : [];
 
         if (!versionNote) return null;
+        const currentText = versionNote.text;
 
         return (
-      <Modal animationType="fade" transparent visible={Boolean(versionNote)} onRequestClose={() => setVersionNoteId(null)} statusBarTranslucent>
-        <Pressable style={mainAppStyles.modalBackdrop} onPress={() => setVersionNoteId(null)}>
+      <Modal animationType="fade" transparent visible={Boolean(versionNote)} onRequestClose={() => { setVersionNoteId(null); setSelectedVersionId(null); }} statusBarTranslucent>
+        <Pressable style={mainAppStyles.modalBackdrop} onPress={() => { setVersionNoteId(null); setSelectedVersionId(null); }}>
           <Pressable style={[mainAppStyles.modalForm, { backgroundColor: palette.card, borderColor: palette.border, maxWidth: 640 }]} onPress={() => null}>
             <View style={mainAppStyles.modalHeader}>
               <Text style={[mainAppStyles.sectionTitle, { color: palette.fg }]}>Note versions</Text>
-              <Pressable style={[mainAppStyles.modalCloseBtn, { borderColor: palette.border }]} onPress={() => setVersionNoteId(null)}>
+              <Pressable style={[mainAppStyles.modalCloseBtn, { borderColor: palette.border }]} onPress={() => { setVersionNoteId(null); setSelectedVersionId(null); }}>
                 <Ionicons name="close" size={18} color={palette.fg} />
               </Pressable>
             </View>
             {versions.length ? (
               <View style={{ gap: 10 }}>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingBottom: 2 }}>
+                  {versions.slice(1).map((version) => {
+                    const active = selectedVersionId === version.id;
+                    return (
+                      <Pressable
+                        key={version.id}
+                        onPress={() => setSelectedVersionId(version.id)}
+                        style={({ pressed }) => ({
+                          minHeight: 34,
+                          paddingHorizontal: 12,
+                          borderRadius: 999,
+                          borderWidth: 1,
+                          borderColor: active ? palette.accent : palette.border,
+                          backgroundColor: active ? `${palette.accent}18` : palette.card,
+                          justifyContent: 'center',
+                          opacity: pressed ? 0.85 : 1,
+                        })}
+                      >
+                        <Text style={{ color: active ? palette.accent : palette.fg, fontSize: 11, fontWeight: '700' }}>
+                          {new Date(version.createdAt).toLocaleDateString()}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </ScrollView>
                 {versions.map((version) => (
                   <View key={version.id} style={{ borderWidth: 1, borderColor: palette.border, borderRadius: 12, padding: 12, gap: 10, backgroundColor: version.isCurrent ? palette.bg : palette.card }}>
                     <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
@@ -1303,28 +1358,45 @@ export function NotesTab({ palette }: { palette: Palette }) {
                         </Pressable>
                       </View>
                     </View>
-                    <View style={{ borderWidth: 1, borderColor: palette.border, borderRadius: 10, overflow: 'hidden' }}>
-                      <View style={{ flexDirection: 'row' }}>
-                        <View style={{ flex: 1, padding: 10, gap: 6, borderRightWidth: 1, borderRightColor: palette.border, backgroundColor: palette.card }}>
-                      <Text style={{ color: palette.muted, fontSize: 10, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 }}>Current</Text>
-                      <Text style={{ color: palette.muted, fontSize: 11, lineHeight: 16 }}>
-                        {new Date(versionNote.updatedAt).toLocaleString()}
-                      </Text>
-                      <Text style={{ color: palette.fg, fontSize: 12, lineHeight: 18 }} numberOfLines={4}>
-                        {versionNote?.text || '-'}
-                      </Text>
-                    </View>
-                    <View style={{ flex: 1, padding: 10, gap: 6, backgroundColor: palette.card }}>
-                      <Text style={{ color: palette.accent, fontSize: 10, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 }}>Mirror</Text>
-                      <Text style={{ color: palette.muted, fontSize: 11, lineHeight: 16 }}>
-                        {version.isCurrent ? new Date(version.createdAt).toLocaleString() : new Date(version.createdAt).toLocaleString()}
-                      </Text>
-                      <Text style={{ color: palette.fg, fontSize: 12, lineHeight: 18 }} numberOfLines={4}>
-                        {version.text}
-                      </Text>
+                    {!version.isCurrent && (() => {
+                      const diffLines = computeLineDiff(version.text || '', currentText || '');
+                      const hasChanges = diffLines.some((d) => d.type !== 'same');
+                      return (
+                        <View style={{ borderWidth: 1, borderColor: palette.border, borderRadius: 10, overflow: 'hidden' }}>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 10, paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: palette.border, backgroundColor: palette.bg }}>
+                            <Text style={{ color: palette.muted, fontSize: 10, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                              Diff — {new Date(version.createdAt).toLocaleString()} → Current
+                            </Text>
+                            {!hasChanges && (
+                              <Text style={{ color: palette.muted, fontSize: 10 }}>Sin cambios</Text>
+                            )}
+                          </View>
+                          <ScrollView style={{ maxHeight: 160 }} nestedScrollEnabled showsVerticalScrollIndicator={false}>
+                            <View style={{ padding: 10, gap: 2 }}>
+                              {hasChanges ? diffLines.map((dl, idx) => (
+                                <View
+                                  key={idx}
+                                  style={{
+                                    flexDirection: 'row', gap: 6,
+                                    backgroundColor: dl.type === 'add' ? '#22c55e18' : dl.type === 'remove' ? '#ef444418' : 'transparent',
+                                    borderRadius: 3, paddingHorizontal: 4,
+                                  }}
+                                >
+                                  <Text style={{ color: dl.type === 'add' ? '#22c55e' : dl.type === 'remove' ? '#ef4444' : palette.muted, fontSize: 11, fontFamily: Platform.OS === 'web' ? 'monospace' : undefined, width: 10 }}>
+                                    {dl.type === 'add' ? '+' : dl.type === 'remove' ? '-' : ' '}
+                                  </Text>
+                                  <Text style={{ color: dl.type === 'add' ? '#22c55e' : dl.type === 'remove' ? '#ef4444' : palette.fg, fontSize: 11, lineHeight: 17, flex: 1, fontFamily: Platform.OS === 'web' ? 'monospace' : undefined }}>
+                                    {dl.line || ' '}
+                                  </Text>
+                                </View>
+                              )) : (
+                                <Text style={{ color: palette.muted, fontSize: 11 }}>El contenido es idéntico al actual.</Text>
+                              )}
+                            </View>
+                          </ScrollView>
                         </View>
-                      </View>
-                    </View>
+                      );
+                    })()}
                   </View>
                 ))}
               </View>

@@ -123,6 +123,8 @@ export function HistoryTab({
         numColumns={columns}
         key={`history-grid-${columns}`}
         keyExtractor={(item) => item.id}
+        showsVerticalScrollIndicator={false}
+        style={Platform.OS === 'web' ? ({ scrollbarWidth: 'none', msOverflowStyle: 'none' } as any) : undefined}
         contentContainerStyle={[mainAppStyles.listContent, { gap: 8, paddingTop: 8, paddingBottom: 120, paddingHorizontal: 0, minWidth: 0 }]}
         columnWrapperStyle={columns > 1 ? { gap: 10, width: '100%', minWidth: 0 } : undefined}
         ListHeaderComponent={(
