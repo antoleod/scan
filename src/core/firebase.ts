@@ -320,55 +320,63 @@ export async function syncNotesWithFirebase(localNotes: NoteItem[], localTemplat
   const notesRef = collection(rt.db, 'users', uid, 'notes');
   const templatesRef = collection(rt.db, 'users', uid, 'noteTemplates');
 
+  // Read server state first so we can merge (newest updatedAt wins).
   const notesSnapBefore = await getDocs(query(notesRef));
-  const serverNoteIds = new Set<string>();
-  notesSnapBefore.forEach((d) => serverNoteIds.add(d.id));
+  const serverNotesMap = new Map<string, NoteItem>();
+  notesSnapBefore.forEach((d) => {
+    const x = d.data() as NoteItem;
+    serverNotesMap.set(d.id, { ...x, id: d.id });
+  });
 
   const templatesSnapBefore = await getDocs(query(templatesRef));
-  const serverTemplateIds = new Set<string>();
-  templatesSnapBefore.forEach((d) => serverTemplateIds.add(d.id));
+  const serverTemplatesMap = new Map<string, NoteTemplate>();
+  templatesSnapBefore.forEach((d) => {
+    const x = d.data() as NoteTemplate;
+    serverTemplatesMap.set(d.id, { ...x, id: d.id });
+  });
 
+  // Push local notes that are newer than (or absent from) the server.
   const localNotesLimited = localNotes.slice(0, 3000);
-  const localNoteIds = new Set(localNotesLimited.map((note) => note.id));
   let pushedNotes = 0;
   for (const note of localNotesLimited) {
-    await setDoc(doc(notesRef, note.id), { ...note, uid, updatedAtServer: serverTimestamp() }, { merge: true });
-    pushedNotes += 1;
+    const serverNote = serverNotesMap.get(note.id);
+    if (!serverNote || note.updatedAt >= serverNote.updatedAt) {
+      await setDoc(doc(notesRef, note.id), { ...note, uid, updatedAtServer: serverTimestamp() }, { merge: true });
+      pushedNotes += 1;
+    }
   }
 
+  // Push local templates that are newer than (or absent from) the server.
   const localTemplatesLimited = localTemplates.slice(0, 300);
-  const localTemplateIds = new Set(localTemplatesLimited.map((template) => template.id));
   let pushedTemplates = 0;
   for (const template of localTemplatesLimited) {
-    await setDoc(doc(templatesRef, template.id), { ...template, uid, updatedAtServer: serverTimestamp() }, { merge: true });
-    pushedTemplates += 1;
-  }
-
-  // Local state is authoritative for deletions to avoid "reviving" removed notes/templates.
-  for (const serverId of serverNoteIds) {
-    if (!localNoteIds.has(serverId)) {
-      await deleteDoc(doc(notesRef, serverId));
-    }
-  }
-  for (const serverId of serverTemplateIds) {
-    if (!localTemplateIds.has(serverId)) {
-      await deleteDoc(doc(templatesRef, serverId));
+    const serverTemplate = serverTemplatesMap.get(template.id);
+    if (!serverTemplate || template.updatedAt >= serverTemplate.updatedAt) {
+      await setDoc(doc(templatesRef, template.id), { ...template, uid, updatedAtServer: serverTimestamp() }, { merge: true });
+      pushedTemplates += 1;
     }
   }
 
+  // Read final server state and merge with local (server may have items from other devices).
   const notesSnap = await getDocs(query(notesRef));
-  const serverNotes: NoteItem[] = [];
+  const mergedNotesMap = new Map<string, NoteItem>();
+  for (const note of localNotesLimited) mergedNotesMap.set(note.id, note);
   notesSnap.forEach((d) => {
-    const x = d.data() as NoteItem;
-    serverNotes.push({ ...x, id: x.id || d.id });
+    const x = { ...(d.data() as NoteItem), id: d.id };
+    const existing = mergedNotesMap.get(x.id);
+    if (!existing || x.updatedAt >= existing.updatedAt) mergedNotesMap.set(x.id, x);
   });
+  const serverNotes = Array.from(mergedNotesMap.values());
 
   const templatesSnap = await getDocs(query(templatesRef));
-  const serverTemplates: NoteTemplate[] = [];
+  const mergedTemplatesMap = new Map<string, NoteTemplate>();
+  for (const t of localTemplatesLimited) mergedTemplatesMap.set(t.id, t);
   templatesSnap.forEach((d) => {
-    const x = d.data() as NoteTemplate;
-    serverTemplates.push({ ...x, id: x.id || d.id });
+    const x = { ...(d.data() as NoteTemplate), id: d.id };
+    const existing = mergedTemplatesMap.get(x.id);
+    if (!existing || x.updatedAt >= existing.updatedAt) mergedTemplatesMap.set(x.id, x);
   });
+  const serverTemplates = Array.from(mergedTemplatesMap.values());
 
   return { pushedNotes, pushedTemplates, serverNotes, serverTemplates };
 }

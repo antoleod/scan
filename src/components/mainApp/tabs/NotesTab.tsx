@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Image, Linking, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
@@ -10,6 +10,7 @@ import * as Sharing from 'expo-sharing';
 import {
   fetchSharedGroupsForCurrentUser,
   subscribeToNotes,
+  syncNotesWithFirebase,
   upsertSharedGroupNote,
   type SharedNoteGroup,
 } from '../../../core/firebase';
@@ -24,6 +25,8 @@ import {
   ensureWorkNotesAndEmailTemplates,
   removeNote,
   removeTemplate,
+  saveNotes as saveLocalNotes,
+  saveTemplates as saveLocalTemplates,
   setNoteColor,
   togglePinned,
   toggleArchived,
@@ -173,6 +176,10 @@ export function NotesTab({ palette }: { palette: Palette }) {
   const [lastNoteTap, setLastNoteTap] = useState<{ id: string; ts: number } | null>(null);
   const [lastTap, setLastTap] = useState<{ id: string; ts: number } | null>(null);
 
+  // Ref to avoid auto-pushing notes back to Firebase when they just arrived from the server.
+  const serverUpdateRef = useRef(false);
+  const notesSyncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const autoCategory = useMemo(() => detectAutoCategory(draftText), [draftText]);
   const activeCategory = manualCategory || autoCategory;
 
@@ -201,16 +208,41 @@ export function NotesTab({ palette }: { palette: Palette }) {
     fetchSharedGroupsForCurrentUser().then(setGroups).catch(() => undefined);
   }, []);
 
-  // Real-time cross-device sync via Firestore onSnapshot (replaces 10s polling).
+  // Real-time cross-device sync via Firestore onSnapshot.
   useEffect(() => {
     if (!user) return;
     let unsub: (() => void) | null = null;
     subscribeToNotes(({ notes: serverNotes, templates: serverTemplates }) => {
-      setNotes((current) => mergeNotesByNewest(current, serverNotes));
-      setTemplates((current) => mergeTemplatesByNewest(current, serverTemplates));
+      serverUpdateRef.current = true;
+      setNotes((current) => {
+        const merged = mergeNotesByNewest(current, serverNotes);
+        saveLocalNotes(merged).catch(() => undefined);
+        return merged;
+      });
+      setTemplates((current) => {
+        const merged = mergeTemplatesByNewest(current, serverTemplates);
+        saveLocalTemplates(merged).catch(() => undefined);
+        return merged;
+      });
     }).then((u) => { unsub = u; }).catch(() => undefined);
     return () => { unsub?.(); };
   }, [user?.uid]);
+
+  // Auto-push notes to Firebase when they change locally (debounced, skips server-initiated updates).
+  useEffect(() => {
+    if (!user) return;
+    if (serverUpdateRef.current) {
+      serverUpdateRef.current = false;
+      return;
+    }
+    if (notesSyncTimerRef.current) clearTimeout(notesSyncTimerRef.current);
+    notesSyncTimerRef.current = setTimeout(() => {
+      syncNotesWithFirebase(notes, templates).catch(() => undefined);
+    }, 1500);
+    return () => {
+      if (notesSyncTimerRef.current) clearTimeout(notesSyncTimerRef.current);
+    };
+  }, [notes, templates, user?.uid]);
 
   useEffect(() => {
     AsyncStorage.getItem(DRAFT_KEY).then((raw) => {
