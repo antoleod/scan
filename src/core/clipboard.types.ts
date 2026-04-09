@@ -1,12 +1,19 @@
-﻿export type ClipboardCategory = 'code' | 'servicenow' | 'link' | 'general';
-export type ClipboardKind = 'text' | 'image';
+export type ClipKind = 'text' | 'image';
+export type ClipCategory = 'url' | 'code' | 'servicenow' | 'email' | 'general';
+export type ClipSource = 'paste' | 'copy' | 'focus' | 'poll' | 'manual';
+export type PermState = 'granted' | 'denied' | 'prompt' | 'unsupported';
 
-export interface ClipboardEntry {
+export interface ClipEntry {
   id: string;
-  kind: ClipboardKind;
+  kind: ClipKind;
   content: string;
-  imageDataUri?: string;
-  sourceKey: string;
+  category: ClipCategory;
+  source: ClipSource;
   capturedAt: number;
-  category: ClipboardCategory;
+  sig: string;
+  imageDataUri?: string;
 }
+
+export type ClipboardCategory = ClipCategory;
+export type ClipboardKind = ClipKind;
+export type ClipboardEntry = ClipEntry;

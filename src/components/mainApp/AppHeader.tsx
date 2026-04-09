@@ -1,7 +1,6 @@
 import React from 'react';
-import { Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 
-import { lightThemes, ThemeName } from '../../theme/theme';
 import { mainAppStyles } from './styles';
 
 type Palette = {
@@ -13,19 +12,14 @@ type Palette = {
   border: string;
 };
 
-function LogoMark({ accent, foreground, compact }: { accent: string; foreground: string; compact?: boolean }) {
-  const size = compact ? 44 : 52;
-  const lineHeight = compact ? 18 : 22;
+function LogoMark({ accent, foreground }: { accent: string; foreground: string }) {
   return (
-    <View style={[mainAppStyles.logoShell, { width: size, height: size, borderColor: accent }]}>
-      <View style={[mainAppStyles.logoHalo, { backgroundColor: accent + '22' }]} />
-      <View style={[mainAppStyles.logoCore, { backgroundColor: accent }]}>
-        <View style={mainAppStyles.logoBars}>
-          <View style={[mainAppStyles.logoBar, { height: lineHeight, backgroundColor: foreground }]} />
-          <View style={[mainAppStyles.logoBarThin, { height: lineHeight - 4, backgroundColor: foreground }]} />
-          <View style={[mainAppStyles.logoBar, { height: lineHeight + 2, backgroundColor: foreground }]} />
-          <View style={[mainAppStyles.logoBarThin, { height: lineHeight - 2, backgroundColor: foreground }]} />
-        </View>
+    <View style={[mainAppStyles.logoShell, { width: 32, height: 32, borderColor: accent, backgroundColor: accent, borderRadius: 8 }]}>
+      <View style={mainAppStyles.logoBars}>
+        <View style={[mainAppStyles.logoBar, { height: 16, backgroundColor: foreground }]} />
+        <View style={[mainAppStyles.logoBarThin, { height: 12, backgroundColor: foreground }]} />
+        <View style={[mainAppStyles.logoBar, { height: 18, backgroundColor: foreground }]} />
+        <View style={[mainAppStyles.logoBarThin, { height: 14, backgroundColor: foreground }]} />
       </View>
     </View>
   );
@@ -33,27 +27,27 @@ function LogoMark({ accent, foreground, compact }: { accent: string; foreground:
 
 export function AppHeader({
   palette,
-  statusChip,
-  compact,
-  themeName,
+  email,
+  onPressEmail,
 }: {
   palette: Palette;
-  statusChip: string;
-  compact?: boolean;
-  themeName: ThemeName;
+  email: string;
+  onPressEmail: () => void;
 }) {
-  const isLightTheme = lightThemes.includes(themeName);
-
   return (
-    <View style={[mainAppStyles.header, { backgroundColor: palette.card, borderColor: palette.border }]}>
-      <View style={mainAppStyles.brandBlock}>
-        <LogoMark accent={palette.accent} foreground={isLightTheme ? '#162235' : '#0b1220'} compact={compact} />
-        <View>
-          <Text style={[mainAppStyles.kicker, { color: palette.accent }]}>BARRA CORE</Text>
-          <Text style={[mainAppStyles.title, { color: palette.fg }]}>Oryxen Scanner</Text>
-          <Text style={[mainAppStyles.subtitle, { color: palette.muted }]}>{statusChip}</Text>
-        </View>
+    <View style={[mainAppStyles.header, { backgroundColor: palette.bg, borderColor: palette.border, height: 52 }]}>
+      <View style={[mainAppStyles.brandBlock, { gap: 10 }]}>
+        <LogoMark accent={palette.accent} foreground="#000000" />
+        <Text style={{ color: palette.fg, fontSize: 15, fontWeight: '500', flex: 1, minWidth: 0 }} numberOfLines={1}>
+          Oryxen Scanner
+        </Text>
       </View>
+
+      <Pressable onPress={onPressEmail} hitSlop={8} style={{ minHeight: 44, justifyContent: 'center', maxWidth: '42%', flexShrink: 1 }}>
+        <Text style={{ color: '#999999', fontSize: 12, fontWeight: '400', textAlign: 'right', flexShrink: 1 }} numberOfLines={1}>
+          {email}
+        </Text>
+      </Pressable>
     </View>
   );
 }

@@ -1,0 +1,150 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    function hasOnlyKeys(allowed) {
+      return request.resource.data.keys().hasOnly(allowed);
+    }
+
+    function noteValid() {
+      return hasOnlyKeys([
+        'id',
+        'kind',
+        'category',
+        'text',
+        'imageBase64',
+        'imageMimeType',
+        'attachments',
+        'pinned',
+        'createdAt',
+        'updatedAt',
+        'uid',
+        'updatedAtServer'
+      ])
+      && request.resource.data.id is string
+      && request.resource.data.kind in ['text', 'image']
+      && request.resource.data.category in ['general', 'work']
+      && request.resource.data.text is string
+      && request.resource.data.pinned is bool
+      && request.resource.data.createdAt is number
+      && request.resource.data.updatedAt is number
+      && request.resource.data.uid == request.auth.uid;
+    }
+
+    function templateValid() {
+      return hasOnlyKeys([
+        'id',
+        'name',
+        'kind',
+        'subject',
+        'body',
+        'location',
+        'durationMinutes',
+        'createdAt',
+        'updatedAt',
+        'uid',
+        'updatedAtServer'
+      ])
+      && request.resource.data.id is string
+      && request.resource.data.name is string
+      && request.resource.data.kind in ['email', 'appointment']
+      && request.resource.data.subject is string
+      && request.resource.data.body is string
+      && request.resource.data.createdAt is number
+      && request.resource.data.updatedAt is number
+      && request.resource.data.uid == request.auth.uid;
+    }
+
+    function scanValid() {
+      return request.resource.data.uid == request.auth.uid;
+    }
+
+    match /users/{uid} {
+      allow read: if isOwner(uid);
+
+      // Keep the root doc blocked unless the app explicitly starts using it.
+      allow create, update, delete: if false;
+
+      match /private/{docId} {
+        allow read, write: if isOwner(uid);
+      }
+
+      match /scans/{scanId} {
+        allow read: if isOwner(uid);
+        allow create, update: if isOwner(uid) && scanValid();
+        allow delete: if isOwner(uid);
+      }
+
+      match /notes/{noteId} {
+        allow read: if isOwner(uid);
+        allow create, update: if isOwner(uid) && noteValid();
+        allow delete: if isOwner(uid);
+      }
+
+      match /noteTemplates/{templateId} {
+        allow read: if isOwner(uid);
+        allow create, update: if isOwner(uid) && templateValid();
+        allow delete: if isOwner(uid);
+      }
+    }
+
+    match /noteGroups/{groupId} {
+      // Needed so signed-in users can look up a group by invite code.
+      // Group notes remain protected by member checks below.
+      allow read: if signedIn();
+
+      allow create: if signedIn()
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.members is list
+        && request.resource.data.members.hasAny([request.auth.uid])
+        && request.resource.data.inviteCode is string
+        && request.resource.data.name is string;
+
+      allow update: if signedIn() && (
+        resource.data.ownerUid == request.auth.uid
+        || (
+          request.resource.data.ownerUid == resource.data.ownerUid
+          && request.resource.data.inviteCode == resource.data.inviteCode
+          && request.resource.data.name == resource.data.name
+          && request.resource.data.members.size() == resource.data.members.size() + 1
+          && request.resource.data.members.hasAny([request.auth.uid])
+        )
+      );
+
+      allow delete: if signedIn() && resource.data.ownerUid == request.auth.uid;
+
+      match /notes/{noteId} {
+        allow read: if signedIn()
+          && get(/databases/$(database)/documents/noteGroups/$(groupId)).data.members.hasAny([request.auth.uid]);
+        allow create, update, delete: if signedIn()
+          && get(/databases/$(database)/documents/noteGroups/$(groupId)).data.members.hasAny([request.auth.uid]);
+      }
+    }
+
+    match /usernames/{username} {
+      allow read: if signedIn();
+      allow create: if signedIn()
+                    && request.resource.data.uid == request.auth.uid
+                    && request.resource.data.username == username;
+      allow update: if signedIn()
+                    && resource.data.uid == request.auth.uid
+                    && request.resource.data.uid == request.auth.uid;
+      allow delete: if false;
+    }
+
+    match /authAttempts/{attemptId} {
+      allow read, write: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

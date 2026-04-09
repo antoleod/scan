@@ -294,28 +294,61 @@ export async function subscribeToNotes(
   let latestNotes: NoteItem[] = [];
   let latestTemplates: NoteTemplate[] = [];
 
-  const notesUnsub = onSnapshot(query(notesRef), (snap) => {
-    latestNotes = snap.docs.map((d) => ({ ...(d.data() as NoteItem), id: d.id }));
-    callback({ notes: latestNotes, templates: latestTemplates });
-  });
+  const notesUnsub = onSnapshot(
+    query(notesRef),
+    (snap) => {
+      latestNotes = snap.docs.map((d) => ({ ...(d.data() as NoteItem), id: d.id }));
+      callback({ notes: latestNotes, templates: latestTemplates });
+    },
+    async (error) => {
+      await diag.warn('notes.subscribe.notes.error', { message: String(error) });
+    }
+  );
 
-  const templatesUnsub = onSnapshot(query(templatesRef), (snap) => {
-    latestTemplates = snap.docs.map((d) => ({ ...(d.data() as NoteTemplate), id: d.id }));
-    callback({ notes: latestNotes, templates: latestTemplates });
-  });
+  const templatesUnsub = onSnapshot(
+    query(templatesRef),
+    (snap) => {
+      latestTemplates = snap.docs.map((d) => ({ ...(d.data() as NoteTemplate), id: d.id }));
+      callback({ notes: latestNotes, templates: latestTemplates });
+    },
+    async (error) => {
+      await diag.warn('notes.subscribe.templates.error', { message: String(error) });
+    }
+  );
 
   return () => { notesUnsub(); templatesUnsub(); };
 }
 
-export async function syncNotesWithFirebase(localNotes: NoteItem[], localTemplates: NoteTemplate[]) {
+export async function upsertNoteInFirebase(note: NoteItem): Promise<void> {
   const rt = await initFirebaseRuntime();
   if (!rt.enabled || !rt.auth || !rt.db) {
     throw new Error(buildFirebaseDisabledErrorMessage(rt));
   }
-
   const user = rt.auth.currentUser;
-  if (!user) throw new Error('No authenticated session to sync notes.');
+  if (!user) throw new Error('No authenticated session to save note.');
+  // Keep payload aligned with current Firestore Rules allow-list.
+  const payload = {
+    id: note.id,
+    kind: note.kind,
+    category: note.category,
+    text: note.text,
+    imageBase64: note.imageBase64,
+    imageMimeType: note.imageMimeType,
+    attachments: note.attachments,
+    pinned: Boolean(note.pinned),
+    createdAt: Number(note.createdAt || Date.now()),
+    updatedAt: Number(note.updatedAt || Date.now()),
+    uid: user.uid,
+    updatedAtServer: serverTimestamp(),
+  };
+  await setDoc(
+    doc(rt.db, 'users', user.uid, 'notes', note.id),
+    payload,
+    { merge: true }
+  );
+}
 
+<<<<<<< HEAD
   const uid = user.uid;
   const notesRef = collection(rt.db, 'users', uid, 'notes');
   const templatesRef = collection(rt.db, 'users', uid, 'noteTemplates');
@@ -379,6 +412,34 @@ export async function syncNotesWithFirebase(localNotes: NoteItem[], localTemplat
   const serverTemplates = Array.from(mergedTemplatesMap.values());
 
   return { pushedNotes, pushedTemplates, serverNotes, serverTemplates };
+=======
+export async function upsertTemplateInFirebase(template: NoteTemplate): Promise<void> {
+  const rt = await initFirebaseRuntime();
+  if (!rt.enabled || !rt.auth || !rt.db) {
+    throw new Error(buildFirebaseDisabledErrorMessage(rt));
+  }
+  const user = rt.auth.currentUser;
+  if (!user) throw new Error('No authenticated session to save template.');
+  // Keep payload aligned with current Firestore Rules allow-list.
+  const payload = {
+    id: template.id,
+    name: template.name,
+    kind: template.kind,
+    subject: template.subject,
+    body: template.body,
+    location: template.location || '',
+    durationMinutes: Number(template.durationMinutes || 30),
+    createdAt: Number(template.createdAt || Date.now()),
+    updatedAt: Number(template.updatedAt || Date.now()),
+    uid: user.uid,
+    updatedAtServer: serverTimestamp(),
+  };
+  await setDoc(
+    doc(rt.db, 'users', user.uid, 'noteTemplates', template.id),
+    payload,
+    { merge: true }
+  );
+>>>>>>> 3fe73b75a067a31bf53cd2e5de4e72afe5e8745d
 }
 
 export async function fetchNotesFromFirebase() {
@@ -526,6 +587,77 @@ export async function fetchSharedGroupsForCurrentUser(): Promise<SharedNoteGroup
     groups.push({ ...(d.data() as SharedNoteGroup), id: d.id });
   });
   return groups;
+}
+
+export async function subscribeToSharedGroups(
+  callback: (groups: SharedNoteGroup[]) => void
+): Promise<() => void> {
+  const rt = await initFirebaseRuntime();
+  if (!rt.enabled || !rt.auth || !rt.db) return () => {};
+  const user = rt.auth.currentUser;
+  if (!user) return () => {};
+  const groupsRef = collection(rt.db, 'noteGroups');
+  return onSnapshot(query(groupsRef, where('members', 'array-contains', user.uid)), (snap) => {
+    const groups: SharedNoteGroup[] = [];
+    snap.forEach((d) => groups.push({ ...(d.data() as SharedNoteGroup), id: d.id }));
+    callback(groups);
+  });
+}
+
+export async function subscribeToSharedGroupNotes(
+  callback: (notes: NoteItem[]) => void
+): Promise<() => void> {
+  const rt = await initFirebaseRuntime();
+  if (!rt.enabled || !rt.auth || !rt.db) return () => {};
+  const user = rt.auth.currentUser;
+  if (!user) return () => {};
+
+  const groupsRef = collection(rt.db, 'noteGroups');
+  const perGroupUnsub = new Map<string, () => void>();
+  const latestByGroup = new Map<string, NoteItem[]>();
+
+  const emit = () => {
+    const all: NoteItem[] = [];
+    latestByGroup.forEach((items) => all.push(...items));
+    callback(all);
+  };
+
+  const groupsUnsub = onSnapshot(query(groupsRef, where('members', 'array-contains', user.uid)), (groupsSnap) => {
+    const seen = new Set<string>();
+    groupsSnap.forEach((d) => {
+      const groupId = d.id;
+      seen.add(groupId);
+      if (perGroupUnsub.has(groupId)) return;
+
+      const notesRef = collection(rt.db as Firestore, 'noteGroups', groupId, 'notes');
+      const unsub = onSnapshot(query(notesRef), (notesSnap) => {
+        const items = notesSnap.docs.map((docSnap) => {
+          const raw = docSnap.data() as NoteItem;
+          return { ...raw, id: raw.id || docSnap.id, groupId };
+        });
+        latestByGroup.set(groupId, items);
+        emit();
+      });
+      perGroupUnsub.set(groupId, unsub);
+    });
+
+    // Cleanup listeners for groups no longer present.
+    Array.from(perGroupUnsub.keys()).forEach((groupId) => {
+      if (seen.has(groupId)) return;
+      perGroupUnsub.get(groupId)?.();
+      perGroupUnsub.delete(groupId);
+      latestByGroup.delete(groupId);
+    });
+
+    emit();
+  });
+
+  return () => {
+    groupsUnsub();
+    perGroupUnsub.forEach((u) => u());
+    perGroupUnsub.clear();
+    latestByGroup.clear();
+  };
 }
 
 export async function upsertSharedGroupNote(groupId: string, note: NoteItem): Promise<void> {

@@ -36,10 +36,13 @@ export function HistoryTab({
   onEditItem,
   onDeleteItem,
   onOpenBarcode,
+  onOpenScanner,
+  historyCount,
   visibleScanType,
 }: {
   palette: Palette;
   filteredHistory: ScanRecord[];
+  historyCount: number;
   query: string;
   filterType: string;
   dateFilter: DateFilter;
@@ -57,6 +60,7 @@ export function HistoryTab({
   onEditItem: (item: ScanRecord) => void;
   onDeleteItem: (item: ScanRecord) => void;
   onOpenBarcode: (value: string, codeType?: 'pi' | 'office' | 'other') => void;
+  onOpenScanner: () => void;
   visibleScanType: (type: string) => string;
 }) {
   const { width } = useWindowDimensions();
@@ -65,7 +69,7 @@ export function HistoryTab({
   const [moreVisible, setMoreVisible] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<ScanRecord | null>(null);
   const editLockRef = useRef(false);
-  const columns = width >= 1500 ? 3 : width >= 980 ? 2 : 1;
+  const columns = width >= 1600 ? 3 : width >= 1100 ? 2 : 1;
   const showActionLabels = width >= 1200;
 
   useEffect(() => {
@@ -80,6 +84,10 @@ export function HistoryTab({
   }, [filteredHistory, visibleScanType]);
 
   const hiddenFilters = useMemo(() => allFilterTypes.filter((type) => !PRIMARY_FILTERS.includes(type)), [allFilterTypes]);
+  const emptyStateTitle = historyCount === 0 ? 'Scan a code to get started' : 'No results';
+  const emptyStateText = historyCount === 0
+    ? 'Your history appears here after you scan or paste a code.'
+    : 'Clear filters or adjust your search to see results.';
 
   async function copyValue(item: ScanRecord) {
     const value = item.codeValue || item.codeNormalized;
@@ -92,62 +100,91 @@ export function HistoryTab({
   }
 
   return (
-    <View style={[mainAppStyles.screen, mainAppStyles.screenLocked, { alignSelf: 'center', maxWidth: 1200 }]}>
-      <TextInput
-        value={query}
-        onChangeText={onQueryChange}
-        placeholder="Search code, user, ticket, notes..."
-        placeholderTextColor={palette.muted}
-        style={[mainAppStyles.input, { color: palette.fg, borderColor: palette.border, backgroundColor: palette.card, marginTop: 0 }]}
-      />
-
-      <View style={[mainAppStyles.filterRow, { marginTop: 0, flexWrap: 'nowrap', alignItems: 'center' }]}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, paddingRight: 8 }}>
-          {PRIMARY_FILTERS.map((type) => (
-            <Pressable
-              key={type}
-              onPress={() => onFilterTypeChange(type)}
-              style={[mainAppStyles.filterChipCompact, filterType === type ? { backgroundColor: palette.accent } : { borderColor: palette.border, borderWidth: 1 }]}
-            >
-              <Text style={{ color: filterType === type ? '#fff' : palette.fg, fontSize: 12, fontWeight: '700' }}>{type}</Text>
-            </Pressable>
-          ))}
-          <Pressable onPress={() => setMoreVisible(true)} style={[mainAppStyles.filterChipCompact, { borderColor: palette.border, borderWidth: 1 }]}>
-            <Text style={{ color: palette.fg, fontSize: 12, fontWeight: '700' }}>...</Text>
-          </Pressable>
-        </ScrollView>
-
-        <Pressable
-          style={[mainAppStyles.filterChipCompact, { borderColor: palette.border, borderWidth: 1 }]}
-          onPress={() => onSortByChange(sortBy === 'recent' ? 'most_used' : sortBy === 'most_used' ? 'not_used' : 'recent')}
-        >
-          <View style={mainAppStyles.compactAction}>
-            <Ionicons name="swap-vertical-outline" size={14} color={palette.fg} />
-            <Text style={{ color: palette.fg, fontSize: 11, fontWeight: '700' }}>{sortBy === 'recent' ? 'Recent' : sortBy === 'most_used' ? 'Used' : 'Unused'}</Text>
-          </View>
-        </Pressable>
-
-        <Pressable
-          style={[mainAppStyles.filterChipCompact, selectedDateLabel ? { backgroundColor: palette.accent } : { borderColor: palette.border, borderWidth: 1 }]}
-          onPress={onOpenDatePicker}
-        >
-          <View style={mainAppStyles.compactAction}>
-            <Ionicons name="calendar-outline" size={14} color={selectedDateLabel ? '#fff' : palette.fg} />
-            <Text style={{ color: selectedDateLabel ? '#fff' : palette.fg, fontSize: 11, fontWeight: '700' }}>
-              {selectedDateLabel || (dateFilter === 'TODAY' ? 'Today' : dateFilter === 'WEEK' ? 'Week' : 'Date')}
-            </Text>
-          </View>
-        </Pressable>
-      </View>
-
+    <View style={[mainAppStyles.screen, mainAppStyles.screenLocked, { alignSelf: 'center', maxWidth: width >= 1280 ? 1280 : 1200, minWidth: 0 }]}>
       <FlatList
         data={filteredHistory}
         numColumns={columns}
         key={`history-grid-${columns}`}
         keyExtractor={(item) => item.id}
-        contentContainerStyle={[mainAppStyles.listContent, { gap: 8 }]}
-        columnWrapperStyle={columns > 1 ? { gap: 10 } : undefined}
-        ListEmptyComponent={<View style={[mainAppStyles.card, { backgroundColor: palette.card, borderColor: palette.border }]}><Text style={{ color: palette.fg }}>No scans yet.</Text></View>}
+        contentContainerStyle={[mainAppStyles.listContent, { gap: 8, paddingTop: 8, paddingBottom: 120, paddingHorizontal: 0, minWidth: 0 }]}
+        columnWrapperStyle={columns > 1 ? { gap: 10, width: '100%', minWidth: 0 } : undefined}
+        ListHeaderComponent={(
+          <View style={[mainAppStyles.card, { backgroundColor: palette.card, borderColor: palette.border, marginBottom: 0, gap: 10, paddingVertical: width >= 1280 ? 16 : 12, paddingHorizontal: width >= 1280 ? 16 : 12 }]}>
+            <View style={[mainAppStyles.filterBar, { marginTop: 0 }]}>
+              <TextInput
+                value={query}
+                onChangeText={onQueryChange}
+                placeholder="Search code, user, ticket, notes..."
+                placeholderTextColor={palette.muted}
+                style={[mainAppStyles.input, { flex: 1, color: palette.fg, borderColor: palette.border, backgroundColor: palette.bg, marginTop: 0 }]}
+              />
+              <View style={[mainAppStyles.filterChipCompact, { borderColor: palette.border, borderWidth: 1 }]}>
+                <Text style={{ color: palette.muted, fontSize: 11, fontWeight: '700' }}>{filteredHistory.length} results</Text>
+              </View>
+            </View>
+
+            <View style={[mainAppStyles.filterRow, { marginTop: 0, flexWrap: 'nowrap', alignItems: 'center' }]}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, paddingRight: 8 }}>
+                {PRIMARY_FILTERS.map((type) => (
+                  <Pressable
+                    key={type}
+                    onPress={() => onFilterTypeChange(type)}
+                    style={[mainAppStyles.filterChipCompact, filterType === type ? { backgroundColor: palette.accent } : { borderColor: palette.border, borderWidth: 1 }]}
+                  >
+                    <Text style={{ color: filterType === type ? '#fff' : palette.fg, fontSize: 12, fontWeight: '700' }}>{type}</Text>
+                  </Pressable>
+                ))}
+                <Pressable onPress={() => setMoreVisible(true)} style={[mainAppStyles.filterChipCompact, { borderColor: palette.border, borderWidth: 1 }]}>
+                  <Text style={{ color: palette.fg, fontSize: 12, fontWeight: '700' }}>...</Text>
+                </Pressable>
+              </ScrollView>
+
+              <Pressable
+                style={[mainAppStyles.filterChipCompact, { borderColor: palette.border, borderWidth: 1 }]}
+                onPress={() => onSortByChange(sortBy === 'recent' ? 'most_used' : sortBy === 'most_used' ? 'not_used' : 'recent')}
+              >
+                <View style={mainAppStyles.compactAction}>
+                  <Ionicons name="swap-vertical-outline" size={14} color={palette.fg} />
+                  <Text style={{ color: palette.fg, fontSize: 11, fontWeight: '700' }}>{sortBy === 'recent' ? 'Recent' : sortBy === 'most_used' ? 'Used' : 'Unused'}</Text>
+                </View>
+              </Pressable>
+
+              <Pressable
+                style={[mainAppStyles.filterChipCompact, selectedDateLabel ? { backgroundColor: palette.accent } : { borderColor: palette.border, borderWidth: 1 }]}
+                onPress={onOpenDatePicker}
+              >
+                <View style={mainAppStyles.compactAction}>
+                  <Ionicons name="calendar-outline" size={14} color={selectedDateLabel ? '#fff' : palette.fg} />
+                  <Text style={{ color: selectedDateLabel ? '#fff' : palette.fg, fontSize: 11, fontWeight: '700' }}>
+                    {selectedDateLabel || (dateFilter === 'TODAY' ? 'Today' : dateFilter === 'WEEK' ? 'Week' : 'Date')}
+                  </Text>
+                </View>
+              </Pressable>
+            </View>
+          </View>
+        )}
+        stickyHeaderIndices={[0]}
+        ListEmptyComponent={(
+          <View style={[mainAppStyles.card, { backgroundColor: palette.card, borderColor: palette.border, alignItems: 'center', gap: 10 }]}>
+            <Ionicons name={historyCount === 0 ? 'scan-outline' : 'search-outline'} size={28} color={palette.accent} />
+            <Text style={{ color: palette.fg, fontSize: 15, fontWeight: '800', textAlign: 'center' }}>{emptyStateTitle}</Text>
+            <Text style={{ color: palette.muted, fontSize: 12, lineHeight: 18, textAlign: 'center' }}>{emptyStateText}</Text>
+            <Pressable
+              onPress={historyCount === 0 ? onOpenScanner : () => {
+                onQueryChange('');
+                onFilterTypeChange('ALL');
+                onDateFilterChange('ALL');
+                onSortByChange('recent');
+              }}
+              style={({ pressed }) => [
+                mainAppStyles.btn,
+                { backgroundColor: palette.accent, borderColor: palette.accent, opacity: pressed ? 0.85 : 1, alignSelf: 'stretch' },
+              ]}
+            >
+              <Text style={[mainAppStyles.btnText, { textAlign: 'center' }]}>{historyCount === 0 ? 'Open Scanner' : 'Clear filters'}</Text>
+            </Pressable>
+          </View>
+        )}
         renderItem={({ item }) => {
           const isSelected = selection.has(item.id);
           const isUrl = item.codeNormalized.startsWith('http://') || item.codeNormalized.startsWith('https://');
@@ -331,3 +368,4 @@ export function HistoryTab({
     </View>
   );
 }
+

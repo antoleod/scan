@@ -13,7 +13,6 @@ import {
   Text,
   TextInput,
   Switch,
-  useWindowDimensions,
   View
 } from 'react-native';
 import Animated, {
@@ -276,7 +275,6 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
   const { theme, themeName } = useAppTheme();
   const isWeb = Platform.OS === 'web';
   const isIOS = Platform.OS === 'ios';
-  const { height } = useWindowDimensions();
   const scanProgress = useSharedValue(0);
   const fx = useMemo(
     () => ({
@@ -428,8 +426,8 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
     opacity: interpolate(glitchValue.value, [0, 0.5, 1], [1, 0.92, 1]),
   }));
   const pulseStyle = useAnimatedStyle(() => {
-    // Efecto de distorsión sutil: jitter horizontal y skew diagonal
-    // Se intensifica cerca del centro (0.5) del progreso de escaneo
+    // Subtle distortion effect: horizontal jitter and diagonal skew
+    // It intensifies near the center (0.5) of the scan progress
     const jitter = interpolate(scanProgress.value, [0, 0.45, 0.5, 0.55, 1], [0, 0, 2.5, -2.5, 0]);
     const skew = interpolate(scanProgress.value, [0, 0.45, 0.5, 0.55, 1], [0, 0, 0.04, -0.04, 0]);
 
@@ -456,7 +454,7 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
   const starsStyle = useAnimatedStyle(() => ({
     opacity: interpolate(scanProgress.value, [0, 0.2, 0.5, 0.8, 1], [0.3, 0.6, 1, 0.6, 0.3]),
     transform: [
-      { rotate: `${interpolate(scanProgress.value, [0, 1], [0, -360])}deg` }, // Rotación completa y continua
+      { rotate: `${interpolate(scanProgress.value, [0, 1], [0, -360])}deg` }, // Full continuous rotation
       { scale: interpolate(scanProgress.value, [0, 0.5, 1], [0.96, 1.06, 0.96]) }
     ],
   }));
@@ -577,17 +575,17 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
   const handleBiometricAuth = async () => {
     try {
       const authTypes = await LocalAuthentication.supportedAuthenticationTypesAsync();
-      let promptMessage = 'Sign in with Biometrics';
+      let promptMessage = 'Use biometrics';
       
       if (Platform.OS === 'ios') {
         if (authTypes.includes(LocalAuthentication.AuthenticationType.FACIAL_RECOGNITION)) {
-          promptMessage = 'Sign in with FaceID';
+          promptMessage = 'Use Face ID';
         } else if (authTypes.includes(LocalAuthentication.AuthenticationType.FINGERPRINT)) {
-          promptMessage = 'Sign in with TouchID';
+          promptMessage = 'Use Touch ID';
         }
       } else if (Platform.OS === 'android') {
         if (authTypes.includes(LocalAuthentication.AuthenticationType.FINGERPRINT)) {
-          promptMessage = 'Sign in with Fingerprint';
+          promptMessage = 'Use fingerprint';
         }
       }
 
@@ -606,7 +604,7 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
             await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
           }
         } else {
-          setAuthError('No saved credentials found for biometric login.');
+          setAuthError('No saved credentials are available for biometrics.');
         }
       }
     } catch (error) {
@@ -651,7 +649,7 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
         }
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unable to sign in right now.';
+      const message = error instanceof Error ? error.message : "Sign-in isn't available right now.";
       setAuthError(message);
       triggerShake();
     } finally {
@@ -673,7 +671,7 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
 
   return (
     <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 20 : 0}
       style={[styles.container, { backgroundColor: theme.background }]}
     >
@@ -694,7 +692,7 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
         )}
         {palette.watermark && (
           <View style={[styles.watermarkContainer, styles.watermarkVisible]} pointerEvents="none">
-            {/* Capa de Aberración: Rojo (Shift Left) */}
+            {/* Chromatic aberration layer: Red (shift left) */}
             <Animated.View style={[StyleSheet.absoluteFill, chromaticRedStyle]} pointerEvents="none">
               <View style={[styles.gridLineV, { left: '20%', backgroundColor: theme.error }]} />
               <View style={[styles.gridLineV, { left: '40%', backgroundColor: theme.error }]} />
@@ -707,7 +705,7 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
               <View style={[styles.techCircle, { bottom: -100, left: -60, width: 300, height: 300, borderColor: theme.error, opacity: 0.03 }]} />
             </Animated.View>
 
-            {/* Capa de Aberración: Azul (Shift Right) */}
+            {/* Chromatic aberration layer: Blue (shift right) */}
             <Animated.View style={[StyleSheet.absoluteFill, chromaticBlueStyle]} pointerEvents="none">
               <View style={[styles.gridLineV, { left: '20%', backgroundColor: theme.primary }]} />
               <View style={[styles.gridLineV, { left: '40%', backgroundColor: theme.primary }]} />
@@ -721,7 +719,7 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
             </Animated.View>
 
 
-            {/* Rejilla Técnica */}
+            {/* Technical grid */}
             <View style={[styles.gridLineV, { left: '20%', backgroundColor: theme.secondary }]} />
             <View style={[styles.gridLineV, { left: '40%', backgroundColor: theme.secondary }]} />
             <View style={[styles.gridLineV, { left: '60%', backgroundColor: theme.secondary }]} />
@@ -730,11 +728,11 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
             <View style={[styles.gridLineH, { top: '50%', backgroundColor: theme.secondary }]} />
             <View style={[styles.gridLineH, { top: '75%', backgroundColor: theme.secondary }]} />
 
-            {/* Círculos de Radar */}
+            {/* Radar circles */}
             <View style={[styles.techCircle, { top: -50, right: -50, width: 200, height: 200, borderColor: theme.secondary }]} />
             <View style={[styles.techCircle, { bottom: -100, left: -60, width: 300, height: 300, borderColor: theme.secondary, opacity: 0.03 }]} />
 
-            {/* Marcadores de Escaneo */}
+            {/* Scan markers */}
             <Text style={[styles.watermarkMarker, { top: '15%', left: '10%', color: theme.secondary }]}>+</Text>
             <Text style={[styles.watermarkMarker, { top: '15%', right: '10%', color: theme.secondary }]}>+</Text>
             <Text style={[styles.watermarkMarker, { bottom: '20%', left: '15%', color: theme.secondary }]}>+</Text>
@@ -780,7 +778,12 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
         <View pointerEvents="none" style={styles.readabilityVeil} />
       </View>
 
-      <ScrollView contentContainerStyle={[styles.scrollContent, { minHeight: height }]} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
         <Animated.View entering={FadeIn.duration(450)} style={styles.shell}>
           <Animated.View entering={FadeInDown.delay(0).duration(450)} style={styles.badgeRow}>
 
@@ -817,7 +820,7 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
                 {/* Premium glow rings */}
                 <GlowRing size={150} color={theme.secondary} delay={0} dur={2800} opacity={0.22} />
                 <GlowRing size={118} color={theme.primary} delay={700} dur={2200} opacity={0.18} />
-                {/* Círculo de Estrellas Europeas */}
+                {/* Circle of European stars */}
                 <Animated.View style={[styles.starsContainer, starsStyle]}>
                   {Array.from({ length: 12 }).map((_, i) => {
                     const angle = (i * 30) * (Math.PI / 180);
@@ -1065,10 +1068,11 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  background: { ...StyleSheet.absoluteFillObject },
-  watermarkShell: {},
-  watermarkContainer: { ...StyleSheet.absoluteFillObject },
+  container: { flex: 1, width: '100%', minWidth: 0, minHeight: 0, overflow: 'hidden', position: 'relative' },
+  scrollView: { flex: 1, width: '100%', minWidth: 0, alignSelf: 'stretch' },
+  background: { ...StyleSheet.absoluteFillObject, width: '100%', height: '100%', overflow: 'hidden' },
+  watermarkShell: { overflow: 'hidden' },
+  watermarkContainer: { ...StyleSheet.absoluteFillObject, overflow: 'hidden' },
   watermarkVisible: { opacity: 1 },
   readabilityVeil: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(6, 11, 20, 0.28)' },
   gridLineV: { position: 'absolute', top: 0, bottom: 0, width: 1, opacity: 0.04 },
@@ -1085,11 +1089,20 @@ const styles = StyleSheet.create({
   brandingBarcode: { flexDirection: 'row', alignItems: 'flex-end', height: 28, gap: 1, overflow: 'hidden' },
   brandingText: { fontSize: 8, fontWeight: '700', letterSpacing: 2, opacity: 0.15, textTransform: 'uppercase' },
   barcodeField: { position: 'absolute', top: 0, right: 20, bottom: 0, flexDirection: 'row', alignItems: 'center', gap: 2, overflow: 'hidden' },
-  scrollContent: { flexGrow: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 20, paddingVertical: 24 },
-  shell: { width: '100%', maxWidth: 420, gap: 14 },
+  scrollContent: {
+    flexGrow: 1,
+    width: '100%',
+    minWidth: 0,
+    alignSelf: 'stretch',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 24,
+  },
+  shell: { width: '100%', maxWidth: 420, minWidth: 0, gap: 14, alignSelf: 'center' },
   badgeRow: { flexDirection: 'row', gap: 8 },
   logoRow: { gap: 10 },
-  logoWrap: { gap: 4 },
+  logoWrap: { gap: 4, width: '100%', minWidth: 0 },
   logoTextWrap: { overflow: 'hidden', position: 'relative' },
   logo: { fontSize: 28, lineHeight: 32 },
   logoShimmerStrip: { position: 'absolute', top: 0, bottom: 0, width: 60, opacity: 0.12, borderRadius: 4 },
@@ -1112,7 +1125,7 @@ const styles = StyleSheet.create({
   pasteAction: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14, paddingVertical: 10 },
   pastePrefix: { fontSize: 13, fontWeight: '700', fontFamily: Platform.select({ web: 'monospace', default: 'monospace' }) },
   pasteText: { fontSize: 13, fontWeight: '600' },
-  formCard: { borderRadius: 14, borderWidth: 1, padding: 16, gap: 16, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 16 }, shadowOpacity: 0.4, shadowRadius: 32, elevation: 12 },
+  formCard: { width: '100%', borderRadius: 14, borderWidth: 1, padding: 16, gap: 16, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 16 }, shadowOpacity: 0.4, shadowRadius: 32, elevation: 12 },
   field: { gap: 6 },
   label: { fontSize: 10, fontWeight: '800', letterSpacing: 1.2, textTransform: 'uppercase' },
   input: { height: 48, borderRadius: 10, borderWidth: 1, paddingHorizontal: 14, fontSize: 15, shadowOffset: { width: 0, height: 0 }, shadowRadius: 8 },
@@ -1141,7 +1154,7 @@ const styles = StyleSheet.create({
   statusRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   statusDot: { width: 6, height: 6, borderRadius: 3 },
   statusText: { fontSize: 11, fontWeight: '600' },
-  links: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12 },
+  links: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12, flexWrap: 'wrap' },
   linkAction: { paddingVertical: 4 },
   link: { fontSize: 12, fontWeight: '700' },
   linkDivider: { fontSize: 12 },

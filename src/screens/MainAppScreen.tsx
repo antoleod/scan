@@ -40,7 +40,7 @@ import {
   initFirebaseRuntime,
   recheckFirebaseRuntime,
   subscribeToScans,
-  syncNotesWithFirebase,
+  fetchNotesFromFirebase,
   syncScansWithFirebase,
 } from '../core/firebase';
 import { IMAGE_SCAN_BARCODE_TYPES, buildScanRecord, processScanInput } from '../core/scanPipeline';
@@ -63,7 +63,7 @@ import { QrModal } from '../components/mainApp/QrModal';
 import { ScanTab } from '../components/mainApp/tabs/ScanTab';
 import { SelectionFooter } from '../components/mainApp/SelectionFooter';
 import { SettingsTab } from '../components/mainApp/tabs/SettingsTab';
-import { hardDeleteAllNotes, hardDeleteAllTemplates, loadNotes as loadWorkNotes, loadTemplates as loadNoteTemplates, saveNotes as saveWorkNotes, saveTemplates as saveNoteTemplates } from '../core/notes';
+import { hardDeleteAllNotes, hardDeleteAllTemplates, saveNotes as saveWorkNotes, saveTemplates as saveNoteTemplates } from '../core/notes';
 import { clearClipboardEntries } from '../core/clipboard';
 
 type Tab = 'scan' | 'history' | 'notes' | 'settings';
@@ -976,17 +976,16 @@ function MainApp() {
       setHistory(merged);
       await saveHistory(merged);
 
-      const localNotes = await loadWorkNotes();
-      const localNoteTemplates = await loadNoteTemplates();
-      const notesSync = await syncNotesWithFirebase(localNotes, localNoteTemplates);
-      await saveWorkNotes(notesSync.serverNotes);
-      await saveNoteTemplates(notesSync.serverTemplates);
+      // Notes/templates are expected to stay live via onSnapshot; manual sync pulls server snapshot.
+      const notesSnap = await fetchNotesFromFirebase();
+      await saveWorkNotes(notesSnap.serverNotes);
+      await saveNoteTemplates(notesSnap.serverTemplates);
 
       await diag.info('firebase.sync.ok', { pushed: result.pushed, total: merged.length });
       if (showAlert) {
         Alert.alert(
           'Sync',
-          `OK. scans pushed=${result.pushed}, scans total=${merged.length}, notes=${notesSync.serverNotes.length}, templates=${notesSync.serverTemplates.length}`
+          `OK. scans pushed=${result.pushed}, scans total=${merged.length}, notes=${notesSnap.serverNotes.length}, templates=${notesSnap.serverTemplates.length}`
         );
       }
     } catch (error) {
@@ -1356,13 +1355,6 @@ function MainApp() {
     return enabledTypes.length > 0 ? enabledTypes : SCAN_BARCODE_TYPES;
   }, [settings.barcodeTypes]);
 
-  const statusChip = persistenceMode === 'local'
-    ? isGuest
-      ? 'Guest mode (local)'
-      : 'Local mode'
-    : user
-      ? `Firebase (${user.email || 'user'})`
-      : 'Firebase guest';
   const selectedDateLabel = selectedDate ? selectedDate.toLocaleDateString() : null;
   const tabOrder: Tab[] = ['notes', 'scan', 'history', 'settings'];
 
@@ -1394,9 +1386,8 @@ function MainApp() {
       <AppLayout>
         <AppHeader
           palette={palette}
-          statusChip={statusChip}
-          compact={isCompactLayout}
-          themeName={activeTheme}
+          email={user?.email || 'gean@oryxen.tech'}
+          onPressEmail={() => setActiveTab('settings')}
         />
 
         <KeyboardAvoidingView
@@ -1443,6 +1434,7 @@ function MainApp() {
             <HistoryTab
               palette={palette}
               filteredHistory={filteredHistory}
+              historyCount={history.length}
               query={query}
               filterType={filterType}
               dateFilter={dateFilter}
@@ -1460,6 +1452,7 @@ function MainApp() {
               onEditItem={openEditItemModal}
               onDeleteItem={deleteHistoryItem}
               onOpenBarcode={openBarcodePreview}
+              onOpenScanner={() => setActiveTab('scan')}
               visibleScanType={visibleScanType}
             />
           ) : activeTab === 'notes' ? (
@@ -1567,7 +1560,7 @@ function MainApp() {
         />
         <BottomTabs
           activeTab={activeTab}
-          palette={{ accent: palette.accent, muted: palette.muted, card: palette.card, border: palette.border }}
+          palette={{ accent: palette.accent, muted: palette.muted, bg: palette.bg, border: palette.border }}
           onChangeTab={setActiveTab}
           onAddPress={openManualEntryModal}
         />
@@ -1628,10 +1621,10 @@ const styles = StyleSheet.create({
   logoBars: { flexDirection: 'row', alignItems: 'flex-end', gap: 3 },
   logoBar: { width: 4, borderRadius: 99 },
   logoBarThin: { width: 2, borderRadius: 99, opacity: 0.9 },
-  content: { flex: 1 },
-  screen: { flex: 1, width: '100%', maxWidth: '100%', padding: 12, gap: 10, overflow: 'hidden' },
-  tabViewport: { flex: 1, width: '100%', maxWidth: '100%', overflow: 'hidden' },
-  settingsContent: { width: '100%', paddingBottom: 24, overflow: 'hidden' },
+  content: { flex: 1, minHeight: 0, minWidth: 0, width: '100%' },
+  screen: { flex: 1, width: '100%', maxWidth: '100%', minWidth: 0, minHeight: 0, padding: 12, gap: 10, overflow: 'visible' },
+  tabViewport: { flex: 1, width: '100%', maxWidth: '100%', minWidth: 0, minHeight: 0, overflow: 'visible' },
+  settingsContent: { width: '100%', minWidth: 0, paddingBottom: 24, overflow: 'visible' },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   cameraContainer: { flex: 1, borderRadius: 16, overflow: 'hidden' },
   camera: { flex: 1, borderWidth: 1, borderRadius: 16, overflow: 'hidden' },
@@ -1658,7 +1651,7 @@ const styles = StyleSheet.create({
   },
   code: { fontSize: 16, fontWeight: '800' },
   sectionTitle: { fontSize: 14, fontWeight: '700' },
-  footer: { borderTopWidth: 1, paddingHorizontal: 8, paddingVertical: 8, flexDirection: 'row' },
+  footer: { width: '100%', borderTopWidth: 1, paddingHorizontal: 8, paddingVertical: 8, flexDirection: 'row' },
   footerBtn: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 8 },
   footerBtnInner: { alignItems: 'center', justifyContent: 'center', gap: 5 },
   selectionFooter: {

@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+=======
+﻿import React, { useEffect, useMemo, useRef, useState } from 'react';
+>>>>>>> 3fe73b75a067a31bf53cd2e5de4e72afe5e8745d
 import { Image, Linking, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
@@ -8,9 +12,13 @@ import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 
 import {
-  fetchSharedGroupsForCurrentUser,
   subscribeToNotes,
+<<<<<<< HEAD
   syncNotesWithFirebase,
+=======
+  subscribeToSharedGroups,
+  subscribeToSharedGroupNotes,
+>>>>>>> 3fe73b75a067a31bf53cd2e5de4e72afe5e8745d
   upsertSharedGroupNote,
   type SharedNoteGroup,
 } from '../../../core/firebase';
@@ -35,7 +43,12 @@ import {
 } from '../../../core/notes';
 import { ClipboardEntry } from '../../../core/clipboard.types';
 import { addClipboardEntryUnique, addClipboardImageUnique, loadClipboardEntries, removeClipboardEntriesByDay, removeClipboardEntriesByIds, updateClipboardEntryCategory } from '../../../core/clipboard';
+import { ClipboardScreen } from '../../../screens/ClipboardScreen';
 import { mainAppStyles } from '../styles';
+import { TabBar } from '../../TabBar';
+import { ComposerSection } from '../../ComposerSection';
+import { SearchFilterBar } from '../../SearchFilterBar';
+import { NoteCard } from '../../NoteCard';
 
 type Palette = { bg: string; fg: string; accent: string; muted: string; card: string; border: string };
 type WorkspaceTab = 'notes' | 'templates' | 'clipboard';
@@ -175,6 +188,8 @@ export function NotesTab({ palette }: { palette: Palette }) {
   const [selectedClipboardIds, setSelectedClipboardIds] = useState<Set<string>>(new Set());
   const [lastNoteTap, setLastNoteTap] = useState<{ id: string; ts: number } | null>(null);
   const [lastTap, setLastTap] = useState<{ id: string; ts: number } | null>(null);
+  const draftInputRef = useRef<React.ElementRef<typeof TextInput> | null>(null);
+  const templateInputRef = useRef<React.ElementRef<typeof TextInput> | null>(null);
 
   // Ref to avoid auto-pushing notes back to Firebase when they just arrived from the server.
   const serverUpdateRef = useRef(false);
@@ -205,7 +220,6 @@ export function NotesTab({ palette }: { palette: Palette }) {
       setTemplates(t);
     }).catch(() => undefined);
     loadClipboardEntries().then(setClipboardItems).catch(() => undefined);
-    fetchSharedGroupsForCurrentUser().then(setGroups).catch(() => undefined);
   }, []);
 
   // Real-time cross-device sync via Firestore onSnapshot.
@@ -228,6 +242,7 @@ export function NotesTab({ palette }: { palette: Palette }) {
     return () => { unsub?.(); };
   }, [user?.uid]);
 
+<<<<<<< HEAD
   // Auto-push notes to Firebase when they change locally (debounced, skips server-initiated updates).
   useEffect(() => {
     if (!user) return;
@@ -243,6 +258,19 @@ export function NotesTab({ palette }: { palette: Palette }) {
       if (notesSyncTimerRef.current) clearTimeout(notesSyncTimerRef.current);
     };
   }, [notes, templates, user?.uid]);
+=======
+  // Live shared groups + their notes (cross-device / multi-user).
+  useEffect(() => {
+    if (!user) return;
+    let groupsUnsub: (() => void) | null = null;
+    let notesUnsub: (() => void) | null = null;
+    subscribeToSharedGroups(setGroups).then((u) => { groupsUnsub = u; }).catch(() => undefined);
+    subscribeToSharedGroupNotes((sharedNotes) => {
+      setNotes((current) => mergeNotesByNewest(current, sharedNotes));
+    }).then((u) => { notesUnsub = u; }).catch(() => undefined);
+    return () => { groupsUnsub?.(); notesUnsub?.(); };
+  }, [user?.uid]);
+>>>>>>> 3fe73b75a067a31bf53cd2e5de4e72afe5e8745d
 
   useEffect(() => {
     AsyncStorage.getItem(DRAFT_KEY).then((raw) => {
@@ -598,6 +626,38 @@ export function NotesTab({ palette }: { palette: Palette }) {
     }
   }
 
+  async function saveNoteToDevice(note: NoteItem) {
+    const timestamp = new Date(note.updatedAt);
+    const content = [
+      timestamp.toLocaleString(),
+      '',
+      note.category.toUpperCase(),
+      '',
+      note.text.trim(),
+      '',
+      ...(note.attachments || []).map((attachment, index) => `Attachment ${index + 1}: ${attachment}`),
+    ].join('\n');
+
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = `note-${note.id}.txt`;
+      anchor.click();
+      URL.revokeObjectURL(url);
+      return;
+    }
+
+    const path = `${FileSystem.cacheDirectory}note_${note.id}_${Date.now()}.txt`;
+    await FileSystem.writeAsStringAsync(path, content, { encoding: FileSystem.EncodingType.UTF8 });
+    if (await Sharing.isAvailableAsync()) {
+      await Sharing.shareAsync(path, { mimeType: 'text/plain' });
+    } else {
+      await Clipboard.setStringAsync(content);
+    }
+  }
+
   async function importScreenshotToClipboard() {
     const picked = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.9, base64: true });
     if (picked.canceled || !picked.assets?.length) return;
@@ -667,237 +727,191 @@ export function NotesTab({ palette }: { palette: Palette }) {
     setSelectedClipboardIds(new Set());
   }
 
-  const workspaceWidth = '100%';
+  const notesEmptyTitle = notes.length === 0 ? 'Create your first note' : 'No results';
+  const notesEmptyText = notes.length === 0
+    ? 'Write something in the editor, then save it to get started.'
+    : 'Clear the search or change the filter to see notes.';
+  const templatesEmptyTitle = templates.length === 0 ? 'Create your first template' : 'No results';
+  const templatesEmptyText = templates.length === 0
+    ? 'Save your first template to reuse common messages.'
+    : 'Refine your search to find templates.';
+  const clipboardEmptyTitle = clipboardItems.length === 0 ? 'Capture your clipboard' : 'No results';
+  const clipboardEmptyText = clipboardItems.length === 0
+    ? 'Use the capture button or paste text from any app.'
+    : 'Clear the search to see the full history again.';
+
+  const uiPalette = {
+    bg: palette.bg,
+    accent: palette.accent,
+    border: palette.border,
+    surface: '#141414',
+    surfaceAlt: '#1A1A1A',
+    textBody: '#DDDDDD',
+    textDim: '#555555',
+    textMuted: '#888888',
+    textPrimary: '#FFFFFF',
+    chipBorder: '#2A2A2A',
+  };
 
   return (
-    <ScrollView style={mainAppStyles.screen} contentContainerStyle={[styles.content, { alignItems: 'center' }]} keyboardShouldPersistTaps="handled">
-      <View style={[styles.workspace, { width: workspaceWidth }]}>
-        <View style={[mainAppStyles.card, styles.workspaceTabs, { backgroundColor: palette.card, borderColor: palette.border }]}>
-          {([
-            { key: 'notes', icon: 'document-text-outline', label: 'Notes' },
-            { key: 'templates', icon: 'layers-outline', label: 'Templates' },
-            { key: 'clipboard', icon: 'clipboard-outline', label: 'Clipboard' },
-          ] as { key: WorkspaceTab; icon: keyof typeof Ionicons.glyphMap; label: string }[]).map((tab) => {
-            const active = workspaceTab === tab.key;
-            return (
-              <Pressable key={tab.key} onPress={() => setWorkspaceTab(tab.key)} style={({ pressed }) => [styles.workspaceTab, { borderColor: active ? palette.accent : palette.border, backgroundColor: active ? `${palette.accent}22` : 'transparent', opacity: pressed ? 0.8 : 1 }]}>
-                <Ionicons name={tab.icon} size={15} color={active ? palette.accent : palette.muted} />
-                <Text style={{ color: active ? palette.accent : palette.muted, fontSize: 12, fontWeight: '800', letterSpacing: 0.3 }}>{tab.label}</Text>
-              </Pressable>
-            );
-          })}
-        </View>
+    <ScrollView
+      style={mainAppStyles.screen}
+      contentContainerStyle={[styles.content, { alignItems: 'stretch' }]}
+      keyboardShouldPersistTaps="handled"
+    >
+      <View style={[styles.workspace, { width: '100%', minWidth: 0, alignSelf: 'stretch' }]}>
+        <TabBar
+          activeTab={workspaceTab}
+          palette={uiPalette}
+          onChangeTab={setWorkspaceTab}
+          tabs={[
+            { key: 'notes', label: 'Notes' },
+            { key: 'templates', label: 'Templates' },
+            { key: 'clipboard', label: 'Clipboard' },
+          ]}
+        />
 
         {workspaceTab === 'notes' ? (
           <>
-            {(draftText.trim() || draftImages.length) ? <View style={[mainAppStyles.card, styles.resumeCard, { backgroundColor: palette.card, borderColor: palette.border }]}><Text style={{ color: palette.muted, fontSize: 11, fontWeight: '700' }}>Resume last note</Text><Text style={{ color: palette.fg, fontSize: 12 }} numberOfLines={1}>{draftText || `Images: ${draftImages.length}`}</Text></View> : null}
-
-            <View style={[mainAppStyles.card, { backgroundColor: palette.card, borderColor: palette.border }]}> 
-              <View style={styles.groupSelectorRow}>
-                <Text style={{ color: palette.muted, fontSize: 11, fontWeight: '700' }}>Group:</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }}>
-                  <Pressable style={[styles.categoryChip, { borderColor: activeGroupId === 'personal' ? palette.accent : palette.border }]} onPress={() => setActiveGroupId('personal')}>
-                    <Text style={{ color: palette.fg, fontSize: 11, fontWeight: '700' }}>Personal</Text>
-                  </Pressable>
-                  {groups.map((g) => (
-                    <Pressable key={g.id} style={[styles.categoryChip, { borderColor: activeGroupId === g.id ? palette.accent : palette.border }]} onPress={() => setActiveGroupId(g.id)}>
-                      <Text style={{ color: palette.fg, fontSize: 11, fontWeight: '700' }}>{g.name}</Text>
-                    </Pressable>
-                  ))}
-                </ScrollView>
-              </View>
-              <View style={styles.editorHeader}>
-                <Text style={{ color: palette.fg, fontWeight: '800' }}>Intelligent note</Text>
-                <Pressable onPress={() => runSmartGenerateWithOcr().catch(() => undefined)} style={({ pressed }) => [styles.iconAction, { borderColor: palette.border, backgroundColor: palette.bg, opacity: pressed ? 0.8 : 1 }]}>
-                  <Ionicons name="sparkles-outline" size={16} color={palette.accent} />
-                  <Text style={{ color: palette.accent, fontSize: 12, fontWeight: '700' }}>{ocrBusy ? 'Analyzing...' : 'Generate'}</Text>
-                </Pressable>
-              </View>
-              <TextInput
-                style={[mainAppStyles.input, styles.noteInput, { backgroundColor: palette.bg, color: palette.fg, borderColor: palette.border, marginTop: 8 }]}
-                placeholder="Type here. Auto-save is always on."
-                placeholderTextColor={palette.muted}
-                multiline
-                value={draftText}
+            <View style={{ width: '100%', gap: 24, paddingHorizontal: 16, paddingTop: 24, paddingBottom: 128, alignSelf: 'stretch', minWidth: 0 }}>
+              <ComposerSection
+                ref={draftInputRef}
+                palette={uiPalette}
+                activeGroupId={activeGroupId}
+                groups={groups}
+                draftText={draftText}
+                draftImages={draftImages}
+                activeCategory={activeCategory}
+                onChangeGroup={setActiveGroupId}
                 onChangeText={setDraftText}
-                onKeyPress={(event) => {
-                  const e = event.nativeEvent as unknown as { key?: string; ctrlKey?: boolean; metaKey?: boolean; shiftKey?: boolean };
-                  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && !e.shiftKey) {
-                    void saveDraftAsNote();
-                  }
-                }}
+                onGenerate={() => runSmartGenerateWithOcr().catch(() => undefined)}
+                onAddImage={() => addImageToDraft().catch(() => undefined)}
+                onPasteImage={() => pasteImageFromClipboardToDraft().catch(() => undefined)}
+                onSave={() => saveDraftAsNote().catch(() => undefined)}
+                onSetCategory={setManualCategory}
+                generating={ocrBusy}
               />
 
-              {draftImages.length ? <View style={styles.attachmentRow}>{draftImages.map((item) => <View key={item} style={[styles.attachmentChip, { borderColor: palette.border, backgroundColor: palette.bg }]}><Ionicons name="image-outline" size={12} color={palette.muted} /><Text style={{ color: palette.fg, fontSize: 11 }} numberOfLines={1}>Image</Text></View>)}</View> : null}
-
-              <View style={styles.editorFooter}>
-                <View style={styles.categoryRow}>
-                  <Pressable style={[styles.categoryChip, { borderColor: activeCategory === 'general' ? palette.accent : palette.border }]} onPress={() => setManualCategory('general')}><Text style={{ color: palette.fg, fontSize: 11, fontWeight: '700' }}>General</Text></Pressable>
-                  <Pressable style={[styles.categoryChip, { borderColor: activeCategory === 'work' ? palette.accent : palette.border }]} onPress={() => setManualCategory('work')}><Text style={{ color: palette.fg, fontSize: 11, fontWeight: '700' }}>Work</Text></Pressable>
+              {smartResult ? (
+                <View style={{ width: '100%', borderWidth: 1, borderColor: palette.border, borderRadius: 12, backgroundColor: uiPalette.surface, padding: 14, gap: 10, alignSelf: 'stretch' }}>
+                  <Text style={{ color: palette.fg, fontWeight: '800', fontSize: 14 }}>Suggested structure</Text>
+                  <Text style={{ color: uiPalette.textBody, fontSize: 12, lineHeight: 18 }}>{smartResult.summary}</Text>
+                  <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
+                    <Pressable style={[styles.iconOnlyAction, { borderColor: palette.border }]} onPress={() => saveDraftAsNote().catch(() => undefined)}>
+                      <Ionicons name="document-text-outline" size={16} color={palette.fg} />
+                    </Pressable>
+                    <Pressable style={[styles.iconOnlyAction, { borderColor: palette.border }]} onPress={() => { setWorkspaceTab('templates'); setTemplateName(smartResult.ticketNumber || 'Generated template'); setTemplateTo(''); setTemplateSubject(`Follow-up ${smartResult.ticketNumber || ''}`.trim()); setTemplateBody(smartResult.summary); }}>
+                      <Ionicons name="layers-outline" size={16} color={palette.fg} />
+                    </Pressable>
+                    <Pressable style={[styles.iconOnlyAction, { borderColor: palette.border }]} onPress={() => createOutlookEventFromContent(smartResult.summary).catch(() => undefined)}>
+                      <Ionicons name="calendar-outline" size={16} color={palette.fg} />
+                    </Pressable>
+                  </View>
                 </View>
-                <View style={styles.editorActions}>
-                  <Pressable style={[styles.iconOnlyAction, { borderColor: palette.border }]} onPress={() => addImageToDraft().catch(() => undefined)}><Ionicons name="images-outline" size={16} color={palette.fg} /></Pressable>
-                  <Pressable style={[styles.iconOnlyAction, { borderColor: palette.border }]} onPress={() => pasteImageFromClipboardToDraft().catch(() => undefined)}><Ionicons name="clipboard-outline" size={16} color={palette.fg} /></Pressable>
-                  <Pressable style={[styles.iconOnlyAction, { borderColor: palette.border }]} onPress={() => saveDraftAsNote().catch(() => undefined)}><Ionicons name="save-outline" size={16} color={palette.fg} /></Pressable>
-                </View>
-              </View>
-            </View>
+              ) : null}
 
-            {smartResult ? <View style={[mainAppStyles.card, { backgroundColor: palette.card, borderColor: palette.border }]}><Text style={{ color: palette.fg, fontWeight: '800', marginBottom: 6 }}>Generated structure</Text><Text style={{ color: palette.fg, fontSize: 12, lineHeight: 18 }}>{smartResult.summary}</Text><View style={styles.editorActions}><Pressable style={[styles.iconOnlyAction, { borderColor: palette.border }]} onPress={() => saveDraftAsNote().catch(() => undefined)}><Ionicons name="document-text-outline" size={16} color={palette.fg} /></Pressable><Pressable style={[styles.iconOnlyAction, { borderColor: palette.border }]} onPress={() => { setWorkspaceTab('templates'); setTemplateName(smartResult.ticketNumber || 'Generated template'); setTemplateTo(''); setTemplateSubject(`Follow-up ${smartResult.ticketNumber || ''}`.trim()); setTemplateBody(smartResult.summary); }}><Ionicons name="layers-outline" size={16} color={palette.fg} /></Pressable><Pressable style={[styles.iconOnlyAction, { borderColor: palette.border }]} onPress={() => createOutlookEventFromContent(smartResult.summary).catch(() => undefined)}><Ionicons name="calendar-outline" size={16} color={palette.fg} /></Pressable></View></View> : null}
+              <SearchFilterBar
+                palette={{
+                  bg: palette.bg,
+                  accent: palette.accent,
+                  border: palette.border,
+                  surface: uiPalette.surface,
+                  surfaceAlt: uiPalette.surfaceAlt,
+                  textBody: uiPalette.textBody,
+                  textDim: uiPalette.textDim,
+                  textMuted: uiPalette.textMuted,
+                  chipBorder: uiPalette.chipBorder,
+                }}
+                value={searchText}
+                count={filteredNotes.length}
+                filter={filter}
+                onChange={setSearchText}
+                onChangeFilter={setFilter}
+              />
 
-            <View style={[mainAppStyles.card, { backgroundColor: palette.card, borderColor: palette.border, gap: 10 }]}>
-              <View style={[styles.searchRow, { borderColor: palette.border, backgroundColor: palette.bg }]}>
-                <Ionicons name="search" size={15} color={searchText ? palette.accent : palette.muted} />
-                <TextInput
-                  style={[styles.searchInput, { color: palette.fg }]}
-                  placeholder="Search notes..."
-                  placeholderTextColor={palette.muted}
-                  value={searchText}
-                  onChangeText={setSearchText}
-                />
-                {searchText ? (
-                  <Pressable onPress={() => setSearchText('')} hitSlop={8}>
-                    <Ionicons name="close-circle" size={15} color={palette.muted} />
-                  </Pressable>
-                ) : null}
-              </View>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterChipRow}>
-                {(['all', 'work', 'pinned', 'archived'] as NoteFilter[]).map((item) => (
-                  <Pressable key={item} style={[styles.categoryChip, { borderColor: filter === item ? palette.accent : palette.border, backgroundColor: filter === item ? `${palette.accent}18` : 'transparent' }]} onPress={() => setFilter(item)}>
-                    <Text style={{ color: filter === item ? palette.accent : palette.fg, fontSize: 12, fontWeight: '700' }}>{item}</Text>
-                  </Pressable>
-                ))}
-              </ScrollView>
-            </View>
-
-            <View style={styles.gridWrap}>
-              {noteRows.map((row, rowIndex) => (
-                <View key={`row-${rowIndex}`} style={styles.gridRow}>
-                  {row.map((note) => {
-                    const expanded = expandedNoteId === note.id;
-                    const preview = note.text.trim() || `Image attachment (${note.attachments?.length || 0})`;
-                    const firstAttachment = note.attachments?.[0];
-                    const handleNotePress = () => {
-                      const now = Date.now();
-                      if (lastNoteTap && lastNoteTap.id === note.id && now - lastNoteTap.ts < 320) {
-                        setEditingNoteId(note.id);
-                        setEditingText(note.text);
-                        setLastNoteTap(null);
+              {filteredNotes.length === 0 ? (
+                <View style={{ width: '100%', borderWidth: 1, borderColor: palette.border, borderRadius: 12, backgroundColor: uiPalette.surface, alignItems: 'center', gap: 10, padding: 16, alignSelf: 'stretch' }}>
+                  <Ionicons name={notes.length === 0 ? 'document-text-outline' : 'search-outline'} size={28} color={palette.accent} />
+                  <Text style={{ color: palette.fg, fontSize: 15, fontWeight: '800', textAlign: 'center' }}>{notesEmptyTitle}</Text>
+                  <Text style={{ color: palette.muted, fontSize: 12, lineHeight: 18, textAlign: 'center' }}>{notesEmptyText}</Text>
+                  <Pressable
+                    style={({ pressed }) => [
+                      mainAppStyles.btn,
+                      { backgroundColor: palette.accent, borderColor: palette.accent, opacity: pressed ? 0.85 : 1, alignSelf: 'stretch' },
+                    ]}
+                    onPress={() => {
+                      if (notes.length === 0) {
+                        draftInputRef.current?.focus();
                         return;
                       }
-                      setLastNoteTap({ id: note.id, ts: now });
-                      setExpandedNoteId(expanded ? null : note.id);
-                    };
-                    return (
-                      <Pressable
-                        key={note.id}
-                        onPress={handleNotePress}
-                        style={({ pressed }) => [
-                          styles.compactCard,
-                          {
-                            flex: 1,
-                            borderColor: palette.border,
-                            backgroundColor:
-                              note.color === 'amber' ? '#2b2314' :
-                                note.color === 'mint' ? '#172821' :
-                                  note.color === 'sky' ? '#132531' :
-                                    note.color === 'rose' ? '#321a24' : palette.card,
-                            opacity: pressed ? 0.9 : 1,
-                          },
-                        ]}
-                      >
-                        <View style={styles.cardHead}>
-                          <Text style={{ color: palette.muted, fontSize: 10, flex: 1 }} numberOfLines={1}>{new Date(note.updatedAt).toLocaleDateString()} · {new Date(note.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</Text>
-                          <Pressable onPress={() => togglePinned(note.id).then(setNotes)} hitSlop={8}>
-                            <Ionicons name={note.pinned ? 'bookmark' : 'bookmark-outline'} size={16} color={note.pinned ? palette.accent : palette.muted} />
-                          </Pressable>
-                        </View>
-                        {firstAttachment ? (
-                          <Pressable onPress={() => setPreviewNoteImageUri(firstAttachment)}>
-                            <Image source={{ uri: firstAttachment }} style={styles.noteThumb} resizeMode="cover" />
-                          </Pressable>
-                        ) : null}
-                        {editingNoteId === note.id ? (
-                          <TextInput
-                            value={editingText}
-                            onChangeText={setEditingText}
-                            multiline
-                            onKeyPress={(event) => {
-                              const e = event.nativeEvent as unknown as { key?: string; ctrlKey?: boolean; metaKey?: boolean; shiftKey?: boolean };
-                              if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && !e.shiftKey) {
-                                void updateNoteText(note.id, editingText).then((next) => {
-                                  setNotes(next);
-                                  setEditingNoteId(null);
-                                  setEditingText('');
-                                });
-                              }
-                            }}
-                            style={[mainAppStyles.input, { marginTop: 6, backgroundColor: palette.bg, color: palette.fg, borderColor: palette.border }]}
-                          />
-                        ) : (
-                          <Text style={{ color: palette.fg, fontSize: 13, lineHeight: 19 }} numberOfLines={expanded ? 0 : 3}>{preview}</Text>
-                        )}
-                        <View style={styles.cardFoot}>
-                          <View style={[styles.categoryChip, { borderColor: note.category === 'work' ? `${palette.accent}60` : palette.border, backgroundColor: note.category === 'work' ? `${palette.accent}14` : 'transparent', paddingHorizontal: 8, paddingVertical: 4 }]}>
-                            <Text style={{ color: note.category === 'work' ? palette.accent : palette.muted, fontSize: 9, fontWeight: '800', letterSpacing: 0.5 }}>{note.category.toUpperCase()}</Text>
-                          </View>
-                          <View style={styles.editorActions}>
-                            {editingNoteId === note.id ? (
-                              <Pressable hitSlop={8} onPress={() => updateNoteText(note.id, editingText).then((next) => { setNotes(next); setEditingNoteId(null); setEditingText(''); })}>
-                                <Ionicons name="checkmark-circle" size={18} color={palette.accent} />
-                              </Pressable>
-                            ) : (
-                              <Pressable hitSlop={8} onPress={() => { setEditingNoteId(note.id); setEditingText(note.text); }}>
-                                <Ionicons name="create-outline" size={16} color={palette.fg} />
-                              </Pressable>
-                            )}
-                            <Pressable hitSlop={8} onPress={() => toggleArchived(note.id).then(setNotes)}>
-                              <Ionicons name={note.archived ? 'archive' : 'archive-outline'} size={16} color={palette.fg} />
-                            </Pressable>
-                            <Pressable hitSlop={8} onPress={() => setShareNote(note)}>
-                              <Ionicons name="share-social-outline" size={16} color={palette.fg} />
-                            </Pressable>
-                            <Pressable hitSlop={8} onPress={() => createQuickReminderFromNote(note).catch(() => undefined)}>
-                              <Ionicons name="alarm-outline" size={16} color={palette.fg} />
-                            </Pressable>
-                            <Pressable hitSlop={8} onPress={() => removeNote(note.id).then(setNotes)}>
-                              <Ionicons name="trash-outline" size={16} color="#ef4444" />
-                            </Pressable>
-                          </View>
-                        </View>
-                        <View style={styles.colorRow}>
-                          {(['default', 'amber', 'mint', 'sky', 'rose'] as const).map((swatch) => (
-                            <Pressable
-                              key={swatch}
-                              onPress={() => setNoteColor(note.id, swatch).then(setNotes)}
-                              style={[
-                                styles.colorDot,
-                                {
-                                  borderColor: note.color === swatch ? palette.accent : palette.border,
-                                  backgroundColor:
-                                    swatch === 'default' ? palette.card :
-                                      swatch === 'amber' ? '#f59e0b' :
-                                        swatch === 'mint' ? '#10b981' :
-                                          swatch === 'sky' ? '#38bdf8' : '#f43f5e',
-                                },
-                              ]}
-                            />
-                          ))}
-                        </View>
-                      </Pressable>
-                    );
-                  })}
-                  {row.length < (isDesktop ? desktopColumns : 1) ? Array.from({ length: (isDesktop ? desktopColumns : 1) - row.length }).map((_, i) => <View key={`fill-${i}`} style={{ flex: 1 }} />) : null}
+                      setSearchText('');
+                      setFilter('all');
+                    }}
+                  >
+                    <Text style={[mainAppStyles.btnText, { textAlign: 'center', color: '#000' }]}>{notes.length === 0 ? 'New note' : 'Clear filters'}</Text>
+                  </Pressable>
                 </View>
-              ))}
+              ) : null}
+
+              <View style={styles.gridWrap}>
+                {noteRows.map((row, rowIndex) => (
+                  <View key={`row-${rowIndex}`} style={styles.gridRow}>
+                    {row.map((note) => {
+                      const expanded = expandedNoteId === note.id;
+                      const editing = editingNoteId === note.id;
+                      return (
+                        <View key={note.id} style={{ flex: 1, minWidth: 0 }}>
+                          <NoteCard
+                            note={note}
+                            palette={{
+                              bg: palette.bg,
+                              accent: palette.accent,
+                              border: palette.border,
+                              surface: uiPalette.surface,
+                              surfaceAlt: uiPalette.surfaceAlt,
+                              textBody: uiPalette.textBody,
+                              textDim: uiPalette.textDim,
+                              textMuted: uiPalette.textMuted,
+                              textPrimary: uiPalette.textPrimary,
+                              chipBorder: uiPalette.chipBorder,
+                            }}
+                            expanded={expanded}
+                            editing={editing}
+                            editingText={editingText}
+                            onToggleExpand={() => setExpandedNoteId(expanded ? null : note.id)}
+                            onStartEdit={() => {
+                              setEditingNoteId(note.id);
+                              setEditingText(note.text);
+                            }}
+                            onChangeEditingText={setEditingText}
+                            onSaveEdit={() => updateNoteText(note.id, editingText).then((next) => { setNotes(next); setEditingNoteId(null); setEditingText(''); })}
+                            onCancelEdit={() => {
+                              setEditingNoteId(null);
+                              setEditingText('');
+                            }}
+                            onTogglePinned={() => togglePinned(note.id).then(setNotes)}
+                            onOpenImage={setPreviewNoteImageUri}
+                            onSaveToDevice={() => saveNoteToDevice(note).catch(() => undefined)}
+                            onShare={() => setShareNote(note)}
+                            onSetReminder={() => createQuickReminderFromNote(note).catch(() => undefined)}
+                            onDelete={() => removeNote(note.id).then(setNotes)}
+                            onSetColor={(color) => setNoteColor(note.id, color).then(setNotes)}
+                          />
+                        </View>
+                      );
+                    })}
+                    {row.length < (isDesktop ? desktopColumns : 1) ? Array.from({ length: (isDesktop ? desktopColumns : 1) - row.length }).map((_, i) => <View key={`fill-${i}`} style={{ flex: 1, minWidth: 0 }} />) : null}
+                  </View>
+                ))}
+              </View>
             </View>
           </>
         ) : null}
 
         {workspaceTab === 'templates' ? (
           <>
-            <View style={[mainAppStyles.card, { backgroundColor: palette.card, borderColor: palette.border }]}>
-              <TextInput style={[mainAppStyles.input, { backgroundColor: palette.bg, color: palette.fg, borderColor: palette.border, marginTop: 0 }]} placeholder="Template name" placeholderTextColor={palette.muted} value={templateName} onChangeText={setTemplateName} />
+            <View style={[mainAppStyles.card, { backgroundColor: palette.card, borderColor: palette.border, width: '100%', alignSelf: 'stretch' }]}>
+              <TextInput ref={templateInputRef} style={[mainAppStyles.input, { backgroundColor: palette.bg, color: palette.fg, borderColor: palette.border, marginTop: 0 }]} placeholder="Template name" placeholderTextColor={palette.muted} value={templateName} onChangeText={setTemplateName} />
               <TextInput style={[mainAppStyles.input, { backgroundColor: palette.bg, color: palette.fg, borderColor: palette.border }]} placeholder="To (emails separated by ;)" placeholderTextColor={palette.muted} value={templateTo} onChangeText={setTemplateTo} />
               <TextInput style={[mainAppStyles.input, { backgroundColor: palette.bg, color: palette.fg, borderColor: palette.border }]} placeholder="Subject" placeholderTextColor={palette.muted} value={templateSubject} onChangeText={setTemplateSubject} />
               <TextInput style={[mainAppStyles.input, styles.noteInput, { backgroundColor: palette.bg, color: palette.fg, borderColor: palette.border }]} placeholder="Body" placeholderTextColor={palette.muted} multiline value={templateBody} onChangeText={setTemplateBody} />
@@ -916,10 +930,46 @@ export function NotesTab({ palette }: { palette: Palette }) {
                 ) : null}
               </View>
             </View>
-            <View style={[mainAppStyles.card, { backgroundColor: palette.card, borderColor: palette.border }]}>
-              <TextInput style={[mainAppStyles.input, { backgroundColor: palette.bg, color: palette.fg, borderColor: palette.border, marginTop: 0 }]} placeholder="Search templates" placeholderTextColor={palette.muted} value={templateSearch} onChangeText={setTemplateSearch} />
-              {filteredTemplates.map((template) => (
-                <View key={template.id} style={[styles.compactCard, { borderColor: palette.border, backgroundColor: palette.bg }]}>
+            <View style={[mainAppStyles.card, { backgroundColor: palette.card, borderColor: palette.border, width: '100%', alignSelf: 'stretch' }]}>
+              <View style={[styles.searchRow, { borderColor: palette.border, backgroundColor: palette.bg }]}>
+                <Ionicons name="search" size={15} color={templateSearch ? palette.accent : palette.muted} />
+                <TextInput
+                  style={[styles.searchInput, { color: palette.fg }]}
+                  placeholder="Search templates"
+                  placeholderTextColor={palette.muted}
+                  value={templateSearch}
+                  onChangeText={setTemplateSearch}
+                />
+                <View style={[mainAppStyles.filterChipCompact, { borderColor: palette.border, borderWidth: 1 }]}>
+                  <Text style={{ color: palette.muted, fontSize: 11, fontWeight: '700' }}>{filteredTemplates.length} templates</Text>
+                </View>
+              </View>
+            {filteredTemplates.length === 0 ? (
+              <View style={[mainAppStyles.card, { backgroundColor: palette.card, borderColor: palette.border, alignItems: 'center', gap: 10, width: '100%', alignSelf: 'stretch' }]}>
+                <Ionicons name={templates.length === 0 ? 'layers-outline' : 'search-outline'} size={28} color={palette.accent} />
+                <Text style={{ color: palette.fg, fontSize: 15, fontWeight: '800', textAlign: 'center' }}>{templatesEmptyTitle}</Text>
+                <Text style={{ color: palette.muted, fontSize: 12, lineHeight: 18, textAlign: 'center' }}>{templatesEmptyText}</Text>
+                <Pressable
+                  style={({ pressed }) => [
+                    mainAppStyles.btn,
+                    { backgroundColor: palette.accent, borderColor: palette.accent, opacity: pressed ? 0.85 : 1, alignSelf: 'stretch' },
+                  ]}
+                  onPress={() => {
+                    if (templates.length === 0) {
+                      templateInputRef.current?.focus();
+                      return;
+                    }
+                    setTemplateSearch('');
+                  }}
+                >
+                  <Text style={[mainAppStyles.btnText, { textAlign: 'center' }]}>{templates.length === 0 ? 'Create template' : 'Clear search'}</Text>
+                </Pressable>
+              </View>
+            ) : null}
+            {filteredTemplates.length > 0 ? (
+              <>
+                {filteredTemplates.map((template) => (
+                <View key={template.id} style={[styles.compactCard, { borderColor: palette.border, backgroundColor: palette.bg, width: '100%' }]}>
                   <Text style={{ color: palette.fg, fontWeight: '800' }} numberOfLines={1}>{template.name}</Text>
                   <Text style={{ color: palette.muted, fontSize: 11 }} numberOfLines={1}>{template.to || '(No recipients)'}</Text>
                   <Text style={{ color: palette.muted, fontSize: 11 }} numberOfLines={1}>{template.subject || '(No subject)'}</Text>
@@ -931,111 +981,19 @@ export function NotesTab({ palette }: { palette: Palette }) {
                     <Pressable onPress={() => removeTemplate(template.id).then(setTemplates)}><Ionicons name="trash-outline" size={16} color="#ef4444" /></Pressable>
                   </View>
                 </View>
-              ))}
+                ))}
+              </>
+            ) : null}
             </View>
           </>
         ) : null}
 
         {workspaceTab === 'clipboard' ? (
-          <>
-            <View style={[mainAppStyles.card, { backgroundColor: palette.card, borderColor: palette.border, gap: 10 }]}>
-              <View style={styles.editorHeader}>
-                <Text style={{ color: palette.fg, fontWeight: '800' }}>Clipboard timeline</Text>
-                <View style={styles.editorActions}>
-                  <Pressable style={[styles.iconOnlyAction, { borderColor: palette.border }]} onPress={() => captureClipboardNow().catch(() => undefined)}>
-                    <Ionicons name="clipboard-outline" size={16} color={palette.fg} />
-                  </Pressable>
-                  <Pressable style={[styles.iconOnlyAction, { borderColor: palette.border }]} onPress={() => importScreenshotToClipboard().catch(() => undefined)}>
-                    <Ionicons name="image-outline" size={16} color={palette.fg} />
-                  </Pressable>
-                </View>
-              </View>
-              <View style={[styles.searchRow, { borderColor: palette.border, backgroundColor: palette.bg }]}>
-                <Ionicons name="search" size={15} color={searchText ? palette.accent : palette.muted} />
-                <TextInput
-                  style={[styles.searchInput, { color: palette.fg }]}
-                  placeholder="Search clipboard..."
-                  placeholderTextColor={palette.muted}
-                  value={searchText}
-                  onChangeText={setSearchText}
-                />
-                {searchText ? (
-                  <Pressable onPress={() => setSearchText('')} hitSlop={8}>
-                    <Ionicons name="close-circle" size={15} color={palette.muted} />
-                  </Pressable>
-                ) : null}
-              </View>
-              <Text style={{ color: palette.muted, fontSize: 11 }}>
-                Live capture enabled. Long-press entries to select and bulk delete.
-              </Text>
-              {(browserInfo.isFirefox || browserInfo.isSafari) ? (
-                <Text style={{ color: palette.muted, fontSize: 11, marginTop: 4 }}>
-                  Firefox/Safari may restrict background clipboard reads. Use the clipboard button to capture manually.
-                </Text>
-              ) : null}
-              {selectedClipboardIds.size ? (
-                <View style={{ marginTop: 8, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <Text style={{ color: palette.muted, fontSize: 11 }}>{selectedClipboardIds.size} selected</Text>
-                  <Pressable onPress={() => deleteSelectedClipboard().catch(() => undefined)} style={[styles.categoryChip, { borderColor: palette.border, paddingVertical: 4 }]}>
-                    <Text style={{ color: '#ef4444', fontSize: 10, fontWeight: '800' }}>Delete selected</Text>
-                  </Pressable>
-                </View>
-              ) : null}
-            </View>
-            <View style={styles.gridWrap}>
-              {groupedClipboard.map(([day, entries]) => (
-                <View key={day} style={{ gap: 8 }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <Text style={{ color: palette.muted, fontSize: 11, fontWeight: '800' }}>{day} ({entries.length})</Text>
-                    <Pressable onPress={() => deleteClipboardDay(day).catch(() => undefined)} style={[styles.categoryChip, { borderColor: palette.border, paddingVertical: 4 }]}>
-                      <Text style={{ color: '#ef4444', fontSize: 10, fontWeight: '800' }}>Delete day</Text>
-                    </Pressable>
-                  </View>
-                  {chunk(entries, isDesktop ? desktopColumns : 1).map((row, rowIndex) => (
-                    <View key={`clip-row-${day}-${rowIndex}`} style={styles.gridRow}>
-                      {row.map((entry) => {
-                    const eventDate = parseFollowUpDate(entry.content);
-                    return (
-                      <Pressable
-                        key={entry.id}
-                        onPress={() => handleClipboardCardPress(entry)}
-                        onLongPress={() => toggleClipboardSelection(entry.id)}
-                        style={({ pressed }) => [styles.compactCard, { flex: 1, borderColor: selectedClipboardIds.has(entry.id) ? palette.accent : palette.border, backgroundColor: palette.card, opacity: pressed ? 0.92 : 1 }]}
-                      >
-                        <View style={styles.cardHead}>
-                          <Text style={{ color: palette.muted, fontSize: 10 }}>{new Date(entry.capturedAt).toLocaleDateString()} {new Date(entry.capturedAt).toLocaleTimeString()}</Text>
-                          <Text style={{ color: palette.accent, fontSize: 10, fontWeight: '800' }}>{entry.category.toUpperCase()}</Text>
-                        </View>
-                        {entry.kind === 'image' && entry.imageDataUri ? <Image source={{ uri: entry.imageDataUri }} style={styles.clipThumb} resizeMode="cover" /> : null}
-                        <Text style={{ color: palette.fg, fontSize: 12 }} numberOfLines={2}>{entry.content}</Text>
-                        <Text style={{ color: palette.muted, fontSize: 10 }}>Double tap to preview</Text>
-                        <View style={styles.editorActions}>
-                          <Pressable
-                            onPress={() => {
-                              const order: Array<'general' | 'code' | 'servicenow' | 'link'> = ['general', 'code', 'servicenow', 'link'];
-                              const idx = order.indexOf(entry.category as 'general' | 'code' | 'servicenow' | 'link');
-                              const nextCategory = order[(idx + 1) % order.length];
-                              void updateClipboardEntryCategory(entry.id, nextCategory).then(setClipboardItems);
-                            }}
-                            style={[styles.categoryChip, { borderColor: palette.border, paddingVertical: 4, paddingHorizontal: 8 }]}
-                          >
-                            <Text style={{ color: palette.fg, fontSize: 10, fontWeight: '700' }}>{entry.category}</Text>
-                          </Pressable>
-                          <Pressable onPress={() => forceCopyToClipboard(entry.content).catch(() => undefined)}><Ionicons name="copy-outline" size={16} color={palette.fg} /></Pressable>
-                          <Pressable onPress={() => sendClipboardToNote(entry).catch(() => undefined)}><Ionicons name="document-text-outline" size={16} color={palette.fg} /></Pressable>
-                          <Pressable onPress={() => sendClipboardToTemplate(entry)}><Ionicons name="layers-outline" size={16} color={palette.fg} /></Pressable>
-                          {eventDate ? <Pressable onPress={() => createOutlookEventFromContent(entry.content).catch(() => undefined)}><Ionicons name="calendar-outline" size={16} color={palette.fg} /></Pressable> : null}
-                        </View>
-                      </Pressable>
-                    );
-                      })}
-                      {row.length < (isDesktop ? desktopColumns : 1) ? Array.from({ length: (isDesktop ? desktopColumns : 1) - row.length }).map((_, i) => <View key={`clip-fill-${day}-${i}`} style={{ flex: 1 }} />) : null}
-                    </View>
-                  ))}
-                </View>
-              ))}
-            </View>
-          </>
+          <ClipboardScreen
+            palette={palette}
+            onSendToNote={sendClipboardToNote}
+            onSendToTemplate={sendClipboardToTemplate}
+          />
         ) : null}
       </View>
 
@@ -1130,30 +1088,30 @@ export function NotesTab({ palette }: { palette: Palette }) {
 }
 
 const styles = StyleSheet.create({
-  content: { paddingBottom: 32 },
-  workspace: { gap: 10 },
+  content: { paddingBottom: 128, width: '100%', minWidth: 0, alignItems: 'stretch' },
+  workspace: { gap: 10, minWidth: 0 },
   workspaceTabs: { flexDirection: 'row', gap: 6, marginBottom: 0 },
-  workspaceTab: { flex: 1, minHeight: 42, borderWidth: 1, borderRadius: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingHorizontal: 8 },
+  workspaceTab: { flex: 1, minHeight: 44, borderWidth: 1, borderRadius: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingHorizontal: 8 },
   resumeCard: { paddingVertical: 10 },
   editorHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   groupSelectorRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
-  shareRow: { flexDirection: 'row', gap: 10 },
-  iconAction: { borderWidth: 1, borderRadius: 999, minHeight: 32, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', gap: 6 },
+  shareRow: { flexDirection: 'row', gap: 10, minWidth: 0 },
+  iconAction: { borderWidth: 1, borderRadius: 999, minHeight: 44, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', gap: 6, justifyContent: 'center' },
   noteInput: { minHeight: 100, textAlignVertical: 'top' },
   attachmentRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 },
   attachmentChip: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 5, flexDirection: 'row', alignItems: 'center', gap: 5, maxWidth: 120 },
   editorFooter: { marginTop: 10, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 10 },
   categoryRow: { flexDirection: 'row', gap: 6 },
-  categoryChip: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 7 },
+  categoryChip: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 7, minHeight: 44, justifyContent: 'center' },
   editorActions: { flexDirection: 'row', gap: 10, alignItems: 'center' },
-  iconOnlyAction: { width: 34, height: 34, borderRadius: 17, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  iconOnlyAction: { width: 44, height: 44, borderRadius: 17, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   filterRow: { flexDirection: 'row', gap: 6 },
   filterChipRow: { flexDirection: 'row', gap: 6, alignItems: 'center' },
   searchRow: { flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 8 },
   searchInput: { flex: 1, fontSize: 13, paddingVertical: 0 },
-  gridWrap: { gap: 10 },
-  gridRow: { flexDirection: 'row', gap: 10 },
-  compactCard: { borderWidth: 1, borderRadius: 12, padding: 12, gap: 8 },
+  gridWrap: { gap: 10, width: '100%', minWidth: 0 },
+  gridRow: { flexDirection: 'row', gap: 10, width: '100%', minWidth: 0 },
+  compactCard: { borderWidth: 1, borderRadius: 12, padding: 12, gap: 8, minWidth: 0 },
   noteThumb: { width: '100%', height: 120, borderRadius: 8, backgroundColor: '#111' },
   clipThumb: { width: '100%', height: 96, borderRadius: 8, backgroundColor: '#111' },
   cardHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
@@ -1165,3 +1123,5 @@ const styles = StyleSheet.create({
   previewActions: { marginTop: 14, flexDirection: 'row', gap: 10 },
   previewBtn: { flex: 1, minHeight: 44, borderRadius: 10, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
 });
+
+

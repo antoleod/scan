@@ -79,7 +79,7 @@ function GlowRing({ size, color, delay, dur, opacity }: { size: number; color: s
   );
 }
 
-// Pantalla de éxito post-registro
+// Post-signup success screen
 function SuccessOverlay({ theme }: { theme: any }) {
   const scale = useSharedValue(0);
   const opacity = useSharedValue(0);
@@ -104,7 +104,7 @@ function SuccessOverlay({ theme }: { theme: any }) {
           IDENTITY SECURED
         </Text>
         <Text style={{ color: theme.textSecondary, fontSize: 14, marginTop: 8, textAlign: 'center', paddingHorizontal: 20 }}>
-          Your account has been created successfully. Accessing terminal...
+          Your account is ready. Signing you in...
         </Text>
         <ActivityIndicator color={theme.secondary} style={{ marginTop: 24 }} />
       </Animated.View>
@@ -220,10 +220,10 @@ export default function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
     
     setPassword(generated);
     setConfirmPassword(generated);
-    setShowPassword(true); // Se muestra automáticamente para que el usuario vea qué se generó
+    setShowPassword(true); // Shown automatically so the user can review what was generated
 
     if (Platform.OS !== 'web') {
-      // Efecto "brillante" mediante secuencia haptica
+      // Sparkle effect using a haptic sequence
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       setTimeout(() => void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light), 60);
       setTimeout(() => void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium), 120);
@@ -241,8 +241,8 @@ export default function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
 
   const starsStyle = useAnimatedStyle(() => ({
     transform: [
-      { rotate: `${interpolate(scanProgress.value, [0, 1], [0, -360])}deg` }, // Rotación completa y continua
-      { scale: interpolate(scanProgress.value, [0, 0.5, 1], [1, 1.05, 1]) }, // Sutil pulsación
+      { rotate: `${interpolate(scanProgress.value, [0, 1], [0, -360])}deg` }, // Full continuous rotation
+      { scale: interpolate(scanProgress.value, [0, 0.5, 1], [1, 1.05, 1]) }, // Subtle pulse
     ],
   }));
 
@@ -250,7 +250,7 @@ export default function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
     setError(null);
     if (!firebase.enabled) {
       const missing = firebase.missingRequiredEnv.join(', ');
-      setError(missing ? `Firebase not configured. Missing: ${missing}` : 'Firebase not configured in this build.');
+      setError(missing ? `Firebase is not configured. Missing: ${missing}` : 'Firebase is not configured in this build.');
       return;
     }
 
@@ -260,7 +260,7 @@ export default function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
     }
 
     if (!usernameValid || !isValidEmail(normalizedEmail)) {
-      setError('Username invalid. Use 3+ chars: a-z, 0-9, dot, underscore or hyphen.');
+      setError('Username must be at least 3 characters and can include letters, numbers, dots, underscores, and hyphens.');
       return;
     }
 

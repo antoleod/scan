@@ -1,12 +1,24 @@
-﻿import React from 'react';
-import { StyleSheet, View } from 'react-native';
+import React from 'react';
+import { StyleSheet, View, useWindowDimensions } from 'react-native';
 
-export const APP_LAYOUT_MAX_WIDTH = 1420;
+export const APP_LAYOUT_MAX_WIDTH = 1200;
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
+  const { width } = useWindowDimensions();
+  const isDesktop = width >= 1024;
+
   return (
     <View style={styles.outer}>
-      <View style={styles.inner}>{children}</View>
+      <View
+        style={[
+          styles.inner,
+          {
+            paddingHorizontal: isDesktop ? 24 : 12,
+          },
+        ]}
+      >
+        {children}
+      </View>
     </View>
   );
 }
@@ -14,12 +26,17 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 const styles = StyleSheet.create({
   outer: {
     width: '100%',
+    minWidth: 0,
     alignItems: 'center',
     flex: 1,
+    overflow: 'hidden',
   },
   inner: {
-    width: '92%',
+    width: '100%',
     maxWidth: APP_LAYOUT_MAX_WIDTH,
     flex: 1,
+    minWidth: 0,
+    minHeight: 0,
+    alignSelf: 'center',
   },
 });

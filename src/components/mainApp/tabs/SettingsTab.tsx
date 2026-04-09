@@ -1,5 +1,5 @@
 ﻿import React, { useEffect, useMemo, useState } from 'react';
-import { Alert, Linking, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import { Alert, Linking, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 import { AppSettings, type PersistenceMode } from '../../../types';
@@ -82,7 +82,7 @@ function SectionCard({ title, subtitle, accent, subtitleColor, cardBackground, c
   );
 }
 
-function ThemeCard({ option, active, onPress }: { option: ThemeOption; active: boolean; onPress: () => void }) {
+function ThemeCard({ option, active, onPress, desktop }: { option: ThemeOption; active: boolean; desktop: boolean; onPress: () => void }) {
   const [pulse, setPulse] = useState(0);
   useEffect(() => {
     if (!active) return;
@@ -91,7 +91,7 @@ function ThemeCard({ option, active, onPress }: { option: ThemeOption; active: b
   }, [active]);
 
   return (
-    <Pressable onPress={onPress} style={({ pressed }) => [styles.themeCard, { backgroundColor: option.background, borderColor: active ? option.accent : option.border, borderWidth: active ? (pulse ? 2.3 : 1.5) : 1, opacity: pressed ? 0.85 : 1 }]}>
+    <Pressable onPress={onPress} style={({ pressed }) => [styles.themeCard, desktop ? styles.themeCardDesktop : styles.themeCardMobile, { backgroundColor: option.background, borderColor: active ? option.accent : option.border, borderWidth: active ? (pulse ? 2.3 : 1.5) : 1, opacity: pressed ? 0.85 : 1 }]}>
       <View style={[styles.themeSwatch, { backgroundColor: option.accent }]} />
       <Text style={[styles.themeCardText, { color: option.text }]}>{option.label}</Text>
       {active ? <Text style={[styles.check, { color: option.accent }]}>ACTIVE</Text> : null}
@@ -145,6 +145,8 @@ export function SettingsTab({
   barcodeOutputFormat: BarcodeFormat;
 }) {
   const activeAccent = '#FFD84D';
+  const { width } = useWindowDimensions();
+  const isDesktop = width >= 1024;
   const { setThemeName } = useAppTheme();
   const [bulkInput, setBulkInput] = useState('');
   const [passPhrase, setPassPhrase] = useState('');
@@ -278,12 +280,13 @@ export function SettingsTab({
         </SectionCard>
 
         <SectionCard title="Theme selector" subtitle="Animated active border." accent={palette.accent} subtitleColor={palette.muted} cardBackground={palette.card} cardBorder={palette.border} defaultOpen>
-          <View style={styles.themeGrid}>
+          <View style={[styles.themeGrid, isDesktop ? styles.themeGridDesktop : null]}> 
             {themeOptions.map((item) => (
               <ThemeCard
                 key={item.key}
                 option={item}
                 active={settings.theme === item.key}
+                desktop={isDesktop}
                 onPress={() => {
                   onPatchSettings({ theme: item.key as SupportedTheme });
                   const mapped: AppThemeName = item.key === 'eu_blue' ? 'euBlue' : (item.key as AppThemeName);
@@ -393,11 +396,11 @@ export function SettingsTab({
         ) : null}
 
         <SectionCard title="Barcode formats" subtitle="Available formats." accent={palette.accent} subtitleColor={palette.muted} cardBackground={palette.card} cardBorder={palette.border}>
-          <View style={styles.formatGrid}>
+          <View style={[styles.formatGrid, isDesktop ? styles.formatGridDesktop : null]}> 
             {barcodeOptions.map((format) => {
               const selected = barcodeOutputFormat === format.name;
               return (
-                <Pressable key={format.name} onPress={() => { const match = BARCODE_FORMAT_OPTIONS.find((opt) => opt.value === format.name); if (!match || format.hardwareOnly) return; onPatchSettings({ barcodeOutputFormat: match.value }); }} style={({ pressed }) => [styles.formatCard, { borderColor: selected ? activeAccent : palette.border, backgroundColor: palette.card, opacity: pressed ? 0.8 : 1 }]}>
+                <Pressable key={format.name} onPress={() => { const match = BARCODE_FORMAT_OPTIONS.find((opt) => opt.value === format.name); if (!match || format.hardwareOnly) return; onPatchSettings({ barcodeOutputFormat: match.value }); }} style={({ pressed }) => [styles.formatCard, isDesktop ? styles.formatCardDesktop : styles.formatCardMobile, { borderColor: selected ? activeAccent : palette.border, backgroundColor: palette.card, opacity: pressed ? 0.8 : 1 }]}>
                   <Text style={[styles.formatName, { color: palette.fg }]}>{format.label}</Text>
                   <Text style={[styles.formatDescription, { color: palette.muted }]}>{format.description}</Text>
                 </Pressable>
@@ -408,24 +411,24 @@ export function SettingsTab({
         </SectionCard>
 
         <SectionCard title="Data + Sync" subtitle="Backup and synchronization." accent={palette.accent} subtitleColor={palette.muted} cardBackground={palette.card} cardBorder={palette.border}>
-          <View style={styles.bulkGrid}>
-            <Pressable onPress={onExportCsv} style={({ pressed }) => [styles.bulkButton, styles.bulkGridItem, { backgroundColor: activeAccent, opacity: pressed ? 0.8 : 1 }]}><Text style={[styles.bulkButtonText, { color: '#111' }]}>Export CSV</Text></Pressable>
-            <Pressable onPress={onExportBackup} style={({ pressed }) => [styles.bulkButton, styles.bulkGridItem, { backgroundColor: activeAccent, opacity: pressed ? 0.8 : 1 }]}><Text style={[styles.bulkButtonText, { color: '#111' }]}>Export backup</Text></Pressable>
-            <Pressable onPress={onOpenBackupImport} style={({ pressed }) => [styles.bulkButton, styles.bulkGridItem, { backgroundColor: activeAccent, opacity: pressed ? 0.8 : 1 }]}><Text style={[styles.bulkButtonText, { color: '#111' }]}>Import</Text></Pressable>
-            <Pressable onPress={onRecheckFirebase} style={({ pressed }) => [styles.bulkButton, styles.bulkGridItem, { backgroundColor: activeAccent, opacity: pressed ? 0.8 : 1 }]}><Text style={[styles.bulkButtonText, { color: '#111' }]}>Recheck Firebase</Text></Pressable>
-            <Pressable disabled={syncBusy} onPress={onSyncNow} style={({ pressed }) => [styles.bulkButton, styles.bulkGridItem, { backgroundColor: activeAccent, opacity: syncBusy ? 0.6 : pressed ? 0.8 : 1 }]}><Text style={[styles.bulkButtonText, { color: '#111' }]}>{syncBusy ? 'Syncing' : 'Sync now'}</Text></Pressable>
-            <Pressable onPress={() => Alert.alert('Clear history', 'Are you sure you want to clear all history?', [{ text: 'Cancel', style: 'cancel' }, { text: 'Clear', style: 'destructive', onPress: onClearHistory }])} style={({ pressed }) => [styles.bulkButton, styles.bulkGridItem, { backgroundColor: '#ef4444', opacity: pressed ? 0.8 : 1 }]}><Text style={[styles.bulkButtonText, { color: '#fff' }]}>Clear history</Text></Pressable>
-            <Pressable onPress={() => Alert.alert('Hard delete history', 'Delete all history locally, cache and cloud?', [{ text: 'Cancel', style: 'cancel' }, { text: 'Delete', style: 'destructive', onPress: onHardDeleteHistory }])} style={({ pressed }) => [styles.bulkButton, styles.bulkGridItem, { backgroundColor: '#991b1b', opacity: pressed ? 0.8 : 1 }]}><Text style={[styles.bulkButtonText, { color: '#fff' }]}>Hard delete history</Text></Pressable>
-            <Pressable onPress={() => Alert.alert('Hard delete notes', 'Delete all notes locally and in cloud?', [{ text: 'Cancel', style: 'cancel' }, { text: 'Delete', style: 'destructive', onPress: onHardDeleteNotes }])} style={({ pressed }) => [styles.bulkButton, styles.bulkGridItem, { backgroundColor: '#b91c1c', opacity: pressed ? 0.8 : 1 }]}><Text style={[styles.bulkButtonText, { color: '#fff' }]}>Hard delete notes</Text></Pressable>
-            <Pressable onPress={() => Alert.alert('Hard delete clipboard', 'Delete all clipboard memory locally?', [{ text: 'Cancel', style: 'cancel' }, { text: 'Delete', style: 'destructive', onPress: onHardDeleteClipboard }])} style={({ pressed }) => [styles.bulkButton, styles.bulkGridItem, { backgroundColor: '#b91c1c', opacity: pressed ? 0.8 : 1 }]}><Text style={[styles.bulkButtonText, { color: '#fff' }]}>Hard delete clipboard</Text></Pressable>
-            <Pressable onPress={() => Alert.alert('Hard delete templates', 'Delete all templates locally and in cloud?', [{ text: 'Cancel', style: 'cancel' }, { text: 'Delete', style: 'destructive', onPress: onHardDeleteTemplates }])} style={({ pressed }) => [styles.bulkButton, styles.bulkGridItem, { backgroundColor: '#b91c1c', opacity: pressed ? 0.8 : 1 }]}><Text style={[styles.bulkButtonText, { color: '#fff' }]}>Hard delete templates</Text></Pressable>
+          <View style={[styles.bulkGrid, isDesktop ? styles.bulkGridDesktop : null]}> 
+            <Pressable onPress={onExportCsv} style={({ pressed }) => [styles.bulkButton, styles.bulkGridItem, isDesktop ? styles.bulkGridItemDesktop : styles.bulkGridItemMobile, { backgroundColor: activeAccent, opacity: pressed ? 0.8 : 1 }]}><Text style={[styles.bulkButtonText, { color: '#111' }]}>Export CSV</Text></Pressable>
+            <Pressable onPress={onExportBackup} style={({ pressed }) => [styles.bulkButton, styles.bulkGridItem, isDesktop ? styles.bulkGridItemDesktop : styles.bulkGridItemMobile, { backgroundColor: activeAccent, opacity: pressed ? 0.8 : 1 }]}><Text style={[styles.bulkButtonText, { color: '#111' }]}>Export backup</Text></Pressable>
+            <Pressable onPress={onOpenBackupImport} style={({ pressed }) => [styles.bulkButton, styles.bulkGridItem, isDesktop ? styles.bulkGridItemDesktop : styles.bulkGridItemMobile, { backgroundColor: activeAccent, opacity: pressed ? 0.8 : 1 }]}><Text style={[styles.bulkButtonText, { color: '#111' }]}>Import</Text></Pressable>
+            <Pressable onPress={onRecheckFirebase} style={({ pressed }) => [styles.bulkButton, styles.bulkGridItem, isDesktop ? styles.bulkGridItemDesktop : styles.bulkGridItemMobile, { backgroundColor: activeAccent, opacity: pressed ? 0.8 : 1 }]}><Text style={[styles.bulkButtonText, { color: '#111' }]}>Recheck Firebase</Text></Pressable>
+            <Pressable disabled={syncBusy} onPress={onSyncNow} style={({ pressed }) => [styles.bulkButton, styles.bulkGridItem, isDesktop ? styles.bulkGridItemDesktop : styles.bulkGridItemMobile, { backgroundColor: activeAccent, opacity: syncBusy ? 0.6 : pressed ? 0.8 : 1 }]}><Text style={[styles.bulkButtonText, { color: '#111' }]}>{syncBusy ? 'Syncing' : 'Sync now'}</Text></Pressable>
+            <Pressable onPress={() => Alert.alert('Clear history', 'Are you sure you want to clear all history?', [{ text: 'Cancel', style: 'cancel' }, { text: 'Clear', style: 'destructive', onPress: onClearHistory }])} style={({ pressed }) => [styles.bulkButton, styles.bulkGridItem, isDesktop ? styles.bulkGridItemDesktop : styles.bulkGridItemMobile, { backgroundColor: '#ef4444', opacity: pressed ? 0.8 : 1 }]}><Text style={[styles.bulkButtonText, { color: '#fff' }]}>Clear history</Text></Pressable>
+            <Pressable onPress={() => Alert.alert('Hard delete history', 'Delete all history locally, cache and cloud?', [{ text: 'Cancel', style: 'cancel' }, { text: 'Delete', style: 'destructive', onPress: onHardDeleteHistory }])} style={({ pressed }) => [styles.bulkButton, styles.bulkGridItem, isDesktop ? styles.bulkGridItemDesktop : styles.bulkGridItemMobile, { backgroundColor: '#991b1b', opacity: pressed ? 0.8 : 1 }]}><Text style={[styles.bulkButtonText, { color: '#fff' }]}>Hard delete history</Text></Pressable>
+            <Pressable onPress={() => Alert.alert('Hard delete notes', 'Delete all notes locally and in cloud?', [{ text: 'Cancel', style: 'cancel' }, { text: 'Delete', style: 'destructive', onPress: onHardDeleteNotes }])} style={({ pressed }) => [styles.bulkButton, styles.bulkGridItem, isDesktop ? styles.bulkGridItemDesktop : styles.bulkGridItemMobile, { backgroundColor: '#b91c1c', opacity: pressed ? 0.8 : 1 }]}><Text style={[styles.bulkButtonText, { color: '#fff' }]}>Hard delete notes</Text></Pressable>
+            <Pressable onPress={() => Alert.alert('Hard delete clipboard', 'Delete all clipboard memory locally?', [{ text: 'Cancel', style: 'cancel' }, { text: 'Delete', style: 'destructive', onPress: onHardDeleteClipboard }])} style={({ pressed }) => [styles.bulkButton, styles.bulkGridItem, isDesktop ? styles.bulkGridItemDesktop : styles.bulkGridItemMobile, { backgroundColor: '#b91c1c', opacity: pressed ? 0.8 : 1 }]}><Text style={[styles.bulkButtonText, { color: '#fff' }]}>Hard delete clipboard</Text></Pressable>
+            <Pressable onPress={() => Alert.alert('Hard delete templates', 'Delete all templates locally and in cloud?', [{ text: 'Cancel', style: 'cancel' }, { text: 'Delete', style: 'destructive', onPress: onHardDeleteTemplates }])} style={({ pressed }) => [styles.bulkButton, styles.bulkGridItem, isDesktop ? styles.bulkGridItemDesktop : styles.bulkGridItemMobile, { backgroundColor: '#b91c1c', opacity: pressed ? 0.8 : 1 }]}><Text style={[styles.bulkButtonText, { color: '#fff' }]}>Hard delete templates</Text></Pressable>
           </View>
           <Text style={{ color: palette.muted, marginTop: 6 }}>Mode: {isGuest ? 'Guest' : 'Authenticated'} | Persistence: {persistenceMode === 'firebase' ? 'Firebase' : 'Local'}</Text>
           {userEmail ? <Text style={{ color: palette.fg, marginTop: 2 }}>{userEmail}</Text> : null}
         </SectionCard>
 
         <View style={styles.bottomLogout}>
-          <Pressable onPress={onLogout} style={[styles.bulkButton, styles.bottomLogoutBtn, { backgroundColor: palette.accent }]}>
+          <Pressable onPress={onLogout} style={[styles.bulkButton, styles.bottomLogoutBtn, isDesktop ? styles.bottomLogoutBtnDesktop : null, { backgroundColor: palette.accent }]}>
             <Text style={[styles.bulkButtonText, { color: '#fff' }]}>Log off</Text>
           </Pressable>
         </View>
@@ -437,36 +440,46 @@ export function SettingsTab({
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
-  scrollOuter: { alignItems: 'center' },
-  container: { padding: 16, gap: 14, paddingBottom: 120, width: '100%', maxWidth: 960 },
+  scrollOuter: { alignItems: 'center', width: '100%', minWidth: 0 },
+  container: { padding: 16, gap: 14, paddingBottom: 160, width: '100%', maxWidth: 1280, minWidth: 0 },
   header: { gap: 8, paddingTop: 6 },
   kicker: { fontSize: 10, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 3, fontFamily: 'monospace' },
   pageTitle: { fontSize: 22, fontWeight: '900', letterSpacing: -0.6 },
   pageSubtitle: { fontSize: 12, lineHeight: 16 },
-  sectionCard: { gap: 12, padding: 14, borderRadius: 12, borderLeftWidth: 3, borderWidth: 1 },
+  sectionCard: { gap: 12, padding: 14, borderRadius: 14, borderLeftWidth: 3, borderWidth: 1 },
   sectionHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
   sectionTitle: { fontSize: 13, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 1.2, fontFamily: 'monospace' },
   sectionSubtitle: { fontSize: 11, lineHeight: 15 },
   chevron: { fontWeight: '800', fontSize: 14 },
-  themeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  themeCard: { minWidth: 68, flexGrow: 1, minHeight: 70, borderRadius: 14, paddingHorizontal: 10, paddingVertical: 10, justifyContent: 'center', alignItems: 'center', gap: 6, position: 'relative' },
+  themeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, width: '100%', minWidth: 0 },
+  themeGridDesktop: { gap: 10 },
+  themeCard: { minWidth: 0, flexGrow: 1, minHeight: 76, borderRadius: 14, paddingHorizontal: 10, paddingVertical: 10, justifyContent: 'center', alignItems: 'center', gap: 6, position: 'relative' },
+  themeCardDesktop: { flexBasis: '31%' },
+  themeCardMobile: { flexBasis: '100%' },
   themeSwatch: { width: 24, height: 24, borderRadius: 12, borderWidth: 1, borderColor: 'rgba(255,255,255,0.22)' },
   themeCardText: { fontSize: 10, fontWeight: '800', textAlign: 'center' },
   check: { position: 'absolute', right: 6, top: 4, fontSize: 9, fontWeight: '900' },
-  formatGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  formatCard: { flexBasis: '48%', minWidth: 130, borderWidth: 1, borderRadius: 14, padding: 10, gap: 5 },
+  formatGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, width: '100%', minWidth: 0 },
+  formatGridDesktop: { gap: 12 },
+  formatCard: { minWidth: 0, minHeight: 100, borderWidth: 1, borderRadius: 14, padding: 10, gap: 5, flexGrow: 1 },
+  formatCardMobile: { flexBasis: '100%' },
+  formatCardDesktop: { flexBasis: '31%' },
   formatName: { fontSize: 12, fontWeight: '900' },
   formatDescription: { fontSize: 11, lineHeight: 15 },
   helperLine: { fontSize: 11, fontFamily: 'monospace', marginTop: 8 },
-  toggleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 12 },
+  toggleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 12, minHeight: 44 },
   toggleLabel: { fontSize: 13, fontWeight: '700' },
   bulkActions: { flexDirection: 'row', gap: 10, flexWrap: 'wrap' },
-  bulkGrid: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
-  bulkGridItem: { flexBasis: '48%', flexGrow: 1, minWidth: 120 },
-  bulkButton: { minHeight: 40, borderRadius: 10, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 14 },
+  bulkGrid: { flexDirection: 'row', gap: 8, flexWrap: 'wrap', width: '100%', minWidth: 0 },
+  bulkGridDesktop: { gap: 10 },
+  bulkGridItem: { flexGrow: 1, minWidth: 0 },
+  bulkGridItemMobile: { flexBasis: '100%' },
+  bulkGridItemDesktop: { flexBasis: '31%' },
+  bulkButton: { minHeight: 44, borderRadius: 10, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 14 },
   bulkButtonText: { fontSize: 12, fontWeight: '900', textTransform: 'uppercase', letterSpacing: 1 },
   bottomLogout: { marginTop: 4, paddingTop: 4, borderTopWidth: 1, borderTopColor: 'rgba(148,163,184,0.2)' },
   bottomLogoutBtn: { alignSelf: 'stretch' },
+  bottomLogoutBtnDesktop: { alignSelf: 'flex-end', minWidth: 220 },
   passwordResult: { borderWidth: 1, borderRadius: 12, padding: 12, gap: 10 },
   passwordResultText: { fontSize: 13, fontWeight: '800', letterSpacing: 0.4, lineHeight: 18 },
   modeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
@@ -482,3 +495,7 @@ const styles = StyleSheet.create({
   counterValueText: { fontSize: 14, fontWeight: '800' },
   input: { minHeight: 42, borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 13 },
 });
+
+
+
+

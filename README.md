@@ -94,6 +94,9 @@ The deploy workflow reads only `secrets.*` and does not require committing `.env
 Important: on web clients, Firebase config values are public by design in the built app.
 Protect data with Firebase Auth + Firestore Security Rules + App Check; do not rely on hiding `EXPO_PUBLIC_*` values.
 
+Firestore rules for this app live in [`firestore.rules`](./firestore.rules) and are wired from [`firebase.json`](./firebase.json).
+Deploy them with the Firebase CLI when you update shared notes or sync behavior.
+
 ## Notes
 
 - Web still works where the underlying browser APIs are available.
