@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
   Image,
@@ -29,6 +29,7 @@ type NoteColor = 'default' | 'amber' | 'mint' | 'sky' | 'rose';
 
 type NoteItem = {
   id: string;
+  title?: string;
   text: string;
   category: NoteCategory;
   pinned: boolean;
@@ -150,6 +151,7 @@ export function NoteCard({
   onDelete,
   onSetColor,
   onLongPress,
+  onDoubleTap,
 }: {
   note: NoteItem;
   palette: Palette;
@@ -172,14 +174,26 @@ export function NoteCard({
   onDelete: () => void;
   onSetColor: (color: NoteColor) => void;
   onLongPress?: () => void;
+  onDoubleTap?: () => void;
 }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
+
+  // Double-tap detection
+  const lastTapRef = useRef<number>(0);
 
   // swipeOpen as both ref (for PanResponder closures) and state (to re-render chevron)
   const [swipeOpen, setSwipeOpen] = useState(false);
   const swipeOpenRef   = useRef(false);
   const swipeOffsetRef = useRef(0);   // last snapped position: 0 or -SWIPE_WIDTH
   const translateX     = useRef(new Animated.Value(0)).current;
+
+  // Reset swipe panel whenever the note identity changes (e.g. list re-order after pin)
+  useEffect(() => {
+    swipeOffsetRef.current = 0;
+    swipeOpenRef.current   = false;
+    setSwipeOpen(false);
+    translateX.setValue(0);
+  }, [note.id]);
 
   const closeSwipe = useCallback(() => {
     swipeOffsetRef.current = 0;
@@ -286,6 +300,13 @@ export function NoteCard({
           <Pressable
             onPress={() => {
               if (swipeOpenRef.current) { closeSwipe(); return; }
+              const now = Date.now();
+              if (onDoubleTap && now - lastTapRef.current < 300) {
+                lastTapRef.current = 0;
+                onDoubleTap();
+                return;
+              }
+              lastTapRef.current = now;
               onToggleExpand();
             }}
             onLongPress={onLongPress}
@@ -333,6 +354,13 @@ export function NoteCard({
                 </Pressable>
               )}
             </View>
+
+            {/* ── Optional title ── */}
+            {note.title ? (
+              <Text style={{ color: palette.textBody, fontSize: 14, fontWeight: '700', lineHeight: 20 }} numberOfLines={1}>
+                {note.title}
+              </Text>
+            ) : null}
 
             {/* ── Image attachment thumbnail ── */}
             {firstAttachment ? (

@@ -25,6 +25,7 @@ export interface NoteItem {
   id: string;
   kind: NoteKind;
   category: NoteCategory;
+  title?: string;
   text: string;
   groupId?: string;
   color?: 'default' | 'amber' | 'mint' | 'sky' | 'rose';
@@ -80,6 +81,7 @@ export async function loadNotes(): Promise<NoteItem[]> {
           id: String(item?.id || makeId('note')),
           kind: item?.kind === 'image' ? 'image' : 'text',
           category: item?.category === 'work' ? 'work' : 'general',
+          title: typeof item?.title === 'string' && item.title.trim() ? item.title.trim() : undefined,
           text: String(item?.text || ''),
           groupId: typeof item?.groupId === 'string' ? item.groupId : undefined,
           color: (['default', 'amber', 'mint', 'sky', 'rose'].includes(String(item?.color || '')) ? item.color : 'default') as NoteItem['color'],
@@ -311,6 +313,18 @@ export async function setNoteColor(id: string, color: NoteItem['color'] = 'defau
   if (updated?.groupId) {
     await upsertSharedGroupNote(updated.groupId, updated);
   }
+  return normalizeNotes(next);
+}
+
+export async function updateNoteTitle(id: string, title: string): Promise<NoteItem[]> {
+  const current = await loadNotes();
+  const next = current.map((item) =>
+    item.id === id ? { ...item, title: title.trim() || undefined, updatedAt: Date.now() } : item,
+  );
+  await saveNotes(next);
+  const updated = next.find((item) => item.id === id);
+  if (updated) await pushNoteIfAuthenticated(updated);
+  if (updated?.groupId) await upsertSharedGroupNote(updated.groupId, updated);
   return normalizeNotes(next);
 }
 

@@ -32,6 +32,7 @@ import {
   togglePinned,
   toggleArchived,
   updateNoteText,
+  updateNoteTitle,
   buildAppointmentIcs,
 } from '../../../core/notes';
 import { ClipboardEntry } from '../../../core/clipboard.types';
@@ -42,6 +43,9 @@ import { TabBar } from '../../TabBar';
 import { ComposerSection } from '../../ComposerSection';
 import { SearchFilterBar } from '../../SearchFilterBar';
 import { NoteCard } from '../../NoteCard';
+import { SmartNoteGeneratorModal } from '../../SmartNoteGeneratorModal';
+import { NoteDetailModal } from '../../NoteDetailModal';
+import { Toast, useToast } from '../../Toast';
 
 type Palette = { bg: string; fg: string; accent: string; muted: string; card: string; border: string };
 type WorkspaceTab = 'notes' | 'templates' | 'clipboard';
@@ -176,6 +180,9 @@ export function NotesTab({ palette }: { palette: Palette }) {
   const [previewEntry, setPreviewEntry] = useState<ClipboardEntry | null>(null);
   const [previewNoteImageUri, setPreviewNoteImageUri] = useState<string | null>(null);
   const [shareNote, setShareNote] = useState<NoteItem | null>(null);
+  const [generatorVisible, setGeneratorVisible] = useState(false);
+  const [detailNote, setDetailNote] = useState<NoteItem | null>(null);
+  const { toast, show: showToast, hide: hideToast } = useToast();
   const [searchText, setSearchText] = useState('');
   const [searchCategory, setSearchCategory] = useState<'all' | string>('all');
   const [selectedClipboardIds, setSelectedClipboardIds] = useState<Set<string>>(new Set());
@@ -479,6 +486,7 @@ export function NotesTab({ palette }: { palette: Palette }) {
     const result = await addRichNoteUnique(draftText, activeCategory, draftImages, groupId);
     setNotes(result.notes);
     if (result.inserted) {
+      showToast('Note saved');
       setFilter('all');
       setDraftText('');
       setDraftImages([]);
@@ -742,12 +750,12 @@ export function NotesTab({ palette }: { palette: Palette }) {
   async function deleteSelectedNotes() {
     const count = selectedNoteIds.size;
     Alert.alert(
-      'Eliminar notas',
-      `¿Eliminar ${count} nota${count > 1 ? 's' : ''}? Esta acción no se puede deshacer.`,
+      'Delete notes',
+      `Delete ${count} note${count > 1 ? 's' : ''}? This cannot be undone.`,
       [
-        { text: 'Cancelar', style: 'cancel' },
+        { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Eliminar', style: 'destructive', onPress: async () => {
+          text: 'Delete', style: 'destructive', onPress: async () => {
             let current = notes;
             for (const id of selectedNoteIds) {
               current = await removeNote(id);
@@ -820,7 +828,7 @@ export function NotesTab({ palette }: { palette: Palette }) {
                 activeCategory={activeCategory}
                 onChangeGroup={setActiveGroupId}
                 onChangeText={setDraftText}
-                onGenerate={() => runSmartGenerateWithOcr().catch(() => undefined)}
+                onGenerate={() => setGeneratorVisible(true)}
                 onAddImage={() => addImageToDraft().catch(() => undefined)}
                 onPasteImage={() => pasteImageFromClipboardToDraft().catch(() => undefined)}
                 onSave={() => saveDraftAsNote().catch(() => undefined)}
@@ -941,6 +949,7 @@ export function NotesTab({ palette }: { palette: Palette }) {
                             onArchive={() => toggleArchived(note.id).then(setNotes)}
                             onDelete={() => removeNote(note.id).then(setNotes)}
                             onSetColor={(color) => setNoteColor(note.id, color).then(setNotes)}
+                            onDoubleTap={() => setDetailNote(note)}
                           />
                         </View>
                       );
@@ -1167,7 +1176,44 @@ export function NotesTab({ palette }: { palette: Palette }) {
           </Pressable>
         </Pressable>
       </Modal>
+
+      {/* ── Smart Note Generator ── */}
+      <SmartNoteGeneratorModal
+        visible={generatorVisible}
+        palette={uiPalette}
+        onClose={() => setGeneratorVisible(false)}
+        onSelect={async ({ text, category }) => {
+          const groupId = activeGroupId === 'personal' ? undefined : activeGroupId;
+          const result = await addRichNoteUnique(text, category, [], groupId);
+          setNotes(result.notes);
+          setFilter('all');
+          if (result.inserted) showToast('Note created');
+        }}
+      />
       </ScrollView>
+
+      {/* ── Note detail (double-tap) ── */}
+      <NoteDetailModal
+        note={detailNote}
+        visible={Boolean(detailNote)}
+        palette={uiPalette}
+        onClose={() => setDetailNote(null)}
+        onSave={async (id, title, text) => {
+          let next = notes;
+          if (text.trim()) next = await updateNoteText(id, text);
+          next = await updateNoteTitle(id, title);
+          setNotes(next);
+          showToast('Note updated');
+        }}
+        onTogglePinned={(id) => togglePinned(id).then((n) => { setNotes(n); setDetailNote((prev) => prev?.id === id ? n.find((x) => x.id === id) ?? null : prev); })}
+        onArchive={(id) => toggleArchived(id).then(setNotes)}
+        onDelete={(id) => removeNote(id).then(setNotes)}
+        onCopy={(text) => forceCopyToClipboard(text).catch(() => undefined)}
+        onShare={(id) => { const n = notes.find((x) => x.id === id); if (n) setShareNote(n); setDetailNote(null); }}
+      />
+
+      {/* ── Toast ── */}
+      <Toast toast={toast} onHide={hideToast} />
 
       {/* ── Barra flotante de selección múltiple ── */}
       {selectedNoteIds.size > 0 ? (
@@ -1185,7 +1231,7 @@ export function NotesTab({ palette }: { palette: Palette }) {
             <Ionicons name="close" size={18} color={palette.muted} />
           </Pressable>
           <Text style={{ flex: 1, color: palette.fg, fontWeight: '600', fontSize: 14 }}>
-            {selectedNoteIds.size} seleccionada{selectedNoteIds.size > 1 ? 's' : ''}
+            {selectedNoteIds.size} selected
           </Text>
           <Pressable
             onPress={() => {
@@ -1194,14 +1240,14 @@ export function NotesTab({ palette }: { palette: Palette }) {
             }}
             style={{ paddingHorizontal: 12, height: 36, borderRadius: 10, borderWidth: 1, borderColor: palette.border, alignItems: 'center', justifyContent: 'center' }}
           >
-            <Text style={{ color: palette.fg, fontSize: 13, fontWeight: '600' }}>Todas</Text>
+            <Text style={{ color: palette.fg, fontSize: 13, fontWeight: '600' }}>All</Text>
           </Pressable>
           <Pressable
             onPress={() => deleteSelectedNotes().catch(() => undefined)}
             style={{ paddingHorizontal: 16, height: 36, borderRadius: 10, backgroundColor: '#C0392B', flexDirection: 'row', alignItems: 'center', gap: 6 }}
           >
             <Ionicons name="trash-outline" size={16} color="#fff" />
-            <Text style={{ color: '#fff', fontSize: 13, fontWeight: '700' }}>Eliminar</Text>
+            <Text style={{ color: '#fff', fontSize: 13, fontWeight: '700' }}>Delete</Text>
           </Pressable>
         </View>
       ) : null}
