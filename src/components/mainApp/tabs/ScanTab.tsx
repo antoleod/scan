@@ -125,7 +125,7 @@ export function ScanTab({
 
   return (
     <ScrollView style={styles.root} contentContainerStyle={[styles.scrollContent, isDesktop ? styles.scrollContentDesktop : null]} showsVerticalScrollIndicator={false} bounces>
-      <ScanFeedbackBanner feedback={scanFeedback} palette={{ accent: C.accent }} />
+      <ScanFeedbackBanner feedback={scanFeedback} />
       <Animated.View style={[styles.toastTop, isDesktop ? styles.toastTopDesktop : null, toastStyle]}>
         <Text style={styles.toastTitle}>Scanning is taking longer than expected</Text>
         <Text style={styles.toastSubtitle}>Capture a photo to extract the code quickly.</Text>

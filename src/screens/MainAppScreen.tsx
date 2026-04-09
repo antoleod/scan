@@ -9,30 +9,25 @@ import {
   PanResponder,
   Pressable,
   Linking,
-  ScrollView,
   StatusBar,
   StyleSheet,
-  Switch,
   Text,
-  TextInput,
   useWindowDimensions,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { CameraView, scanFromURLAsync, useCameraPermissions } from 'expo-camera';
 import type { BarcodeType } from 'expo-camera';
-import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import * as Clipboard from 'expo-clipboard';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 
 import { AppSettings, BootStatus, PersistenceMode, ScanRecord, ScanState, TemplateRule } from '../types';
 import { defaultSettings, loadSettings, saveSettings } from '../core/settings';
 import { addHistoryUnique, clearHistory, loadHistory, markHistoryDeleted, saveHistory, historyKey, normalizeHistoryType, createHistoryId } from '../core/history';
-import { loadTemplates, saveTemplate, saveTemplates } from '../core/templates';
-import { addPendingCapture, clearPendingCaptures, loadPendingCaptures, removePendingCapture, updatePendingCapture, type PendingCaptureRecord } from '../core/captures';
+import { loadTemplates, saveTemplates } from '../core/templates';
+import { addPendingCapture, updatePendingCapture } from '../core/captures';
 import { diag } from '../core/diagnostics';
 import { lightThemes, themes, ThemeName } from '../theme/theme';
 import { SCAN_BARCODE_TYPES, type CodeType, normalizeCodeValue } from '../core/codeStrategy';
@@ -135,7 +130,6 @@ function MainApp() {
   const [settings, setSettings] = useState<AppSettings>(defaultSettings);
   const [history, setHistory] = useState<ScanRecord[]>([]);
   const [templates, setTemplates] = useState<TemplateRule[]>([]);
-  const [pendingCaptures, setPendingCaptures] = useState<PendingCaptureRecord[]>([]);
   const [query, setQuery] = useState('');
   const [filterType, setFilterType] = useState('ALL');
   const [dateFilter, setDateFilter] = useState<DateFilter>('ALL');
@@ -191,6 +185,7 @@ function MainApp() {
   const entryDraftRef = useRef<EntryDraftSnapshot | null>(null);
   const entryOpenLockRef = useRef(false);
   const deletedHistoryKeysRef = useRef<Set<string>>(new Set());
+  const serverHistoryRef = useRef<ScanRecord[]>([]);
 
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const isCompactLayout = width < 390 || height < 780;
@@ -270,8 +265,8 @@ function MainApp() {
       const timeoutMs = 6000;
       const timeout = new Promise<never>((_, reject) => setTimeout(() => reject(new Error('boot-timeout')), timeoutMs));
       try {
-        let [loadedSettings, loadedHistory, loadedTemplates, loadedCaptures] = await Promise.race([
-          Promise.all([loadSettings(), loadHistory(), loadTemplates(), loadPendingCaptures()]),
+        let [loadedSettings, loadedHistory, loadedTemplates] = await Promise.race([
+          Promise.all([loadSettings(), loadHistory(), loadTemplates()]),
           timeout,
         ]);
 
@@ -291,7 +286,6 @@ function MainApp() {
         setSettings(loadedSettings);
         setHistory(finalHistory);
         setTemplates(loadedTemplates || []);
-        setPendingCaptures(loadedCaptures || []);
         deletedHistoryKeysRef.current = await loadDeletedHistoryKeys();
 
         const rt = await Promise.race([initFirebaseRuntime(), timeout]);
@@ -474,16 +468,14 @@ function MainApp() {
       if (!picture?.uri) return;
 
       const expectedType = payload.startsWith('http://') || payload.startsWith('https://') ? 'QR' : 'BARCODE';
-      const { capture, items } = await addPendingCapture({
+      const { capture } = await addPendingCapture({
         uri: picture.uri,
         expectedType,
       });
-      setPendingCaptures(items);
       await updatePendingCapture(capture.id, {
         extractedText: payload,
         scanStatus: 'saved',
       });
-      setPendingCaptures(await loadPendingCaptures());
       showFeedback('success', 'Photo saved automatically');
     } catch (error) {
       await diag.warn('capture.auto.error', { message: String(error) });
@@ -736,18 +728,16 @@ function MainApp() {
       const payload = results.find((item) => String(item.data || '').trim())?.data;
       const expectedType = results[0]?.type === 'qr' ? 'QR' : results.length > 0 ? 'BARCODE' : 'unknown';
 
-      const { capture, items } = await addPendingCapture({
+      const { capture } = await addPendingCapture({
         uri: picture.uri,
         expectedType,
       });
-      setPendingCaptures(items);
 
       if (payload) {
         await updatePendingCapture(capture.id, {
           extractedText: String(payload),
           scanStatus: 'saved',
         });
-        setPendingCaptures(await loadPendingCaptures());
       }
 
       setScanState('saved');
@@ -764,44 +754,6 @@ function MainApp() {
     }
   }
 
-  async function processPendingCapture(item: PendingCaptureRecord) {
-    if (manualCaptureBusy) return;
-    setManualCaptureBusy(true);
-    setScanState('saving_photo');
-
-    try {
-      const results = await scanFromURLAsync(item.uri, [...IMAGE_SCAN_BARCODE_TYPES]);
-      const payload = results.find((entry) => String(entry.data || '').trim())?.data;
-      if (!payload) {
-        await updatePendingCapture(item.id, { scanStatus: 'error' });
-        setPendingCaptures(await loadPendingCaptures());
-        setScanState('error');
-        Alert.alert('No result', 'No code detected in the saved photo.');
-        return;
-      }
-
-      await processIncomingScan(payload, 'image');
-      await updatePendingCapture(item.id, {
-        scanStatus: 'saved',
-        extractedText: String(payload),
-      });
-      setPendingCaptures(await loadPendingCaptures());
-      setScanState('saved');
-      restartScannerSessionSoon(900);
-    } catch (error) {
-      await diag.warn('capture.process.error', { message: String(error), id: item.id });
-      setScanState('error');
-      Alert.alert('Error', `Could not process the saved photo: ${String(error)}`);
-    } finally {
-      setManualCaptureBusy(false);
-      restartScannerSessionSoon(1100);
-    }
-  }
-
-  async function deletePendingCapture(itemId: string) {
-    const next = await removePendingCapture(itemId);
-    setPendingCaptures(next);
-  }
   async function scanFromNfc() {
     const ready = nfcReady || (await ensureNfcReady());
     setNfcReady(ready);
@@ -934,29 +886,6 @@ function MainApp() {
     }
   }
 
-  async function copyLogs() {
-    const text = await diag.getText();
-    await Clipboard.setStringAsync(text || 'No logs');
-    Alert.alert('Logs', 'Copied to clipboard');
-  }
-
-  async function exportLogs() {
-    if (Platform.OS === 'web') {
-      const json = await diag.getJson();
-      const blob = new Blob([json], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `oryxen_logs_${Date.now()}.json`;
-      link.click();
-      return;
-    }
-
-    const path = `${FileSystem.cacheDirectory}oryxen_logs_${Date.now()}.json`;
-    await FileSystem.writeAsStringAsync(path, await diag.getJson());
-    await Sharing.shareAsync(path, { mimeType: 'application/json' });
-  }
-
   async function recheckFirebase() {
     try {
       const rt = await recheckFirebaseRuntime();
@@ -1030,15 +959,14 @@ function MainApp() {
     let cleanupFn: (() => void) | null = null;
 
     subscribeToScans((serverScans) => {
+      serverHistoryRef.current = serverScans;
       setHistory((current) => {
-        const filtered = serverScans.filter((s) => !deletedHistoryKeysRef.current.has(historyKey(s)));
-        const localKeys = new Set(current.map((x) => historyKey(x)));
-        const newFromServer = filtered.filter((s) => !localKeys.has(historyKey(s)));
-        if (!newFromServer.length) return current;
-        const merged = [
-          ...current.map((x) => (x.status === 'pending' ? { ...x, status: 'sent' as const } : x)),
-          ...newFromServer,
-        ];
+        const serverKeys = new Set(serverHistoryRef.current.map((item) => historyKey(item)));
+        const pendingLocal = current
+          .filter((item) => item.status === 'pending' && !deletedHistoryKeysRef.current.has(historyKey(item)) && !serverKeys.has(historyKey(item)))
+          .map((item) => ({ ...item, status: 'pending' as const }));
+        const merged = [...serverHistoryRef.current, ...pendingLocal]
+          .filter((item) => !item.deletedAt && !deletedHistoryKeysRef.current.has(historyKey(item)));
         if (realtimeSaveTimerRef.current) clearTimeout(realtimeSaveTimerRef.current);
         realtimeSaveTimerRef.current = setTimeout(() => {
           saveHistory(merged).catch(() => undefined);
@@ -1068,6 +996,7 @@ function MainApp() {
     await clearHistory();
     await saveHistory([]);
     deletedHistoryKeysRef.current = new Set();
+    serverHistoryRef.current = [];
     setHistory([]);
     setSelection(new Set());
     await diag.info('history.cleared');
@@ -1095,10 +1024,9 @@ function MainApp() {
     }
     await clearHistory();
     await saveHistory([]);
-    await clearPendingCaptures();
     deletedHistoryKeysRef.current = new Set();
+    serverHistoryRef.current = [];
     setHistory([]);
-    setPendingCaptures([]);
     setSelection(new Set());
     await diag.info('history.hard_delete');
     Alert.alert(
@@ -1264,11 +1192,6 @@ function MainApp() {
   function handleOfficeScanned(value: string) {
     setEntryOffice(value.trim());
     setOfficeScanVisible(false);
-  }
-
-  function openQrPreview(value: string) {
-    setQrData(value);
-    setQrModalVisible(true);
   }
 
   async function saveEntryRecord() {
@@ -1485,7 +1408,6 @@ function MainApp() {
               onFilterTypeChange={setFilterType}
               onDateFilterChange={handleDateFilterChange}
               onSortByChange={setHistorySort}
-              onOpenDatePicker={() => setDateModalVisible(true)}
               onToggleSelection={toggleSelection}
               onLongPressSelection={handleLongPress}
               onToggleUsed={toggleUsed}
@@ -1515,7 +1437,6 @@ function MainApp() {
               onHardDeleteTemplates={hardDeleteTemplatesNow}
               syncBusy={syncBusy}
               userEmail={user?.email || null}
-              userUidPrefix={user ? user.uid.substring(0, 8) : null}
               isGuest={isGuest}
               persistenceMode={persistenceMode}
               visibleBarcodeTypes={SCAN_BARCODE_TYPES}

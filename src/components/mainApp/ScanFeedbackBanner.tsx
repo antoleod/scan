@@ -9,11 +9,7 @@ type Feedback = {
   message: string;
 } | null;
 
-type Palette = {
-  accent: string;
-};
-
-export function ScanFeedbackBanner({ feedback, palette }: { feedback: Feedback; palette: Palette }) {
+export function ScanFeedbackBanner({ feedback }: { feedback: Feedback }) {
   if (!feedback) return null;
 
   return (

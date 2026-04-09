@@ -5,8 +5,6 @@ import {
   deleteNoteFromFirebase,
   deleteSharedGroupNote,
   deleteTemplateFromFirebase,
-  fetchNotesFromFirebase,
-  fetchSharedGroupNotesForCurrentUser,
   upsertNoteInFirebase,
   upsertTemplateInFirebase,
   upsertSharedGroupNote,
@@ -16,7 +14,6 @@ import { clearDeletedNoteKeys, loadDeletedNoteKeys, markDeletedNoteKey, noteStor
 
 const NOTES_KEY = '@barra_notes_v1';
 const TEMPLATES_KEY = '@barra_note_templates_v1';
-const NOTES_SEEDED_KEY = '@barra_notes_seeded_v1';
 const TEMPLATES_PURGED_KEY = '@barra_templates_purged_v1';
 
 export type NoteKind = 'text' | 'image';
@@ -431,8 +428,6 @@ export async function toggleArchived(id: string): Promise<NoteItem[]> {
 
 export async function clearNotes(): Promise<void> {
   await AsyncStorage.setItem(NOTES_KEY, JSON.stringify([]));
-  // Mark as initialized to avoid demo reseeding after user clears everything.
-  await AsyncStorage.setItem(NOTES_SEEDED_KEY, '1');
   await clearDeletedNoteKeys();
   try {
     await clearNotesInFirebase();
@@ -443,7 +438,6 @@ export async function clearNotes(): Promise<void> {
 
 export async function hardDeleteAllNotes(): Promise<void> {
   await AsyncStorage.setItem(NOTES_KEY, JSON.stringify([]));
-  await AsyncStorage.setItem(NOTES_SEEDED_KEY, '1');
   await clearDeletedNoteKeys();
   try {
     await clearNotesInFirebase();
@@ -528,7 +522,6 @@ export async function ensureWorkNotesAndEmailTemplates(): Promise<{
 }> {
   let notes = await loadNotes();
   let templates = await loadTemplates();
-  const seeded = (await AsyncStorage.getItem(NOTES_SEEDED_KEY)) === '1';
   const templatesPurged = (await AsyncStorage.getItem(TEMPLATES_PURGED_KEY)) === '1';
 
   // One-shot purge requested: remove all existing templates locally/cloud and do not auto-seed again.
@@ -540,46 +533,6 @@ export async function ensureWorkNotesAndEmailTemplates(): Promise<{
       await clearTemplatesInFirebase();
     } catch (error) {
       await diag.warn('templates.purge.remote.error', { message: String(error) });
-    }
-  }
-
-  const hasWorkNotes = notes.some((item) => item.category === 'work');
-  if (!seeded && !hasWorkNotes && notes.length === 0) {
-    const now = Date.now();
-    const examples: NoteItem[] = [
-      {
-        id: makeId('note'),
-        kind: 'text',
-        category: 'work',
-        text: 'Work Notes: User badge replaced. Old badge disabled in access control.',
-        pinned: true,
-        createdAt: now,
-        updatedAt: now,
-      },
-      {
-        id: makeId('note'),
-        kind: 'text',
-        category: 'work',
-        text: 'Work Notes: Laptop PI checked, BitLocker active, ticket moved to done.',
-        pinned: false,
-        createdAt: now + 1,
-        updatedAt: now + 1,
-      },
-      {
-        id: makeId('note'),
-        kind: 'text',
-        category: 'work',
-        text: 'Work Notes: Pending approval from manager for software install.',
-        pinned: false,
-        createdAt: now + 2,
-        updatedAt: now + 2,
-      },
-    ];
-    notes = normalizeNotes([...examples, ...notes]);
-    await saveNotes(notes);
-    await AsyncStorage.setItem(NOTES_SEEDED_KEY, '1');
-    for (const note of examples) {
-      await pushNoteIfAuthenticated(note);
     }
   }
 
@@ -604,24 +557,6 @@ export async function hardDeleteAllTemplates(): Promise<void> {
     await clearTemplatesInFirebase();
   } catch {
     // local cache already cleared
-  }
-}
-
-export async function refreshNotesFromCloudSilently(): Promise<{ notes: NoteItem[]; templates: NoteTemplate[] } | null> {
-  try {
-    const result = await fetchNotesFromFirebase();
-    const sharedNotes = await fetchSharedGroupNotesForCurrentUser();
-    const deletedKeys = await loadDeletedNoteKeys();
-    const notes = normalizeNotes([...result.serverNotes, ...sharedNotes].filter((item) => {
-      const key = noteStorageKey(item.id, item.groupId ? 'group' : 'personal', item.groupId);
-      return !item.deletedAt && !deletedKeys.has(key);
-    })).slice(0, 3000);
-    const templates = result.serverTemplates.slice(0, 300);
-    await AsyncStorage.setItem(NOTES_KEY, JSON.stringify(notes));
-    await AsyncStorage.setItem(TEMPLATES_KEY, JSON.stringify(templates));
-    return { notes, templates };
-  } catch {
-    return null;
   }
 }
 

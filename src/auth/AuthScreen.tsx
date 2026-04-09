@@ -81,21 +81,6 @@ function AuthBackgroundEffects() {
   );
 }
 
-function FirebaseGuardCard() {
-  const { firebase } = useAuth();
-
-  if (firebase.enabled) {
-    return null;
-  }
-
-  return (
-    <View style={[styles.guardCard, styles.guardError]}>
-      <Text style={styles.guardTitle}>Service temporarily unavailable</Text>
-      <Text style={styles.guardText}>Configuration in progress. Please try again shortly.</Text>
-    </View>
-  );
-}
-
 export default function AuthScreen() {
   const { enterAsGuest } = useAuth();
   const [view, setView] = useState<AuthView>('login');

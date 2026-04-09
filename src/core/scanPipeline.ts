@@ -4,7 +4,7 @@ import type { BarcodeType } from 'expo-camera';
 import { classify, Classified } from './classify';
 import { extractFields } from './extract';
 import { addHistoryUnique, createHistoryId } from './history';
-import { normalizeCodeValue, detectCodeType, type CodeType, type BarcodeFormat } from './codeStrategy';
+import { normalizeCodeValue, detectCodeType } from './codeStrategy';
 import { piLogic } from './settings';
 
 export const IMAGE_SCAN_BARCODE_TYPES: BarcodeType[] = ['qr', 'code128', 'code39', 'ean13', 'ean8'];
