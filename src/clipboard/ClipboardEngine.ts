@@ -215,20 +215,17 @@ async function readClipboardTextFromClick(): Promise<string> {
 class ClipboardEngine {
   private entries: ClipEntry[] = [];
   private listeners = new Set<Listener>();
-  private started = false;
   private subscriberCount = 0;
   private permState: PermState = 'unsupported';
   private pollTimer: ReturnType<typeof setInterval> | null = null;
   private pollInterval = POLL_BASE;
   private noChangeCount = 0;
-  private pauseReason: 'hidden' | 'unsupported' | 'denied' | null = null;
   private loadPromise: Promise<void> | null = null;
 
   async ensureReady() {
     if (!this.loadPromise) {
       this.loadPromise = this.loadEntries().then(async () => {
         this.permState = await getClipboardPermission();
-        this.started = true;
         this.syncListeners();
         this.syncPolling();
       });
@@ -375,8 +372,6 @@ class ClipboardEngine {
       window.removeEventListener('focus', this.onFocusRefresh);
     }
     this.revokePolling();
-    this.started = false;
-    this.pauseReason = null;
   }
 
   private revokePolling() {
@@ -513,17 +508,14 @@ class ClipboardEngine {
       return;
     }
     if (!navigator.clipboard?.readText || !browserIsChromium()) {
-      this.pauseReason = 'unsupported';
       this.revokePolling();
       return;
     }
     if (document.visibilityState !== 'visible') {
-      this.pauseReason = 'hidden';
       this.revokePolling();
       return;
     }
 
-    this.pauseReason = null;
     this.revokePolling();
     this.pollTimer = setInterval(() => {
       void this.pollClipboard();
@@ -550,7 +542,6 @@ class ClipboardEngine {
         }
       }
     } catch {
-      this.pauseReason = 'denied';
       this.revokePolling();
     }
   }

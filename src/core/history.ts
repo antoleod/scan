@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { ScanRecord } from '../types';
+import { clearDeletedHistoryKeys, loadDeletedHistoryKeys, markDeletedHistoryKey } from './historyDeletions';
 
 const KEY = 'barra_history';
 let historyIdCounter = 0;
@@ -29,9 +30,13 @@ export async function loadHistory(): Promise<ScanRecord[]> {
   const raw = await AsyncStorage.getItem(KEY);
   if (!raw) return [];
   try {
+    const deletedKeys = await loadDeletedHistoryKeys();
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
-    const sanitized = ensureUniqueHistoryIds(parsed as ScanRecord[]);
+    const sanitized = ensureUniqueHistoryIds(parsed as ScanRecord[]).filter((item) => {
+      if (item.deletedAt) return false;
+      return !deletedKeys.has(historyKey(item));
+    });
     if (sanitized.length !== parsed.length || sanitized.some((item, index) => item.id !== (parsed[index] as ScanRecord)?.id)) {
       await AsyncStorage.setItem(KEY, JSON.stringify(sanitized));
     }
@@ -83,4 +88,9 @@ export async function addHistory(item: ScanRecord): Promise<ScanRecord[]> {
 
 export async function clearHistory(): Promise<void> {
   await AsyncStorage.removeItem(KEY);
+  await clearDeletedHistoryKeys();
+}
+
+export async function markHistoryDeleted(item: Pick<ScanRecord, 'codeNormalized' | 'type' | 'codeValue'>): Promise<Set<string>> {
+  return markDeletedHistoryKey(historyKey(item));
 }

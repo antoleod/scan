@@ -63,6 +63,7 @@ export interface ScanRecord {
   structuredFields: Record<string, string>;
   createdAt?: string;
   updatedAt?: string;
+  deletedAt?: number;
   date: string;
   status: 'pending' | 'sent';
   used: boolean;

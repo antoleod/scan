@@ -28,8 +28,6 @@ import {
   ensureWorkNotesAndEmailTemplates,
   removeNote,
   removeTemplate,
-  saveNotes as saveLocalNotes,
-  saveTemplates as saveLocalTemplates,
   setNoteColor,
   togglePinned,
   toggleArchived,
@@ -38,7 +36,7 @@ import {
   buildAppointmentIcs,
 } from '../../../core/notes';
 import { ClipboardEntry } from '../../../core/clipboard.types';
-import { addClipboardEntryUnique, addClipboardImageUnique, loadClipboardEntries, removeClipboardEntriesByDay, removeClipboardEntriesByIds, updateClipboardEntryCategory } from '../../../core/clipboard';
+import { loadDeletedNoteKeys, markDeletedNoteKey, noteStorageKey } from '../../../core/noteDeletions';
 import { ClipboardScreen } from '../../../screens/ClipboardScreen';
 import { mainAppStyles } from '../styles';
 import { TabBar } from '../../TabBar';
@@ -53,17 +51,6 @@ type Palette = { bg: string; fg: string; accent: string; muted: string; card: st
 type WorkspaceTab = 'notes' | 'templates' | 'clipboard';
 type NoteFilter = 'all' | 'work' | 'pinned' | 'archived';
 
-type SmartResult = {
-  ticketNumber: string;
-  userName: string;
-  location: string;
-  configurationItem: string;
-  followUp: string;
-  summary: string;
-  timeWorked: string;
-  rawText?: string;
-};
-
 const DRAFT_KEY = '@oryxen_notes_draft_v2';
 
 function detectAutoCategory(text: string): NoteCategory {
@@ -71,33 +58,6 @@ function detectAutoCategory(text: string): NoteCategory {
   if (/\b(RITM\d+|INC\d+|REQ\d+|SCTASK\d+)\b/.test(value)) return 'work';
   if (/\b(USER|WORK|REQUEST|OFFICE|CALL|FOLLOW)\b/.test(value)) return 'work';
   return 'general';
-}
-
-function extractField(text: string, pattern: RegExp): string {
-  const match = text.match(pattern);
-  return (match?.[1] || '').trim();
-}
-
-function analyzeSmartContent(text: string, imageRefs: string[]): SmartResult {
-  const merged = `${text}\n${imageRefs.join('\n')}`;
-  const ticketNumber = extractField(merged, /\b(RITM\d+|INC\d+|REQ\d+|SCTASK\d+)\b/i) || extractField(merged, /request\s*item\s*[:\-]?\s*([A-Z0-9]+)/i);
-  const userName = extractField(merged, /(?:requested\s*for|user|name)\s*[:\-]?\s*([A-Za-z][A-Za-z .'-]{2,})/i);
-  const location = extractField(merged, /(?:location|site|office)\s*[:\-]?\s*([^\n]+)/i);
-  const configurationItem = extractField(merged, /(?:configuration\s*item|ci|asset)\s*[:\-]?\s*([^\n]+)/i);
-  const followUp = extractField(merged, /(?:follow\s*up|next\s*action)\s*(?:\(.*?\))?\s*[:\-]?\s*([^\n]+)/i) || extractField(merged, /\b(\d{2}\/\d{2}\/\d{4}\s+\d{2}:\d{2}(?::\d{2})?)\b/i);
-  const timeWorked = extractField(merged, /time\s*worked\s*[:\-]?\s*([^\n]+)/i);
-
-  const summary = [
-    `Ticket: ${ticketNumber || '-'}`,
-    `User: ${userName || '-'}`,
-    `Location: ${location || '-'}`,
-    `Configuration item: ${configurationItem || '-'}`,
-    `Follow-up: ${followUp || '-'}`,
-    `Time worked: ${timeWorked || '-'}`,
-    imageRefs.length ? `Images: ${imageRefs.length}` : '',
-  ].filter(Boolean).join('\n');
-
-  return { ticketNumber, userName, location, configurationItem, followUp, summary, timeWorked };
 }
 
 type DiffLine = { type: 'same' | 'add' | 'remove'; line: string };
@@ -126,14 +86,26 @@ function chunk<T>(items: T[], columns: number): T[][] {
   return rows;
 }
 
-function mergeNotesByNewest(local: NoteItem[], incoming: NoteItem[]): NoteItem[] {
+function noteKey(note: Pick<NoteItem, 'id' | 'groupId'>): string {
+  return noteStorageKey(note.id, note.groupId ? 'group' : 'personal', note.groupId);
+}
+
+function sortNotes(items: NoteItem[]): NoteItem[] {
+  return [...items].sort((a, b) => (a.pinned === b.pinned ? b.updatedAt - a.updatedAt : a.pinned ? -1 : 1));
+}
+
+function mergeServerNotes(serverNotes: NoteItem[], sharedNotes: NoteItem[], deletedKeys: Set<string>): NoteItem[] {
   const map = new Map<string, NoteItem>();
-  for (const item of local) map.set(item.id, item);
-  for (const item of incoming) {
-    const prev = map.get(item.id);
-    if (!prev || item.updatedAt >= prev.updatedAt) map.set(item.id, item);
+  for (const item of [...serverNotes, ...sharedNotes]) {
+    const key = noteKey(item);
+    if (item.deletedAt || deletedKeys.has(key)) {
+      map.delete(key);
+      continue;
+    }
+    const prev = map.get(key);
+    if (!prev || item.updatedAt >= prev.updatedAt) map.set(key, item);
   }
-  return Array.from(map.values()).sort((a, b) => (a.pinned === b.pinned ? b.updatedAt - a.updatedAt : a.pinned ? -1 : 1));
+  return sortNotes(Array.from(map.values()));
 }
 
 function mergeTemplatesByNewest(local: NoteTemplate[], incoming: NoteTemplate[]): NoteTemplate[] {
@@ -146,38 +118,15 @@ function mergeTemplatesByNewest(local: NoteTemplate[], incoming: NoteTemplate[])
   return Array.from(map.values()).sort((a, b) => b.updatedAt - a.updatedAt);
 }
 
-function parseFollowUpDate(value: string): Date | null {
-  const text = String(value || '');
-  const m = text.match(/\b(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2})(?::(\d{2}))?\b/);
-  if (!m) return null;
-  const day = Number(m[1]);
-  const month = Number(m[2]) - 1;
-  const year = Number(m[3]);
-  const hour = Number(m[4]);
-  const minute = Number(m[5]);
-  const second = Number(m[6] || '0');
-  const date = new Date(year, month, day, hour, minute, second, 0);
-  return Number.isNaN(date.getTime()) ? null : date;
-}
-
 export function NotesTab({ palette }: { palette: Palette }) {
   const { user } = useAuth();
   const { width } = useWindowDimensions();
   const isDesktop = width >= 1024;
   const desktopColumns = width >= 1600 ? 3 : width >= 1200 ? 2 : 1;
-  const isWeb = Platform.OS === 'web';
-  const browserInfo = useMemo(() => {
-    if (!isWeb || typeof navigator === 'undefined') return { isFirefox: false, isSafari: false };
-    const ua = String(navigator.userAgent || '').toLowerCase();
-    const isFirefox = ua.includes('firefox');
-    const isSafari = ua.includes('safari') && !ua.includes('chrome') && !ua.includes('chromium') && !ua.includes('edg');
-    return { isFirefox, isSafari };
-  }, [isWeb]);
 
   const [workspaceTab, setWorkspaceTab] = useState<WorkspaceTab>('notes');
   const [notes, setNotes] = useState<NoteItem[]>([]);
   const [templates, setTemplates] = useState<NoteTemplate[]>([]);
-  const [clipboardItems, setClipboardItems] = useState<ClipboardEntry[]>([]);
 
   const [draftText, setDraftText] = useState('');
   const [draftImages, setDraftImages] = useState<string[]>([]);
@@ -186,8 +135,6 @@ export function NotesTab({ palette }: { palette: Palette }) {
   const [expandedNoteId, setExpandedNoteId] = useState<string | null>(null);
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [editingText, setEditingText] = useState('');
-  const [smartResult, setSmartResult] = useState<SmartResult | null>(null);
-  const [ocrBusy, setOcrBusy] = useState(false);
 
   const [templateName, setTemplateName] = useState('');
   const [templateTo, setTemplateTo] = useState('');
@@ -195,7 +142,6 @@ export function NotesTab({ palette }: { palette: Palette }) {
   const [templateBody, setTemplateBody] = useState('');
   const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
   const [templateSearch, setTemplateSearch] = useState('');
-  const [clipboardAvailable, setClipboardAvailable] = useState(true);
   const [groups, setGroups] = useState<SharedNoteGroup[]>([]);
   const [activeGroupId, setActiveGroupId] = useState<string>('personal');
   const [previewEntry, setPreviewEntry] = useState<ClipboardEntry | null>(null);
@@ -207,10 +153,6 @@ export function NotesTab({ palette }: { palette: Palette }) {
   const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
   const { toast, show: showToast, hide: hideToast } = useToast();
   const [searchText, setSearchText] = useState('');
-  const [searchCategory, setSearchCategory] = useState<'all' | string>('all');
-  const [selectedClipboardIds, setSelectedClipboardIds] = useState<Set<string>>(new Set());
-  const [lastNoteTap, setLastNoteTap] = useState<{ id: string; ts: number } | null>(null);
-  const [lastTap, setLastTap] = useState<{ id: string; ts: number } | null>(null);
   const [selectedNoteIds, setSelectedNoteIds] = useState<Set<string>>(new Set());
   const [dateFilter, setDateFilter] = useState<string | null>(null);
   const draftInputRef = useRef<React.ElementRef<typeof TextInput> | null>(null);
@@ -219,30 +161,19 @@ export function NotesTab({ palette }: { palette: Palette }) {
   // Ref to avoid auto-pushing notes back to Firebase when they just arrived from the server.
   const serverUpdateRef = useRef(false);
   const notesSyncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const deletedNoteIdsRef = useRef<Set<string>>(new Set());
+  const deletedNoteKeysRef = useRef<Set<string>>(new Set());
+  const serverNotesRef = useRef<NoteItem[]>([]);
+  const sharedNotesRef = useRef<NoteItem[]>([]);
 
   const autoCategory = useMemo(() => detectAutoCategory(draftText), [draftText]);
   const activeCategory = manualCategory || autoCategory;
 
   async function handleRemoveNote(id: string): Promise<NoteItem[]> {
-    deletedNoteIdsRef.current.add(id);
+    const existing = notes.find((item) => item.id === id);
+    const key = noteKey(existing ?? { id, groupId: undefined });
+    deletedNoteKeysRef.current.add(key);
+    await markDeletedNoteKey(key);
     return removeNote(id);
-  }
-
-  async function readClipboardTextBestEffort(): Promise<string> {
-    if (Platform.OS === 'web' && typeof navigator !== 'undefined' && navigator.clipboard?.readText) {
-      try {
-        const text = await navigator.clipboard.readText();
-        return String(text || '');
-      } catch {
-        // continue with expo fallback
-      }
-    }
-    try {
-      return String(await Clipboard.getStringAsync() || '');
-    } catch {
-      return '';
-    }
   }
 
   useEffect(() => {
@@ -250,25 +181,23 @@ export function NotesTab({ palette }: { palette: Palette }) {
       setNotes(n);
       setTemplates(t);
     }).catch(() => undefined);
-    loadClipboardEntries().then(setClipboardItems).catch(() => undefined);
+    loadDeletedNoteKeys().then((keys) => {
+      deletedNoteKeysRef.current = new Set([...deletedNoteKeysRef.current, ...keys]);
+    }).catch(() => undefined);
   }, []);
 
   // Real-time cross-device sync via Firestore onSnapshot.
   useEffect(() => {
     if (!user) return;
     let unsub: (() => void) | null = null;
-    subscribeToNotes(({ notes: serverNotes, templates: serverTemplates }) => {
+  subscribeToNotes(({ notes: serverNotes, templates: serverTemplates }) => {
       serverUpdateRef.current = true;
-      setNotes((current) => {
-        const filteredNotes = serverNotes.filter((n) => !deletedNoteIdsRef.current.has(n.id));
-        const merged = mergeNotesByNewest(current, filteredNotes);
-        saveLocalNotes(merged).catch(() => undefined);
-        return merged;
+      serverNotesRef.current = serverNotes;
+      setNotes(() => {
+        return mergeServerNotes(serverNotesRef.current, sharedNotesRef.current, deletedNoteKeysRef.current);
       });
       setTemplates((current) => {
-        const merged = mergeTemplatesByNewest(current, serverTemplates);
-        saveLocalTemplates(merged).catch(() => undefined);
-        return merged;
+        return mergeTemplatesByNewest(current, serverTemplates);
       });
     }).then((u) => { unsub = u; }).catch(() => undefined);
     return () => { unsub?.(); };
@@ -298,7 +227,10 @@ export function NotesTab({ palette }: { palette: Palette }) {
     subscribeToSharedGroups(setGroups).then((u) => { groupsUnsub = u; }).catch(() => undefined);
     subscribeToSharedGroupNotes((sharedNotes) => {
       serverUpdateRef.current = true;
-      setNotes((current) => mergeNotesByNewest(current, sharedNotes.filter((n) => !deletedNoteIdsRef.current.has(n.id))));
+      sharedNotesRef.current = sharedNotes;
+      setNotes(() => {
+        return mergeServerNotes(serverNotesRef.current, sharedNotesRef.current, deletedNoteKeysRef.current);
+      });
     }).then((u) => { notesUnsub = u; }).catch(() => undefined);
     return () => { groupsUnsub?.(); notesUnsub?.(); };
   }, [user?.uid]);
@@ -317,141 +249,9 @@ export function NotesTab({ palette }: { palette: Palette }) {
     AsyncStorage.setItem(DRAFT_KEY, JSON.stringify({ text: draftText, images: draftImages, category: manualCategory, updatedAt: Date.now() })).catch(() => undefined);
   }, [draftText, draftImages, manualCategory, workspaceTab]);
 
-  useEffect(() => {
-    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
-    const onPaste = (event: ClipboardEvent) => {
-      const data = event.clipboardData;
-      if (!data) return;
-
-      const text = data.getData('text/plain') || data.getData('text');
-      if (text && text.trim()) {
-        addClipboardEntryUnique(text.trim()).then((result) => {
-          if (result.inserted) setClipboardItems(result.entries);
-        }).catch(() => undefined);
-      }
-
-      const items = Array.from(data.items || []);
-      const imageItem = items.find((item) => item.type.startsWith('image/'));
-      if (!imageItem) return;
-
-      const file = imageItem.getAsFile();
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = () => {
-        const dataUri = String(reader.result || '');
-        if (!dataUri.startsWith('data:image/')) return;
-        addClipboardImageUnique(dataUri).then((result) => {
-          if (result.inserted) setClipboardItems(result.entries);
-        }).catch(() => undefined);
-        setDraftImages((current) => Array.from(new Set([dataUri, ...current])).slice(0, 6));
-      };
-      reader.readAsDataURL(file);
-    };
-
-    const onCopyOrCut = () => {
-      setTimeout(() => {
-        readClipboardTextBestEffort().then((text) => {
-          const value = String(text || '').trim();
-          if (!value) return;
-          addClipboardEntryUnique(value).then((result) => {
-            if (result.inserted) setClipboardItems(result.entries);
-          }).catch(() => undefined);
-        }).catch(() => undefined);
-      }, 40);
-    };
-
-    const onFocus = () => {
-      readClipboardTextBestEffort().then((text) => {
-        const value = String(text || '').trim();
-        if (!value) return;
-        addClipboardEntryUnique(value).then((result) => {
-          if (result.inserted) setClipboardItems(result.entries);
-        }).catch(() => undefined);
-      }).catch(() => undefined);
-    };
-
-    window.addEventListener('paste', onPaste);
-    window.addEventListener('copy', onCopyOrCut);
-    window.addEventListener('cut', onCopyOrCut);
-    window.addEventListener('focus', onFocus);
-    document.addEventListener('visibilitychange', onFocus);
-    return () => {
-      window.removeEventListener('paste', onPaste);
-      window.removeEventListener('copy', onCopyOrCut);
-      window.removeEventListener('cut', onCopyOrCut);
-      window.removeEventListener('focus', onFocus);
-      document.removeEventListener('visibilitychange', onFocus);
-    };
-  }, []);
-
-  useEffect(() => {
-    const allowPolling = !browserInfo.isFirefox && !browserInfo.isSafari;
-    if (!allowPolling) return;
-    if (!clipboardAvailable) return;
-    let mounted = true;
-    let lastSeen = '';
-    let lastImageSig = '';
-
-    const tick = async () => {
-      try {
-        const text = await readClipboardTextBestEffort();
-        const value = String(text || '').trim();
-        if (!mounted) return;
-        if (value && value !== lastSeen) {
-          lastSeen = value;
-          const result = await addClipboardEntryUnique(value);
-          if (result.inserted) setClipboardItems(result.entries);
-        }
-
-        const getImageAsync = (Clipboard as unknown as { getImageAsync?: () => Promise<{ data: string } | null> }).getImageAsync;
-        if (getImageAsync) {
-          const image = await getImageAsync();
-          if (image?.data) {
-            const signature = image.data.slice(0, 64);
-            if (signature && signature !== lastImageSig) {
-              lastImageSig = signature;
-              const dataUri = `data:image/png;base64,${image.data}`;
-              const imageResult = await addClipboardImageUnique(dataUri);
-              if (imageResult.inserted) setClipboardItems(imageResult.entries);
-            }
-          }
-        }
-      } catch {
-        // Keep retrying; web clipboard can temporarily reject while tab focus changes.
-      }
-    };
-
-    const timer = setInterval(() => { tick().catch(() => undefined); }, 1200);
-    tick().catch(() => undefined);
-
-    return () => {
-      mounted = false;
-      clearInterval(timer);
-    };
-  }, [clipboardAvailable, browserInfo.isFirefox, browserInfo.isSafari]);
-
-  async function captureClipboardNow() {
-    const text = (await readClipboardTextBestEffort()).trim();
-    if (text) {
-      const result = await addClipboardEntryUnique(text);
-      if (result.inserted) setClipboardItems(result.entries);
-    }
-    const getImageAsync = (Clipboard as unknown as { getImageAsync?: () => Promise<{ data: string } | null> }).getImageAsync;
-    if (!getImageAsync) return;
-    const image = await getImageAsync();
-    if (!image?.data) return;
-    const dataUri = `data:image/png;base64,${image.data}`;
-    const result = await addClipboardImageUnique(dataUri);
-    if (result.inserted) setClipboardItems(result.entries);
-  }
-
-  const noteCategories = useMemo(() => Array.from(new Set(notes.map((n) => n.category))), [notes]);
-  const clipboardCategories = useMemo(() => Array.from(new Set(clipboardItems.map((n) => n.category))), [clipboardItems]);
-
   const filteredNotes = useMemo(() => {
     const q = searchText.trim().toLowerCase();
     let next = q ? notes.filter((n) => `${n.text} ${(n.attachments || []).join(' ')} ${n.category}`.toLowerCase().includes(q)) : notes;
-    if (searchCategory !== 'all') next = next.filter((n) => n.category === searchCategory);
     if (activeGroupId === 'personal') {
       next = next.filter((n) => !n.groupId);
     } else {
@@ -468,7 +268,7 @@ export function NotesTab({ palette }: { palette: Palette }) {
       });
     }
     return next;
-  }, [notes, searchText, searchCategory, filter, activeGroupId, dateFilter]);
+  }, [notes, searchText, filter, activeGroupId, dateFilter]);
 
   const filteredTemplates = useMemo(() => {
     const q = templateSearch.trim().toLowerCase();
@@ -476,24 +276,7 @@ export function NotesTab({ palette }: { palette: Palette }) {
     return templates.filter((t) => `${t.name} ${t.to || ''} ${t.subject} ${t.body}`.toLowerCase().includes(q));
   }, [templates, templateSearch]);
 
-  const filteredClipboard = useMemo(() => {
-    const q = searchText.trim().toLowerCase();
-    let next = q ? clipboardItems.filter((n) => `${n.content} ${n.category}`.toLowerCase().includes(q)) : clipboardItems;
-    if (searchCategory !== 'all') next = next.filter((n) => n.category === searchCategory);
-    return next;
-  }, [clipboardItems, searchText, searchCategory]);
-
   const noteRows = useMemo(() => chunk(filteredNotes, isDesktop ? desktopColumns : 1), [filteredNotes, isDesktop, desktopColumns]);
-  const groupedClipboard = useMemo(() => {
-    const map = new Map<string, ClipboardEntry[]>();
-    for (const entry of filteredClipboard) {
-      const key = new Date(entry.capturedAt).toISOString().slice(0, 10);
-      const list = map.get(key) || [];
-      list.push(entry);
-      map.set(key, list);
-    }
-    return Array.from(map.entries()).sort((a, b) => (a[0] < b[0] ? 1 : -1));
-  }, [filteredClipboard]);
 
   async function addImageToDraft() {
     const picked = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.9, base64: false });
@@ -535,32 +318,7 @@ export function NotesTab({ palette }: { palette: Palette }) {
       setDraftText('');
       setDraftImages([]);
       setManualCategory(null);
-      setSmartResult(null);
       await AsyncStorage.removeItem(DRAFT_KEY);
-    }
-  }
-
-  function runSmartGenerate() {
-    if (!draftText.trim() && draftImages.length === 0) return;
-    setSmartResult(analyzeSmartContent(draftText, draftImages));
-  }
-
-  async function runSmartGenerateWithOcr() {
-    if (!draftText.trim() && draftImages.length === 0) return;
-    setOcrBusy(true);
-    try {
-      let ocrText = '';
-      const firstImage = draftImages[0];
-      const maybeTesseract = (globalThis as unknown as { Tesseract?: { recognize: (img: string, lang: string) => Promise<{ data?: { text?: string } }> } }).Tesseract;
-      if (firstImage && maybeTesseract?.recognize) {
-        const result = await maybeTesseract.recognize(firstImage, 'eng');
-        ocrText = String(result?.data?.text || '').trim();
-      }
-      const merged = [draftText.trim(), ocrText].filter(Boolean).join('\n');
-      const parsed = analyzeSmartContent(merged, draftImages);
-      setSmartResult({ ...parsed, rawText: ocrText || undefined });
-    } finally {
-      setOcrBusy(false);
     }
   }
 
@@ -571,16 +329,6 @@ export function NotesTab({ palette }: { palette: Palette }) {
       return;
     }
     setDraftText((current) => current ? `${current}\n${entry.content}` : entry.content);
-  }
-
-  function handleClipboardCardPress(entry: ClipboardEntry) {
-    const now = Date.now();
-    if (lastTap && lastTap.id === entry.id && now - lastTap.ts < 320) {
-      setPreviewEntry(entry);
-      setLastTap(null);
-      return;
-    }
-    setLastTap({ id: entry.id, ts: now });
   }
 
   async function createNoteFromPreview() {
@@ -635,32 +383,6 @@ export function NotesTab({ palette }: { palette: Palette }) {
     setTemplateTo('');
     setTemplateSubject(category === 'work' ? 'Work update' : 'General note');
     setTemplateBody(text);
-  }
-
-  async function createOutlookEventFromContent(raw: string) {
-    const dt = parseFollowUpDate(raw);
-    if (!dt) return;
-
-    const ticketMatch = raw.match(/\b(RITM\d+|INC\d+|REQ\d+|SCTASK\d+)\b/i);
-    const title = ticketMatch ? `Follow up ${ticketMatch[1].toUpperCase()}` : 'Follow up';
-    const ics = buildAppointmentIcs(title, raw, '', dt, 30);
-
-    if (Platform.OS === 'web' && typeof window !== 'undefined') {
-      const blob = new Blob([ics], { type: 'text/calendar;charset=utf-8' });
-      const url = URL.createObjectURL(blob);
-      const anchor = document.createElement('a');
-      anchor.href = url;
-      anchor.download = `${title.replace(/\s+/g, '_')}.ics`;
-      anchor.click();
-      URL.revokeObjectURL(url);
-      return;
-    }
-
-    const path = `${FileSystem.cacheDirectory}followup_${Date.now()}.ics`;
-    await FileSystem.writeAsStringAsync(path, ics, { encoding: FileSystem.EncodingType.UTF8 });
-    if (await Sharing.isAvailableAsync()) {
-      await Sharing.shareAsync(path, { mimeType: 'text/calendar' });
-    }
   }
 
   async function createQuickReminderFromNote(note: NoteItem) {
@@ -719,16 +441,6 @@ export function NotesTab({ palette }: { palette: Palette }) {
     }
   }
 
-  async function importScreenshotToClipboard() {
-    const picked = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.9, base64: true });
-    if (picked.canceled || !picked.assets?.length) return;
-    const asset = picked.assets[0];
-    if (!asset.base64) return;
-    const dataUri = `data:image/png;base64,${asset.base64}`;
-    const result = await addClipboardImageUnique(dataUri);
-    if (result.inserted) setClipboardItems(result.entries);
-  }
-
   async function forceCopyToClipboard(text: string) {
     const value = String(text || '');
     if (!value) return;
@@ -764,28 +476,6 @@ export function NotesTab({ palette }: { palette: Palette }) {
         // final fallback already attempted
       }
     }
-  }
-
-  function toggleClipboardSelection(id: string) {
-    setSelectedClipboardIds((current) => {
-      const next = new Set(current);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }
-
-  async function deleteSelectedClipboard() {
-    if (!selectedClipboardIds.size) return;
-    const next = await removeClipboardEntriesByIds(Array.from(selectedClipboardIds));
-    setClipboardItems(next);
-    setSelectedClipboardIds(new Set());
-  }
-
-  async function deleteClipboardDay(day: string) {
-    const next = await removeClipboardEntriesByDay(day);
-    setClipboardItems(next);
-    setSelectedClipboardIds(new Set());
   }
 
   function toggleNoteSelection(id: string) {
@@ -829,10 +519,6 @@ export function NotesTab({ palette }: { palette: Palette }) {
   const templatesEmptyText = templates.length === 0
     ? 'Save your first template to reuse common messages.'
     : 'Refine your search to find templates.';
-  const clipboardEmptyTitle = clipboardItems.length === 0 ? 'Capture your clipboard' : 'No results';
-  const clipboardEmptyText = clipboardItems.length === 0
-    ? 'Use the capture button or paste text from any app.'
-    : 'Clear the search to see the full history again.';
 
   const uiPalette = {
     bg: palette.bg,
@@ -889,26 +575,8 @@ export function NotesTab({ palette }: { palette: Palette }) {
                 onPasteImage={() => pasteImageFromClipboardToDraft().catch(() => undefined)}
                 onSave={() => saveDraftAsNote().catch(() => undefined)}
                 onSetCategory={setManualCategory}
-                generating={ocrBusy}
+                generating={false}
               />
-
-              {smartResult ? (
-                <View style={{ width: '100%', borderWidth: 1, borderColor: palette.border, borderRadius: 12, backgroundColor: uiPalette.surface, padding: 14, gap: 10, alignSelf: 'stretch' }}>
-                  <Text style={{ color: palette.fg, fontWeight: '800', fontSize: 14 }}>Suggested structure</Text>
-                  <Text style={{ color: uiPalette.textBody, fontSize: 12, lineHeight: 18 }}>{smartResult.summary}</Text>
-                  <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
-                    <Pressable style={[styles.iconOnlyAction, { borderColor: palette.border }]} onPress={() => saveDraftAsNote().catch(() => undefined)}>
-                      <Ionicons name="document-text-outline" size={16} color={palette.fg} />
-                    </Pressable>
-                    <Pressable style={[styles.iconOnlyAction, { borderColor: palette.border }]} onPress={() => { setWorkspaceTab('templates'); setTemplateName(smartResult.ticketNumber || 'Generated template'); setTemplateTo(''); setTemplateSubject(`Follow-up ${smartResult.ticketNumber || ''}`.trim()); setTemplateBody(smartResult.summary); }}>
-                      <Ionicons name="layers-outline" size={16} color={palette.fg} />
-                    </Pressable>
-                    <Pressable style={[styles.iconOnlyAction, { borderColor: palette.border }]} onPress={() => createOutlookEventFromContent(smartResult.summary).catch(() => undefined)}>
-                      <Ionicons name="calendar-outline" size={16} color={palette.fg} />
-                    </Pressable>
-                  </View>
-                </View>
-              ) : null}
 
               <SearchFilterBar
                 palette={{

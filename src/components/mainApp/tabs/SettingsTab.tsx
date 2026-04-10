@@ -26,8 +26,6 @@ type AppThemeName = 'euBlue' | 'dark' | 'light' | 'parliament' | 'custom' | 'noi
 const PASSWORD_WORDS = ['choco', 'milk', 'sun', 'river', 'cloud', 'mint', 'lemon', 'tiger', 'magic', 'honey', 'rocket', 'ocean', 'forest', 'happy', 'coffee', 'pixel', 'anchor', 'velvet'];
 const SYMBOLS = ['!', '@', '#', '$', '%', '&', '*', '?'];
 const LETTER_POOL = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
-const DIGIT_POOL = '0123456789';
-const MIXED_POOL = `${LETTER_POOL}${DIGIT_POOL}${SYMBOLS.join('')}`;
 
 function randomFrom<T>(items: T[]): T {
   return items[Math.floor(Math.random() * items.length)];
@@ -116,7 +114,6 @@ export function SettingsTab({
   onLogout,
   syncBusy,
   userEmail,
-  userUidPrefix,
   isGuest,
   persistenceMode,
   visibleBarcodeTypes,
@@ -138,7 +135,6 @@ export function SettingsTab({
   onLogout: () => void;
   syncBusy: boolean;
   userEmail: string | null;
-  userUidPrefix: string | null;
   isGuest: boolean;
   persistenceMode: PersistenceMode;
   visibleBarcodeTypes: string[];
@@ -148,14 +144,12 @@ export function SettingsTab({
   const { width } = useWindowDimensions();
   const isDesktop = width >= 1024;
   const { setThemeName } = useAppTheme();
-  const [bulkInput, setBulkInput] = useState('');
   const [passPhrase, setPassPhrase] = useState('');
   const [passwordMode, setPasswordMode] = useState<'phrases' | 'seed'>('phrases');
   const [phraseCount, setPhraseCount] = useState(2);
   const [seedText, setSeedText] = useState('Welcome');
   const [installBusy, setInstallBusy] = useState(false);
   const [pwaInstallAvailable, setPwaInstallAvailable] = useState(canInstallPwa());
-  const [isInstalled, setIsInstalled] = useState(false);
   const [pwaDiag, setPwaDiag] = useState(getPwaInstallDiagnostics());
   const [groups, setGroups] = useState<SharedNoteGroup[]>([]);
   const [groupNameDraft, setGroupNameDraft] = useState('');
@@ -167,13 +161,6 @@ export function SettingsTab({
     tick();
     const id = setInterval(tick, 2000);
     return () => clearInterval(id);
-  }, []);
-  useEffect(() => {
-    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
-    setIsInstalled(window.matchMedia('(display-mode: standalone)').matches);
-    const onInstall = () => setIsInstalled(true);
-    window.addEventListener('appinstalled', onInstall);
-    return () => window.removeEventListener('appinstalled', onInstall);
   }, []);
   useEffect(() => {
     fetchSharedGroupsForCurrentUser().then(setGroups).catch(() => undefined);
@@ -197,8 +184,6 @@ export function SettingsTab({
     { name: 'QR', label: 'QR', description: 'URLs, configs, multi-line data', hardwareOnly: false },
     { name: 'EAN13', label: 'EAN-13', description: 'Product inventory and procurement', hardwareOnly: false },
   ], []);
-
-  const bulkPreview = useMemo(() => Array.from(new Set(bulkInput.split(/[\n\r,;\t]+/g).map((v) => v.trim()).filter(Boolean))), [bulkInput]);
 
   const generatePassword = () => {
     const currentYear = String(new Date().getFullYear());

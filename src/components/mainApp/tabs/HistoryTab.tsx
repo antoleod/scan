@@ -250,7 +250,6 @@ export function HistoryTab({
   onFilterTypeChange,
   onDateFilterChange,
   onSortByChange,
-  onOpenDatePicker,
   onToggleSelection,
   onLongPressSelection,
   onToggleUsed,
@@ -274,7 +273,6 @@ export function HistoryTab({
   onFilterTypeChange: (value: string) => void;
   onDateFilterChange: (value: DateFilter) => void;
   onSortByChange: (value: HistorySort) => void;
-  onOpenDatePicker: () => void;
   onToggleSelection: (id: string) => void;
   onLongPressSelection: (id: string) => void;
   onToggleUsed: (id: string) => void;

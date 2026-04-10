@@ -5,17 +5,15 @@ import {
   deleteNoteFromFirebase,
   deleteSharedGroupNote,
   deleteTemplateFromFirebase,
-  fetchNotesFromFirebase,
-  fetchSharedGroupNotesForCurrentUser,
   upsertNoteInFirebase,
   upsertTemplateInFirebase,
   upsertSharedGroupNote,
 } from './firebase';
 import { diag } from './diagnostics';
+import { clearDeletedNoteKeys, loadDeletedNoteKeys, markDeletedNoteKey, noteStorageKey } from './noteDeletions';
 
 const NOTES_KEY = '@barra_notes_v1';
 const TEMPLATES_KEY = '@barra_note_templates_v1';
-const NOTES_SEEDED_KEY = '@barra_notes_seeded_v1';
 const TEMPLATES_PURGED_KEY = '@barra_templates_purged_v1';
 
 export type NoteKind = 'text' | 'image';
@@ -43,6 +41,7 @@ export interface NoteItem {
   pinned: boolean;
   createdAt: number;
   updatedAt: number;
+  deletedAt?: number;
 }
 
 export type TemplateKind = 'email' | 'appointment';
@@ -70,6 +69,7 @@ function normalizeText(value: string) {
 
 function normalizeNotes(items: NoteItem[]): NoteItem[] {
   return [...items].sort((a, b) => {
+    if (Boolean(a.deletedAt) !== Boolean(b.deletedAt)) return a.deletedAt ? 1 : -1;
     if (Boolean(a.archived) !== Boolean(b.archived)) return a.archived ? 1 : -1;
     if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
     return b.updatedAt - a.updatedAt;
@@ -80,6 +80,7 @@ export async function loadNotes(): Promise<NoteItem[]> {
   const raw = await AsyncStorage.getItem(NOTES_KEY);
   if (!raw) return [];
   try {
+    const deletedKeys = await loadDeletedNoteKeys();
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
     return normalizeNotes(
@@ -107,8 +108,12 @@ export async function loadNotes(): Promise<NoteItem[]> {
           pinned: Boolean(item?.pinned),
           createdAt: Number(item?.createdAt || Date.now()),
           updatedAt: Number(item?.updatedAt || Date.now()),
+          deletedAt: typeof item?.deletedAt === 'number' ? Number(item.deletedAt) : undefined,
         }))
-        .filter((item) => item.text.trim().length > 0 || (item.kind === 'image' && item.imageBase64)),
+        .filter((item) => {
+          const key = noteStorageKey(item.id, item.groupId ? 'group' : 'personal', item.groupId);
+          return (item.text.trim().length > 0 || (item.kind === 'image' && item.imageBase64)) && !item.deletedAt && !deletedKeys.has(key);
+        }),
     );
   } catch {
     return [];
@@ -297,12 +302,12 @@ export async function removeNote(id: string): Promise<NoteItem[]> {
   const existing = current.find((item) => item.id === id);
   const next = current.filter((item) => item.id !== id);
   const normalized = normalizeNotes(next);
+  await markDeletedNoteKey(noteStorageKey(id, existing?.groupId ? 'group' : 'personal', existing?.groupId));
   await saveNotes(normalized);
   try {
+    await deleteNoteFromFirebase(id);
     if (existing?.groupId) {
       await deleteSharedGroupNote(existing.groupId, id);
-    } else {
-      await deleteNoteFromFirebase(id);
     }
   } catch (error) {
     await diag.warn('notes.delete.remote.error', { message: String(error), noteId: id });
@@ -423,8 +428,7 @@ export async function toggleArchived(id: string): Promise<NoteItem[]> {
 
 export async function clearNotes(): Promise<void> {
   await AsyncStorage.setItem(NOTES_KEY, JSON.stringify([]));
-  // Mark as initialized to avoid demo reseeding after user clears everything.
-  await AsyncStorage.setItem(NOTES_SEEDED_KEY, '1');
+  await clearDeletedNoteKeys();
   try {
     await clearNotesInFirebase();
   } catch (error) {
@@ -434,7 +438,7 @@ export async function clearNotes(): Promise<void> {
 
 export async function hardDeleteAllNotes(): Promise<void> {
   await AsyncStorage.setItem(NOTES_KEY, JSON.stringify([]));
-  await AsyncStorage.setItem(NOTES_SEEDED_KEY, '1');
+  await clearDeletedNoteKeys();
   try {
     await clearNotesInFirebase();
   } catch {
@@ -518,7 +522,6 @@ export async function ensureWorkNotesAndEmailTemplates(): Promise<{
 }> {
   let notes = await loadNotes();
   let templates = await loadTemplates();
-  const seeded = (await AsyncStorage.getItem(NOTES_SEEDED_KEY)) === '1';
   const templatesPurged = (await AsyncStorage.getItem(TEMPLATES_PURGED_KEY)) === '1';
 
   // One-shot purge requested: remove all existing templates locally/cloud and do not auto-seed again.
@@ -530,46 +533,6 @@ export async function ensureWorkNotesAndEmailTemplates(): Promise<{
       await clearTemplatesInFirebase();
     } catch (error) {
       await diag.warn('templates.purge.remote.error', { message: String(error) });
-    }
-  }
-
-  const hasWorkNotes = notes.some((item) => item.category === 'work');
-  if (!seeded && !hasWorkNotes && notes.length === 0) {
-    const now = Date.now();
-    const examples: NoteItem[] = [
-      {
-        id: makeId('note'),
-        kind: 'text',
-        category: 'work',
-        text: 'Work Notes: User badge replaced. Old badge disabled in access control.',
-        pinned: true,
-        createdAt: now,
-        updatedAt: now,
-      },
-      {
-        id: makeId('note'),
-        kind: 'text',
-        category: 'work',
-        text: 'Work Notes: Laptop PI checked, BitLocker active, ticket moved to done.',
-        pinned: false,
-        createdAt: now + 1,
-        updatedAt: now + 1,
-      },
-      {
-        id: makeId('note'),
-        kind: 'text',
-        category: 'work',
-        text: 'Work Notes: Pending approval from manager for software install.',
-        pinned: false,
-        createdAt: now + 2,
-        updatedAt: now + 2,
-      },
-    ];
-    notes = normalizeNotes([...examples, ...notes]);
-    await saveNotes(notes);
-    await AsyncStorage.setItem(NOTES_SEEDED_KEY, '1');
-    for (const note of examples) {
-      await pushNoteIfAuthenticated(note);
     }
   }
 
@@ -594,20 +557,6 @@ export async function hardDeleteAllTemplates(): Promise<void> {
     await clearTemplatesInFirebase();
   } catch {
     // local cache already cleared
-  }
-}
-
-export async function refreshNotesFromCloudSilently(): Promise<{ notes: NoteItem[]; templates: NoteTemplate[] } | null> {
-  try {
-    const result = await fetchNotesFromFirebase();
-    const sharedNotes = await fetchSharedGroupNotesForCurrentUser();
-    const notes = normalizeNotes([...result.serverNotes, ...sharedNotes]).slice(0, 3000);
-    const templates = result.serverTemplates.slice(0, 300);
-    await AsyncStorage.setItem(NOTES_KEY, JSON.stringify(notes));
-    await AsyncStorage.setItem(TEMPLATES_KEY, JSON.stringify(templates));
-    return { notes, templates };
-  } catch {
-    return null;
   }
 }
 

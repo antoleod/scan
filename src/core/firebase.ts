@@ -31,6 +31,8 @@ import {
 import { ScanRecord } from '../types';
 import type { NoteItem, NoteTemplate } from './notes';
 import { diag } from './diagnostics';
+import { loadDeletedNoteKeys, noteStorageKey } from './noteDeletions';
+import { loadDeletedHistoryKeys, markDeletedHistoryKey } from './historyDeletions';
 
 const REQUIRED_FIREBASE_ENV = [
   'EXPO_PUBLIC_FIREBASE_API_KEY',
@@ -246,9 +248,13 @@ export async function syncScansWithFirebase(local: ScanRecord[]) {
 
   const uid = user.uid;
   const scansRef = collection(rt.db, 'users', uid, 'scans');
+  const deletedKeys = await loadDeletedHistoryKeys();
 
   let pushed = 0;
   for (const scan of local.filter((x) => x.status === 'pending')) {
+    if (deletedKeys.has(`${String(scan.codeValue || scan.codeNormalized || '').trim()}::${normalizeScanType(scan.type)}`)) {
+      continue;
+    }
     const docId = `${scan.profileId}_${scan.codeNormalized}_${new Date(scan.date).getTime()}`.replace(/[^A-Za-z0-9_-]/g, '_');
     await setDoc(doc(scansRef, docId), { ...scan, uid, updatedAt: serverTimestamp() }, { merge: true });
     pushed += 1;
@@ -258,6 +264,8 @@ export async function syncScansWithFirebase(local: ScanRecord[]) {
   const server: ScanRecord[] = [];
   snap.forEach((d) => {
     const x = d.data() as ScanRecord;
+    const key = `${String(x.codeValue || x.codeNormalized || '').trim()}::${normalizeScanType(x.type)}`;
+    if (x.deletedAt || deletedKeys.has(key)) return;
     if (!x.id) x.id = d.id;
     server.push(x);
   });
@@ -277,13 +285,19 @@ export async function deleteScanFromFirebase(scan: ScanRecord): Promise<void> {
   const scansRef = collection(rt.db, 'users', user.uid, 'scans');
   const snap = await getDocs(query(scansRef));
   const targetKey = `${String(scan.codeValue || scan.codeNormalized || '').trim()}::${normalizeScanType(scan.type)}`;
+  await markDeletedHistoryKey(targetKey);
   const deletions: Promise<unknown>[] = [];
 
   snap.forEach((d) => {
     const data = d.data() as ScanRecord;
     const rowKey = `${String(data.codeValue || data.codeNormalized || '').trim()}::${normalizeScanType(data.type)}`;
     if (d.id === scan.id || String(data.id || '') === scan.id || rowKey === targetKey) {
-      deletions.push(deleteDoc(doc(scansRef, d.id)));
+      deletions.push(setDoc(doc(scansRef, d.id), {
+        id: data.id || d.id,
+        deletedAt: Date.now(),
+        uid: user.uid,
+        updatedAt: serverTimestamp(),
+      }, { merge: true }));
     }
   });
 
@@ -303,6 +317,7 @@ export async function subscribeToScans(
     const scans: ScanRecord[] = [];
     snap.forEach((d) => {
       const x = d.data() as ScanRecord;
+      if (x.deletedAt) return;
       scans.push({ ...x, id: x.id || d.id });
     });
     callback(scans);
@@ -366,6 +381,7 @@ export async function upsertNoteInFirebase(note: NoteItem): Promise<void> {
     uid: user.uid,
     updatedAtServer: serverTimestamp(),
   };
+  if (note.deletedAt !== undefined) payload.deletedAt = Number(note.deletedAt);
   if (note.groupId !== undefined) payload.groupId = note.groupId;
   if (note.color !== undefined) payload.color = note.color;
   if (note.archived !== undefined) payload.archived = note.archived;
@@ -417,6 +433,7 @@ export async function syncNotesWithFirebase(localNotes: NoteItem[], localTemplat
   const uid = user.uid;
   const notesRef = collection(rt.db, 'users', uid, 'notes');
   const templatesRef = collection(rt.db, 'users', uid, 'noteTemplates');
+  const deletedKeys = await loadDeletedNoteKeys();
 
   // Read server state first so we can merge (newest updatedAt wins).
   const notesSnapBefore = await getDocs(query(notesRef));
@@ -437,11 +454,28 @@ export async function syncNotesWithFirebase(localNotes: NoteItem[], localTemplat
   const localNotesLimited = localNotes.slice(0, 3000);
   let pushedNotes = 0;
   for (const note of localNotesLimited) {
+    const key = noteStorageKey(note.id, note.groupId ? 'group' : 'personal', note.groupId);
+    if (deletedKeys.has(key) || note.deletedAt) {
+      continue;
+    }
     const serverNote = serverNotesMap.get(note.id);
     if (!serverNote || note.updatedAt >= serverNote.updatedAt) {
       await setDoc(doc(notesRef, note.id), { ...note, uid, updatedAtServer: serverTimestamp() }, { merge: true });
       pushedNotes += 1;
     }
+  }
+
+  // Re-apply tombstones so deleted notes do not get resurrected by stale clients.
+  for (const [noteId, serverNote] of serverNotesMap.entries()) {
+    const key = noteStorageKey(noteId, serverNote.groupId ? 'group' : 'personal', serverNote.groupId);
+    if (!deletedKeys.has(key)) continue;
+    if (serverNote.deletedAt) continue;
+    await setDoc(doc(notesRef, noteId), {
+      id: noteId,
+      deletedAt: Date.now(),
+      uid,
+      updatedAtServer: serverTimestamp(),
+    }, { merge: true });
   }
 
   // Push local templates that are newer than (or absent from) the server.
@@ -461,6 +495,10 @@ export async function syncNotesWithFirebase(localNotes: NoteItem[], localTemplat
   for (const note of localNotesLimited) mergedNotesMap.set(note.id, note);
   notesSnap.forEach((d) => {
     const x = { ...(d.data() as NoteItem), id: d.id };
+    if (x.deletedAt || deletedKeys.has(noteStorageKey(x.id, x.groupId ? 'group' : 'personal', x.groupId))) {
+      mergedNotesMap.delete(x.id);
+      return;
+    }
     const existing = mergedNotesMap.get(x.id);
     if (!existing || x.updatedAt >= existing.updatedAt) mergedNotesMap.set(x.id, x);
   });
@@ -491,12 +529,16 @@ export async function fetchNotesFromFirebase() {
   const uid = user.uid;
   const notesRef = collection(rt.db, 'users', uid, 'notes');
   const templatesRef = collection(rt.db, 'users', uid, 'noteTemplates');
+  const deletedKeys = await loadDeletedNoteKeys();
 
   const notesSnap = await getDocs(query(notesRef));
   const serverNotes: NoteItem[] = [];
   notesSnap.forEach((d) => {
     const x = d.data() as NoteItem;
-    serverNotes.push({ ...x, id: x.id || d.id });
+    const key = noteStorageKey(x.id || d.id, x.groupId ? 'group' : 'personal', x.groupId);
+    if (!x.deletedAt && !deletedKeys.has(key)) {
+      serverNotes.push({ ...x, id: x.id || d.id });
+    }
   });
 
   const templatesSnap = await getDocs(query(templatesRef));
@@ -514,7 +556,12 @@ export async function deleteNoteFromFirebase(noteId: string): Promise<void> {
   if (!rt.enabled || !rt.auth || !rt.db) return;
   const user = rt.auth.currentUser;
   if (!user) return;
-  await deleteDoc(doc(rt.db, 'users', user.uid, 'notes', noteId));
+  await setDoc(doc(rt.db, 'users', user.uid, 'notes', noteId), {
+    id: noteId,
+    deletedAt: Date.now(),
+    uid: user.uid,
+    updatedAtServer: serverTimestamp(),
+  }, { merge: true });
 }
 
 export async function deleteTemplateFromFirebase(templateId: string): Promise<void> {
@@ -712,19 +759,28 @@ export async function deleteSharedGroupNote(groupId: string, noteId: string): Pr
   const rt = await initFirebaseRuntime();
   if (!rt.enabled || !rt.auth || !rt.db) return;
   if (!groupId || !noteId) return;
-  await deleteDoc(doc(rt.db, 'noteGroups', groupId, 'notes', noteId));
+  await setDoc(doc(rt.db, 'noteGroups', groupId, 'notes', noteId), {
+    id: noteId,
+    groupId,
+    deletedAt: Date.now(),
+    updatedAtServer: serverTimestamp(),
+  }, { merge: true });
 }
 
 export async function fetchSharedGroupNotesForCurrentUser(): Promise<NoteItem[]> {
   const groups = await fetchSharedGroupsForCurrentUser();
   const rt = await initFirebaseRuntime();
   if (!rt.enabled || !rt.db) return [];
+  const deletedKeys = await loadDeletedNoteKeys();
   const notes: NoteItem[] = [];
   for (const group of groups) {
     const snap = await getDocs(query(collection(rt.db, 'noteGroups', group.id, 'notes')));
     snap.forEach((d) => {
       const note = d.data() as NoteItem;
-      notes.push({ ...note, id: note.id || d.id, groupId: group.id });
+      const key = noteStorageKey(note.id || d.id, 'group', group.id);
+      if (!note.deletedAt && !deletedKeys.has(key)) {
+        notes.push({ ...note, id: note.id || d.id, groupId: group.id });
+      }
     });
   }
   return notes;

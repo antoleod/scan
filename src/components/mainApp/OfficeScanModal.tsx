@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { ActivityIndicator, Modal, Pressable, Text, View } from 'react-native';
+import { Modal, Pressable, Text, View } from 'react-native';
 import { CameraView } from 'expo-camera';
 import type { BarcodeType } from 'expo-camera';
 import { Ionicons } from '@expo/vector-icons';
