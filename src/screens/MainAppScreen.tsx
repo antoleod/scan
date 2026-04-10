@@ -93,11 +93,11 @@ function visibleScanType(type: string) {
 }
 
 const SCAN_TUNING = {
-  duplicateWindowMs: 350,
-  cooldownAfterUrlMs: 850,
-  cooldownAfterInvalidMs: 500,
-  cooldownAfterDuplicateMs: 500,
-  cooldownAfterSuccessMs: 700,
+  duplicateWindowMs: 180,       // was 350 — faster dedupe so same code re-reads don't stall
+  cooldownAfterUrlMs: 600,      // was 850
+  cooldownAfterInvalidMs: 280,  // was 500 — recover quickly from bad reads
+  cooldownAfterDuplicateMs: 320, // was 500
+  cooldownAfterSuccessMs: 500,  // was 700 — ready for next scan sooner
 };
 
 class SimpleErrorBoundary extends React.Component<{ children: React.ReactNode }, { error: Error | null }> {
@@ -249,7 +249,7 @@ function MainApp() {
     setScanState('scanning');
     const detectingTimer = setTimeout(() => {
       setScanState((current) => (current === 'scanning' ? 'detecting' : current));
-    }, 350);
+    }, 200);  // was 350 — show "detecting" state quicker
     const timeoutTimer = setTimeout(() => {
       setScanState((current) => {
         if (current === 'success') return current;
@@ -257,14 +257,14 @@ function MainApp() {
       });
       setTimeout(() => {
         setScanState((current) => (current === 'timeout' ? 'manual_capture_ready' : current));
-      }, 80);
-    }, 1600);
+      }, 60);
+    }, 1400);  // was 1600 — offer manual capture a bit sooner
 
     scanTimersRef.current.detecting = detectingTimer;
     scanTimersRef.current.timeout = timeoutTimer;
   }
 
-  function restartScannerSessionSoon(delay = 900) {
+  function restartScannerSessionSoon(delay = 550) {  // was 900
     if (scanTimersRef.current.resume) {
       clearTimeout(scanTimersRef.current.resume);
     }

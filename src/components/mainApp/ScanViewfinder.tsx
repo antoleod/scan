@@ -1,20 +1,25 @@
-﻿import React from 'react';
+import React, { useEffect } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import Animated, { Easing, interpolate, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
+import Animated, {
+  Easing,
+  interpolate,
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withSequence,
+  withTiming,
+} from 'react-native-reanimated';
 
-const C = {
-  overlay: 'rgba(0,0,0,0.55)',
-  accent: '#FF6B00',
-  hintBg: 'rgba(0,0,0,0.65)',
-  hintBorder: 'rgba(255,255,255,0.1)',
-  hintText: '#cccccc',
-  flashBg: 'rgba(255,255,255,0.07)',
-};
+// ─── Constants ────────────────────────────────────────────────────────────────
 
-const VIEW_W = 220;
-const VIEW_H = 180;
-const BRACKET = 22;
+const ACCENT   = '#FF6B00';
+const ACCENT2  = '#FFD84D';    // secondary gold highlight
+const OVERLAY  = 'rgba(0,0,0,0.52)';
+const BRACKET  = 26;           // corner arm length
+const LINE_W   = 2.5;          // corner stroke width
+
+// ─── ScanViewfinder ──────────────────────────────────────────────────────────
 
 export function ScanViewfinder({
   torchEnabled,
@@ -25,179 +30,334 @@ export function ScanViewfinder({
   onToggleTorch: () => void;
   isDesktop?: boolean;
 }) {
-  const lineProgress = useSharedValue(0);
-  const pulse = useSharedValue(0);
-  const glow = useSharedValue(0);
-  const viewWidth = isDesktop ? 320 : VIEW_W;
-  const viewHeight = isDesktop ? 252 : VIEW_H;
-  const flashSize = isDesktop ? 44 : 36;
-  const hintFontSize = isDesktop ? 13 : 12;
+  const vw = isDesktop ? 340 : 240;
+  const vh = isDesktop ? 220 : 170;
 
-  React.useEffect(() => {
-    lineProgress.value = withRepeat(withTiming(1, { duration: 1250, easing: Easing.inOut(Easing.cubic) }), -1, true);
-    pulse.value = withRepeat(withTiming(1, { duration: 1400, easing: Easing.inOut(Easing.quad) }), -1, true);
-    glow.value = withRepeat(withTiming(1, { duration: 2200, easing: Easing.inOut(Easing.sin) }), -1, true);
-  }, [lineProgress, pulse, glow]);
+  // Animation shared values
+  const lineY      = useSharedValue(0);   // scan-line 0→1
+  const cornerPop  = useSharedValue(1);   // corner bracket scale pulse
+  const glowPulse  = useSharedValue(0);   // outer glow breathe
+  const areaFlash  = useSharedValue(0);   // success flash fill (reserved)
+
+  useEffect(() => {
+    // Scan-line: fast sweep top→bottom→top, continuous
+    lineY.value = withRepeat(
+      withSequence(
+        withTiming(1, { duration: 900, easing: Easing.inOut(Easing.cubic) }),
+        withTiming(0, { duration: 900, easing: Easing.inOut(Easing.cubic) }),
+      ),
+      -1,
+      false,
+    );
+
+    // Corners gently pulse (scale + opacity)
+    cornerPop.value = withRepeat(
+      withSequence(
+        withTiming(1.04, { duration: 700, easing: Easing.inOut(Easing.sin) }),
+        withTiming(0.97, { duration: 700, easing: Easing.inOut(Easing.sin) }),
+      ),
+      -1,
+      true,
+    );
+
+    // Outer glow ring breathes slowly
+    glowPulse.value = withRepeat(
+      withTiming(1, { duration: 2000, easing: Easing.inOut(Easing.sin) }),
+      -1,
+      true,
+    );
+  }, []);
+
+  // ── Animated styles ─────────────────────────────────────────────────────────
 
   const lineStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: interpolate(lineProgress.value, [0, 1], [viewHeight * 0.08, viewHeight * 0.88]) }],
-    opacity: interpolate(lineProgress.value, [0, 0.1, 0.5, 0.9, 1], [0.2, 1, 1, 1, 0.2]),
+    transform: [{ translateY: interpolate(lineY.value, [0, 1], [4, vh - 6]) }],
+    opacity: interpolate(lineY.value, [0, 0.08, 0.5, 0.92, 1], [0, 1, 1, 1, 0]),
   }));
 
-  const pulseStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: interpolate(pulse.value, [0, 1], [0.98, 1.02]) }],
-    opacity: interpolate(pulse.value, [0, 1], [0.8, 1]),
+  // Trailing glow below the scan line — same position, blurred wider
+  const trailStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: interpolate(lineY.value, [0, 1], [4, vh - 6]) }],
+    opacity: interpolate(lineY.value, [0, 0.1, 0.5, 0.9, 1], [0, 0.35, 0.35, 0.35, 0]),
+  }));
+
+  const cornerStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: cornerPop.value }],
+    opacity: interpolate(cornerPop.value, [0.97, 1.04], [0.85, 1]),
   }));
 
   const glowStyle = useAnimatedStyle(() => ({
-    opacity: interpolate(glow.value, [0, 0.5, 1], [0.18, 0.32, 0.18]),
-    transform: [{ scale: interpolate(glow.value, [0, 1], [0.96, 1.04]) }],
+    opacity: interpolate(glowPulse.value, [0, 1], [0.15, 0.38]),
+    transform: [{ scale: interpolate(glowPulse.value, [0, 1], [0.97, 1.03]) }],
+  }));
+
+  const flashStyle = useAnimatedStyle(() => ({
+    opacity: areaFlash.value,
   }));
 
   return (
-    <View style={styles.root} pointerEvents="box-none">
+    <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
+      {/* ── Dark overlays around viewfinder ── */}
       <View style={styles.overlayTop} pointerEvents="none" />
-      <View style={[styles.middle, { height: viewHeight }]} pointerEvents="none">
+      <View style={[styles.middle, { height: vh }]} pointerEvents="none">
         <View style={styles.overlaySide} />
-        <Animated.View style={[styles.viewfinder, { width: viewWidth, height: viewHeight }, pulseStyle]}>
-          <Animated.View style={[styles.glowRing, glowStyle]} />
-          <View style={styles.grid} />
-          <View style={[styles.corner, styles.tl]} />
-          <View style={[styles.corner, styles.tr]} />
-          <View style={[styles.corner, styles.bl]} />
-          <View style={[styles.corner, styles.br]} />
-          <Animated.View style={[styles.scanLine, lineStyle]} />
-          <View style={styles.scanCore} />
-        </Animated.View>
+
+        {/* ── Viewfinder box ── */}
+        <View style={{ width: vw, height: vh }}>
+
+          {/* Glow ring behind corners */}
+          <Animated.View
+            style={[styles.glowRing, { width: vw + 20, height: vh + 20, top: -10, left: -10 }, glowStyle]}
+            pointerEvents="none"
+          />
+
+          {/* Scan area subtle fill */}
+          <View style={[StyleSheet.absoluteFill, styles.scanAreaFill]} pointerEvents="none" />
+
+          {/* Success flash overlay */}
+          <Animated.View style={[StyleSheet.absoluteFill, styles.flashOverlay, flashStyle]} pointerEvents="none" />
+
+          {/* Horizontal grid lines (subtle) */}
+          <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+            {[0.33, 0.66].map((frac) => (
+              <View
+                key={frac}
+                style={{
+                  position: 'absolute',
+                  left: '5%',
+                  right: '5%',
+                  top: `${frac * 100}%`,
+                  height: 1,
+                  backgroundColor: 'rgba(255,255,255,0.05)',
+                }}
+              />
+            ))}
+            {[0.33, 0.66].map((frac) => (
+              <View
+                key={frac}
+                style={{
+                  position: 'absolute',
+                  top: '5%',
+                  bottom: '5%',
+                  left: `${frac * 100}%`,
+                  width: 1,
+                  backgroundColor: 'rgba(255,255,255,0.05)',
+                }}
+              />
+            ))}
+          </View>
+
+          {/* ── Corner brackets ── */}
+          <Animated.View style={[StyleSheet.absoluteFill, cornerStyle]} pointerEvents="none">
+            <Corner pos="tl" vw={vw} vh={vh} />
+            <Corner pos="tr" vw={vw} vh={vh} />
+            <Corner pos="bl" vw={vw} vh={vh} />
+            <Corner pos="br" vw={vw} vh={vh} />
+          </Animated.View>
+
+          {/* ── Scan-line trail (wider, softer, same Y) ── */}
+          <Animated.View
+            style={[styles.scanTrail, { left: '4%', right: '4%' }, trailStyle]}
+            pointerEvents="none"
+          />
+
+          {/* ── Scan-line ── */}
+          <Animated.View
+            style={[styles.scanLine, { left: '4%', right: '4%' }, lineStyle]}
+            pointerEvents="none"
+          />
+
+        </View>
+
         <View style={styles.overlaySide} />
       </View>
       <View style={styles.overlayBottom} pointerEvents="none" />
 
-      <Pressable style={[styles.flash, { width: flashSize, height: flashSize, borderRadius: flashSize / 2 }]} onPress={onToggleTorch}>
-        <Ionicons name={torchEnabled ? 'flash' : 'flash-outline'} size={18} color={C.hintText} />
+      {/* ── Torch button ── */}
+      <Pressable
+        style={[styles.torchBtn, torchEnabled && styles.torchBtnActive]}
+        onPress={onToggleTorch}
+        hitSlop={12}
+      >
+        <Ionicons
+          name={torchEnabled ? 'flash' : 'flash-outline'}
+          size={17}
+          color={torchEnabled ? ACCENT : 'rgba(255,255,255,0.75)'}
+        />
       </Pressable>
 
+      {/* ── Hint pill ── */}
       <View style={styles.hintPill} pointerEvents="none">
-        <Text style={[styles.hintText, { fontSize: hintFontSize }]}>Apunta el codigo al recuadro</Text>
+        <View style={[styles.hintDot, { backgroundColor: ACCENT }]} />
+        <Text style={[styles.hintText, isDesktop && { fontSize: 13 }]}>
+          Apunta el código al recuadro
+        </Text>
       </View>
     </View>
   );
 }
 
+// ─── Corner bracket sub-component ────────────────────────────────────────────
+
+function Corner({ pos, vw, vh }: { pos: 'tl' | 'tr' | 'bl' | 'br'; vw: number; vh: number }) {
+  const isTop    = pos === 'tl' || pos === 'tr';
+  const isLeft   = pos === 'tl' || pos === 'bl';
+  const radius   = 4;
+
+  return (
+    <View
+      pointerEvents="none"
+      style={{
+        position: 'absolute',
+        width: BRACKET,
+        height: BRACKET,
+        top:    isTop  ? 0 : undefined,
+        bottom: !isTop ? 0 : undefined,
+        left:   isLeft  ? 0 : undefined,
+        right:  !isLeft ? 0 : undefined,
+      }}
+    >
+      {/* Horizontal arm */}
+      <View
+        style={{
+          position: 'absolute',
+          height: LINE_W,
+          width: BRACKET,
+          top:    isTop  ? 0 : undefined,
+          bottom: !isTop ? 0 : undefined,
+          left:   isLeft  ? 0 : undefined,
+          right:  !isLeft ? 0 : undefined,
+          backgroundColor: ACCENT,
+          borderTopLeftRadius:     pos === 'tl' ? radius : 0,
+          borderTopRightRadius:    pos === 'tr' ? radius : 0,
+          borderBottomLeftRadius:  pos === 'bl' ? radius : 0,
+          borderBottomRightRadius: pos === 'br' ? radius : 0,
+          shadowColor: ACCENT,
+          shadowOpacity: 0.9,
+          shadowRadius: 5,
+          elevation: 4,
+        }}
+      />
+      {/* Vertical arm */}
+      <View
+        style={{
+          position: 'absolute',
+          width: LINE_W,
+          height: BRACKET,
+          top:    isTop  ? 0 : undefined,
+          bottom: !isTop ? 0 : undefined,
+          left:   isLeft  ? 0 : undefined,
+          right:  !isLeft ? 0 : undefined,
+          backgroundColor: ACCENT,
+          borderTopLeftRadius:     pos === 'tl' ? radius : 0,
+          borderTopRightRadius:    pos === 'tr' ? radius : 0,
+          borderBottomLeftRadius:  pos === 'bl' ? radius : 0,
+          borderBottomRightRadius: pos === 'br' ? radius : 0,
+          shadowColor: ACCENT,
+          shadowOpacity: 0.9,
+          shadowRadius: 5,
+          elevation: 4,
+        }}
+      />
+    </View>
+  );
+}
+
+// ─── Styles ───────────────────────────────────────────────────────────────────
+
 const styles = StyleSheet.create({
-  root: {
-    ...StyleSheet.absoluteFillObject,
-  },
   overlayTop: {
     flex: 1,
-    backgroundColor: C.overlay,
+    backgroundColor: OVERLAY,
   },
   middle: {
     flexDirection: 'row',
   },
   overlaySide: {
     flex: 1,
-    backgroundColor: C.overlay,
+    backgroundColor: OVERLAY,
   },
   overlayBottom: {
     flex: 1,
-    backgroundColor: C.overlay,
-  },
-  viewfinder: {
-    position: 'relative',
+    backgroundColor: OVERLAY,
   },
   glowRing: {
     position: 'absolute',
-    inset: -10,
-    borderRadius: 28,
-    borderWidth: 1,
-    borderColor: 'rgba(255,107,0,0.45)',
-    shadowColor: C.accent,
-    shadowOpacity: 0.35,
-    shadowRadius: 18,
-    elevation: 5,
+    borderRadius: 22,
+    borderWidth: 1.5,
+    borderColor: `${ACCENT}55`,
+    shadowColor: ACCENT,
+    shadowOpacity: 0.5,
+    shadowRadius: 22,
+    elevation: 6,
   },
-  grid: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'transparent',
-    borderColor: 'rgba(255,255,255,0.06)',
-    borderWidth: 1,
-    borderRadius: 20,
-    opacity: 0.55,
+  scanAreaFill: {
+    backgroundColor: 'rgba(255,107,0,0.028)',
+    borderRadius: 4,
   },
-  corner: {
-    position: 'absolute',
-    width: BRACKET,
-    height: BRACKET,
-    borderColor: C.accent,
-  },
-  tl: {
-    top: 0,
-    left: 0,
-    borderTopWidth: 2.5,
-    borderLeftWidth: 2.5,
-  },
-  tr: {
-    top: 0,
-    right: 0,
-    borderTopWidth: 2.5,
-    borderRightWidth: 2.5,
-  },
-  bl: {
-    bottom: 0,
-    left: 0,
-    borderBottomWidth: 2.5,
-    borderLeftWidth: 2.5,
-  },
-  br: {
-    bottom: 0,
-    right: 0,
-    borderBottomWidth: 2.5,
-    borderRightWidth: 2.5,
+  flashOverlay: {
+    backgroundColor: `${ACCENT2}28`,
+    borderRadius: 4,
   },
   scanLine: {
     position: 'absolute',
-    left: '8%',
-    right: '8%',
     height: 2,
-    backgroundColor: C.accent,
-    shadowColor: C.accent,
-    shadowOpacity: 0.85,
-    shadowRadius: 8,
-    elevation: 6,
+    backgroundColor: ACCENT,
+    borderRadius: 2,
+    shadowColor: ACCENT,
+    shadowOpacity: 1,
+    shadowRadius: 10,
+    elevation: 8,
   },
-  scanCore: {
+  scanTrail: {
     position: 'absolute',
-    left: '16%',
-    right: '16%',
-    top: '50%',
-    height: 10,
-    marginTop: -5,
-    borderRadius: 999,
-    backgroundColor: 'rgba(255,107,0,0.14)',
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: `${ACCENT}22`,
+    shadowColor: ACCENT,
+    shadowOpacity: 0.4,
+    shadowRadius: 12,
   },
-  flash: {
+  torchBtn: {
     position: 'absolute',
     top: 14,
     right: 14,
-    backgroundColor: C.flashBg,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
     alignItems: 'center',
     justifyContent: 'center',
   },
+  torchBtnActive: {
+    borderColor: `${ACCENT}66`,
+    backgroundColor: `${ACCENT}18`,
+  },
   hintPill: {
     position: 'absolute',
-    bottom: 24,
+    bottom: 20,
     alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: C.hintBorder,
-    backgroundColor: C.hintBg,
+    borderColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: 'rgba(0,0,0,0.6)',
     paddingHorizontal: 14,
-    paddingVertical: 8,
+    paddingVertical: 7,
+  },
+  hintDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 3,
   },
   hintText: {
-    color: C.hintText,
+    color: 'rgba(255,255,255,0.78)',
     fontSize: 12,
     fontWeight: '500',
+    letterSpacing: 0.2,
   },
 });
