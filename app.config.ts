@@ -11,7 +11,7 @@ const config: ExpoConfig = {
   slug: "oryxen-scanner-mobile",
   version: "1.0.0",
   jsEngine: "jsc",
-  orientation: "portrait",
+  orientation: "default",
   icon: "./assets/images/icon.png",
   userInterfaceStyle: "automatic",
   splash: {
