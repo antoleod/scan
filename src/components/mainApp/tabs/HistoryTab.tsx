@@ -1,4 +1,4 @@
-﻿import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Animated, FlatList, Linking, Modal, PanResponder, Platform, Pressable, ScrollView, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
@@ -542,10 +542,11 @@ export function HistoryTab({
               </Pressable>
               <Pressable
                 style={({ pressed }) => [{ flex: 1, borderRadius: 10, minHeight: 40, alignItems: 'center', justifyContent: 'center', backgroundColor: '#b91c1c', opacity: pressed ? 0.82 : 1 }]}
-                onPress={async () => {
+                onPress={() => {
                   if (!deleteTarget) return;
-                  await onDeleteItem(deleteTarget);
+                  const target = deleteTarget;
                   setDeleteTarget(null);
+                  onDeleteItem(target);
                 }}
               >
                 <Text style={{ color: '#fff', fontSize: 12, fontWeight: '800' }}>Delete</Text>

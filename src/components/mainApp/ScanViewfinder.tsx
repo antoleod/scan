@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, {
   Easing,
@@ -11,33 +11,54 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
+import type { ScanState } from '../../types';
+
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const ACCENT   = '#FF6B00';
-const ACCENT2  = '#FFD84D';    // secondary gold highlight
+const ACCENT2  = '#FFD84D';
 const OVERLAY  = 'rgba(0,0,0,0.52)';
-const BRACKET  = 26;           // corner arm length
-const LINE_W   = 2.5;          // corner stroke width
+const BRACKET  = 26;
+const LINE_W   = 2.5;
 
 // ─── ScanViewfinder ──────────────────────────────────────────────────────────
 
 export function ScanViewfinder({
   torchEnabled,
   onToggleTorch,
-  isDesktop = false,
+  scanState,
 }: {
   torchEnabled: boolean;
   onToggleTorch: () => void;
-  isDesktop?: boolean;
+  scanState?: ScanState;
 }) {
-  const vw = isDesktop ? 340 : 240;
-  const vh = isDesktop ? 220 : 170;
+  const { width: screenW, height: screenH } = useWindowDimensions();
+  const isLandscape = screenW > screenH;
+  const isDesktop = screenW >= 1024;
 
-  // Animation shared values
-  const lineY      = useSharedValue(0);   // scan-line 0→1
-  const cornerPop  = useSharedValue(1);   // corner bracket scale pulse
-  const glowPulse  = useSharedValue(0);   // outer glow breathe
-  const areaFlash  = useSharedValue(0);   // success flash fill (reserved)
+  // ── Responsive viewfinder dimensions ───────────────────────────────────────
+  // Portrait  → narrower, taller   (good for vertical phone hold)
+  // Landscape → wider, shorter     (natural barcode alignment)
+  // Desktop   → comfortable fixed size
+  let vw: number;
+  let vh: number;
+
+  if (isDesktop) {
+    vw = Math.round(Math.min(380, screenW * 0.3));
+    vh = 230;
+  } else if (isLandscape) {
+    vw = Math.round(Math.min(screenW * 0.38, 380));
+    vh = Math.round(Math.min(vw * 0.5, screenH * 0.42));
+  } else {
+    vw = Math.round(Math.min(screenW * 0.6, 270));
+    vh = Math.round(Math.min(vw * 1.05, screenH * 0.24));
+  }
+
+  // ── Animation shared values ────────────────────────────────────────────────
+  const lineY      = useSharedValue(0);
+  const cornerPop  = useSharedValue(1);
+  const glowPulse  = useSharedValue(0);
+  const areaFlash  = useSharedValue(0);
 
   useEffect(() => {
     // Scan-line: fast sweep top→bottom→top, continuous
@@ -68,14 +89,23 @@ export function ScanViewfinder({
     );
   }, []);
 
-  // ── Animated styles ─────────────────────────────────────────────────────────
+  // ── Success flash ──────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (scanState === 'success') {
+      areaFlash.value = withSequence(
+        withTiming(0.55, { duration: 80, easing: Easing.out(Easing.quad) }),
+        withTiming(0, { duration: 450, easing: Easing.inOut(Easing.quad) }),
+      );
+    }
+  }, [scanState]);
+
+  // ── Animated styles ────────────────────────────────────────────────────────
 
   const lineStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: interpolate(lineY.value, [0, 1], [4, vh - 6]) }],
     opacity: interpolate(lineY.value, [0, 0.08, 0.5, 0.92, 1], [0, 1, 1, 1, 0]),
   }));
 
-  // Trailing glow below the scan line — same position, blurred wider
   const trailStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: interpolate(lineY.value, [0, 1], [4, vh - 6]) }],
     opacity: interpolate(lineY.value, [0, 0.1, 0.5, 0.9, 1], [0, 0.35, 0.35, 0.35, 0]),
@@ -117,11 +147,11 @@ export function ScanViewfinder({
           {/* Success flash overlay */}
           <Animated.View style={[StyleSheet.absoluteFill, styles.flashOverlay, flashStyle]} pointerEvents="none" />
 
-          {/* Horizontal grid lines (subtle) */}
+          {/* Grid lines (subtle) */}
           <View pointerEvents="none" style={StyleSheet.absoluteFill}>
             {[0.33, 0.66].map((frac) => (
               <View
-                key={frac}
+                key={`h${frac}`}
                 style={{
                   position: 'absolute',
                   left: '5%',
@@ -134,7 +164,7 @@ export function ScanViewfinder({
             ))}
             {[0.33, 0.66].map((frac) => (
               <View
-                key={frac}
+                key={`v${frac}`}
                 style={{
                   position: 'absolute',
                   top: '5%',
@@ -149,13 +179,13 @@ export function ScanViewfinder({
 
           {/* ── Corner brackets ── */}
           <Animated.View style={[StyleSheet.absoluteFill, cornerStyle]} pointerEvents="none">
-            <Corner pos="tl" vw={vw} vh={vh} />
-            <Corner pos="tr" vw={vw} vh={vh} />
-            <Corner pos="bl" vw={vw} vh={vh} />
-            <Corner pos="br" vw={vw} vh={vh} />
+            <Corner pos="tl" />
+            <Corner pos="tr" />
+            <Corner pos="bl" />
+            <Corner pos="br" />
           </Animated.View>
 
-          {/* ── Scan-line trail (wider, softer, same Y) ── */}
+          {/* ── Scan-line trail ── */}
           <Animated.View
             style={[styles.scanTrail, { left: '4%', right: '4%' }, trailStyle]}
             pointerEvents="none"
@@ -190,7 +220,7 @@ export function ScanViewfinder({
       <View style={styles.hintPill} pointerEvents="none">
         <View style={[styles.hintDot, { backgroundColor: ACCENT }]} />
         <Text style={[styles.hintText, isDesktop && { fontSize: 13 }]}>
-          Apunta el código al recuadro
+          {isLandscape ? 'Align barcode in frame' : 'Point the code at the frame'}
         </Text>
       </View>
     </View>
@@ -199,7 +229,7 @@ export function ScanViewfinder({
 
 // ─── Corner bracket sub-component ────────────────────────────────────────────
 
-function Corner({ pos, vw, vh }: { pos: 'tl' | 'tr' | 'bl' | 'br'; vw: number; vh: number }) {
+function Corner({ pos }: { pos: 'tl' | 'tr' | 'bl' | 'br' }) {
   const isTop    = pos === 'tl' || pos === 'tr';
   const isLeft   = pos === 'tl' || pos === 'bl';
   const radius   = 4;

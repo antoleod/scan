@@ -49,23 +49,26 @@ export default function App() {
     const body = document.body;
     const root = document.getElementById('root');
 
+    const dvh = typeof CSS !== 'undefined' && CSS.supports?.('height', '100dvh');
+    const fullH = dvh ? '100dvh' : '100%';
+
     html.style.width = '100%';
-    html.style.height = '100%';
+    html.style.height = fullH;
     html.style.margin = '0';
-    html.style.overflowX = 'hidden';
+    html.style.overflow = 'hidden';
     html.style.backgroundColor = '#070d1b';
 
     body.style.width = '100%';
-    body.style.height = '100%';
+    body.style.height = fullH;
     body.style.margin = '0';
-    body.style.overflowX = 'hidden';
+    body.style.overflow = 'hidden';
     body.style.backgroundColor = '#070d1b';
 
     if (root) {
       root.style.width = '100%';
-      root.style.height = '100%';
-      root.style.minHeight = '100%';
-      root.style.overflowX = 'hidden';
+      root.style.height = fullH;
+      root.style.minHeight = fullH;
+      root.style.overflow = 'hidden';
       root.style.backgroundColor = '#070d1b';
     }
   }, []);

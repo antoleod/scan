@@ -1,5 +1,5 @@
-﻿import React from 'react';
-import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import React from 'react';
+import { ActivityIndicator, Image, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { CameraView } from 'expo-camera';
 import type { BarcodeType } from 'expo-camera';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
@@ -89,9 +89,8 @@ export function ScanTab({
   laserDuration: number;
   onBarcodeScanned: (data: string) => void;
 }) {
-  const { height, width } = useWindowDimensions();
+  const { width } = useWindowDimensions();
   const isDesktop = width >= 1024;
-  const cameraHeight = isDesktop ? Math.max(420, Math.round(height * 0.58)) : Math.max(320, Math.round(height * 0.65));
   const [toastVisible, setToastVisible] = React.useState(false);
   const lastCameraEventRef = React.useRef<{ data: string; ts: number }>({ data: '', ts: 0 });
   const toastY = useSharedValue(60);
@@ -124,48 +123,69 @@ export function ScanTab({
   }));
 
   return (
-    <ScrollView style={styles.root} contentContainerStyle={[styles.scrollContent, isDesktop ? styles.scrollContentDesktop : null]} showsVerticalScrollIndicator={false} bounces>
-      <ScanFeedbackBanner feedback={scanFeedback} />
-      <Animated.View style={[styles.toastTop, isDesktop ? styles.toastTopDesktop : null, toastStyle]}>
-        <Text style={styles.toastTitle}>Scanning is taking longer than expected</Text>
-        <Text style={styles.toastSubtitle}>Capture a photo to extract the code quickly.</Text>
-        <Pressable style={styles.toastBtn} onPress={onTakePicture} disabled={manualCaptureBusy}>
-          {manualCaptureBusy ? <ActivityIndicator size="small" color={C.accent} /> : <Text style={styles.toastBtnText}>Take photo</Text>}
-        </Pressable>
-      </Animated.View>
-      {!cameraPermissionGranted ? (
-        <View style={styles.permissionBox}>
-          <Text style={styles.permissionText}>Camera permission required</Text>
-          <Pressable style={styles.allowBtn} onPress={requestCameraPermission}>
-            <Ionicons name="camera-outline" size={16} color="#fff" />
-            <Text style={styles.allowBtnText}>Allow camera</Text>
-          </Pressable>
-        </View>
-      ) : (
-        <View style={[styles.cameraArea, isDesktop ? styles.cameraAreaDesktop : null, { height: cameraHeight }]}>
-          <CameraView
-            ref={cameraRef}
-            style={[styles.camera, isCompactLayout ? styles.cameraCompact : null]}
-            facing="back"
-            autofocus="on"
-            active={cameraActive}
-            enableTorch={torchEnabled}
-            ratio="4:3"
-            barcodeScannerSettings={{ barcodeTypes: cameraBarcodeTypes }}
-            onCameraReady={onCameraReady}
-            onBarcodeScanned={(event) => {
-              const now = Date.now();
-              const value = String(event.data || '');
-              if (!value) return;
-              if (value === lastCameraEventRef.current.data && now - lastCameraEventRef.current.ts < 150) return;  // was 300
-              lastCameraEventRef.current = { data: value, ts: now };
-              onBarcodeScanned(event.data);
-            }}
-          />
-          <ScanViewfinder torchEnabled={torchEnabled} onToggleTorch={onToggleTorch} isDesktop={isDesktop} />
-        </View>
-      )}
+    <View style={styles.root}>
+      {/* ── Camera area (flex: 1, fills available space) ── */}
+      <View style={[styles.cameraWrapper, isDesktop ? styles.cameraWrapperDesktop : null]}>
+        {!cameraPermissionGranted ? (
+          <View style={styles.permissionBox}>
+            <Ionicons name="camera-outline" size={48} color={C.muted} style={{ marginBottom: 8 }} />
+            <Text style={styles.permissionText}>Camera permission required</Text>
+            <Pressable style={styles.allowBtn} onPress={requestCameraPermission}>
+              <Ionicons name="camera-outline" size={16} color="#fff" />
+              <Text style={styles.allowBtnText}>Allow camera</Text>
+            </Pressable>
+          </View>
+        ) : (
+          <>
+            {/* Camera preview — fills the wrapper */}
+            <CameraView
+              ref={cameraRef}
+              style={styles.camera}
+              facing="back"
+              autofocus="on"
+              active={cameraActive}
+              enableTorch={torchEnabled}
+              ratio="4:3"
+              barcodeScannerSettings={{ barcodeTypes: cameraBarcodeTypes }}
+              onCameraReady={onCameraReady}
+              onBarcodeScanned={(event) => {
+                const now = Date.now();
+                const value = String(event.data || '');
+                if (!value) return;
+                if (value === lastCameraEventRef.current.data && now - lastCameraEventRef.current.ts < 150) return;
+                lastCameraEventRef.current = { data: value, ts: now };
+                onBarcodeScanned(event.data);
+              }}
+            />
 
+            {/* Scan overlay with viewfinder */}
+            <ScanViewfinder
+              torchEnabled={torchEnabled}
+              onToggleTorch={onToggleTorch}
+              scanState={scanState}
+            />
+
+            {/* Feedback banner overlaid on camera (top) */}
+            <View style={styles.feedbackOverlay} pointerEvents="box-none">
+              <ScanFeedbackBanner feedback={scanFeedback} />
+            </View>
+
+            {/* Manual capture toast overlaid on camera (bottom) */}
+            <Animated.View
+              style={[styles.toastOverlay, isDesktop ? styles.toastOverlayDesktop : null, toastStyle]}
+              pointerEvents={toastVisible ? 'auto' : 'none'}
+            >
+              <Text style={styles.toastTitle}>Scanning is taking longer than expected</Text>
+              <Text style={styles.toastSubtitle}>Capture a photo to extract the code quickly.</Text>
+              <Pressable style={styles.toastBtn} onPress={onTakePicture} disabled={manualCaptureBusy}>
+                {manualCaptureBusy ? <ActivityIndicator size="small" color={C.accent} /> : <Text style={styles.toastBtnText}>Take photo</Text>}
+              </Pressable>
+            </Animated.View>
+          </>
+        )}
+      </View>
+
+      {/* ── Bottom panel (fixed, always visible) ── */}
       <View style={[styles.bottomPanel, isDesktop ? styles.bottomPanelDesktop : null]}>
         <View style={styles.scanStatusRow}>
           <View style={[styles.scanDot, { backgroundColor: cameraActive ? '#22c55e' : C.muted }]} />
@@ -200,9 +220,8 @@ export function ScanTab({
             </Pressable>
           </View>
         ) : null}
-
       </View>
-    </ScrollView>
+    </View>
   );
 }
 
@@ -211,13 +230,54 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: C.bg,
   },
-  scrollContent: {
-    flexGrow: 1,
+
+  // ── Camera wrapper: flex: 1 fills remaining space ──
+  cameraWrapper: {
+    flex: 1,
+    backgroundColor: '#000',
+    overflow: 'hidden',
+    minHeight: 200,
   },
-  scrollContentDesktop: {
-    paddingHorizontal: 12,
-    paddingBottom: 18,
+  cameraWrapperDesktop: {
+    alignSelf: 'center',
+    width: '100%',
+    maxWidth: 920,
+    borderRadius: 20,
+    marginTop: 4,
   },
+  camera: {
+    ...StyleSheet.absoluteFillObject,
+  },
+
+  // ── Overlays on top of camera ──
+  feedbackOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 10,
+  },
+  toastOverlay: {
+    position: 'absolute',
+    bottom: 16,
+    left: 16,
+    right: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: C.toastBorder,
+    backgroundColor: C.toast,
+    padding: 12,
+    gap: 8,
+    zIndex: 10,
+  },
+  toastOverlayDesktop: {
+    alignSelf: 'center',
+    maxWidth: 460,
+    left: 'auto' as any,
+    right: 'auto' as any,
+  },
+
+  // ── Permission state ──
   permissionBox: {
     flex: 1,
     alignItems: 'center',
@@ -244,22 +304,8 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     fontSize: 13,
   },
-  cameraArea: {
-    width: '100%',
-    backgroundColor: '#000',
-    overflow: 'hidden',
-  },
-  cameraAreaDesktop: {
-    alignSelf: 'center',
-    maxWidth: 920,
-    borderRadius: 20,
-  },
-  camera: {
-    ...StyleSheet.absoluteFillObject,
-  },
-  cameraCompact: {
-    minHeight: 260,
-  },
+
+  // ── Bottom panel: auto height, always visible ──
   bottomPanel: {
     flexGrow: 0,
     flexShrink: 0,
@@ -271,7 +317,7 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     width: '100%',
     maxWidth: 920,
-    marginTop: 12,
+    marginTop: 4,
     borderRadius: 20,
     overflow: 'hidden',
   },
@@ -292,27 +338,11 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
   },
-  toastTop: {
-    marginHorizontal: 16,
-    marginTop: 12,
-    marginBottom: 8,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: C.toastBorder,
-    backgroundColor: C.toast,
-    padding: 12,
-    gap: 8,
-  },
-  toastTopDesktop: {
-    alignSelf: 'center',
-    width: '100%',
-    maxWidth: 920,
-  },
   modeRow: {
     flexDirection: 'row',
     gap: 8,
     marginHorizontal: 16,
-    marginBottom: 12,
+    marginBottom: 4,
   },
   modeBtn: {
     flex: 1,
@@ -344,7 +374,7 @@ const styles = StyleSheet.create({
   },
   previewCard: {
     marginHorizontal: 16,
-    marginBottom: 10,
+    marginTop: 8,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: C.border,
@@ -405,4 +435,3 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 });
-
