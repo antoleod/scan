@@ -1,5 +1,5 @@
-﻿import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, FlatList, Linking, Modal, Platform, Pressable, ScrollView, Text, TextInput, View, useWindowDimensions } from 'react-native';
+﻿import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Alert, Animated, FlatList, Linking, Modal, PanResponder, Platform, Pressable, ScrollView, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 
@@ -16,6 +16,225 @@ const HIDDEN_BY_DEFAULT = ['PI', 'RITM', 'REQ'];
 
 function formatType(type: string) {
   return String(type || '').trim().toUpperCase() || 'OTHER';
+}
+
+// ─── Swipe-to-delete constants ────────────────────────────────────────────────
+const SWIPE_WIDTH = 80;
+const SWIPE_THRESHOLD = 40;
+
+// ─── HistoryItemCard ──────────────────────────────────────────────────────────
+// Wraps each history item with swipe-left gesture to reveal a delete button,
+// mirroring the NoteCard swipe pattern.
+function HistoryItemCard({
+  item,
+  palette,
+  columns,
+  showActionLabels,
+  isSelected,
+  isCopied,
+  isExpanded,
+  onPress,
+  onLongPress,
+  onCopy,
+  onEdit,
+  onToggleUsed,
+  onDelete,
+  onOpenBarcode,
+  onToggleExpand,
+  visibleScanType,
+}: {
+  item: ScanRecord;
+  palette: Palette;
+  columns: number;
+  showActionLabels: boolean;
+  isSelected: boolean;
+  isCopied: boolean;
+  isExpanded: boolean;
+  onPress: () => void;
+  onLongPress: () => void;
+  onCopy: () => void;
+  onEdit: () => void;
+  onToggleUsed: () => void;
+  onDelete: () => void;
+  onOpenBarcode: (value: string, codeType?: 'pi' | 'office' | 'other') => void;
+  onToggleExpand: () => void;
+  visibleScanType: (type: string) => string;
+}) {
+  const swipeOpenRef = useRef(false);
+  const swipeOffsetRef = useRef(0);
+  const translateX = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    swipeOffsetRef.current = 0;
+    swipeOpenRef.current = false;
+    translateX.setValue(0);
+  }, [item.id]);
+
+  const closeSwipe = useCallback(() => {
+    swipeOffsetRef.current = 0;
+    swipeOpenRef.current = false;
+    Animated.spring(translateX, { toValue: 0, useNativeDriver: true, tension: 90, friction: 13 }).start();
+  }, [translateX]);
+
+  const openSwipe = useCallback(() => {
+    swipeOffsetRef.current = -SWIPE_WIDTH;
+    swipeOpenRef.current = true;
+    Animated.spring(translateX, { toValue: -SWIPE_WIDTH, useNativeDriver: true, tension: 90, friction: 13 }).start();
+  }, [translateX]);
+
+  const panResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => false,
+        onMoveShouldSetPanResponder: (_, gs) => {
+          const isHorizontal = Math.abs(gs.dx) > 8 && Math.abs(gs.dx) > Math.abs(gs.dy) * 1.5;
+          if (!isHorizontal) return false;
+          return swipeOpenRef.current ? true : gs.dx < 0;
+        },
+        onPanResponderGrant: () => { translateX.stopAnimation(); },
+        onPanResponderMove: (_, gs) => {
+          const raw = swipeOffsetRef.current + gs.dx;
+          translateX.setValue(Math.max(-SWIPE_WIDTH, Math.min(0, raw)));
+        },
+        onPanResponderRelease: (_, gs) => {
+          const raw = swipeOffsetRef.current + gs.dx;
+          if (raw < -SWIPE_THRESHOLD) openSwipe();
+          else closeSwipe();
+        },
+        onPanResponderTerminate: () => closeSwipe(),
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
+
+  const used = Boolean(item.used);
+  const typeLabel = formatType(visibleScanType(item.type));
+  const isUrl = item.codeNormalized.startsWith('http://') || item.codeNormalized.startsWith('https://');
+  const barcodeValue = item.codeValue || item.codeNormalized;
+  const userValue = item.label || item.customLabel || '-';
+  const ticketValue = item.ticketNumber || '-';
+  const piValue = item.codeType === 'pi' || typeLabel === 'PI' ? barcodeValue : '';
+  const officeValue = item.officeCode || (item.codeType === 'office' || typeLabel === 'OFFICE' ? barcodeValue : '');
+  const notesValue = item.notes || '-';
+
+  return (
+    <View
+      style={[
+        mainAppStyles.card,
+        mainAppStyles.cardContained,
+        { backgroundColor: palette.card, borderColor: isSelected ? palette.accent : palette.border, borderWidth: isSelected ? 2 : 1, marginBottom: 0, padding: 0 },
+        columns > 1 ? { flex: 1, minWidth: 0 } : null,
+      ]}
+    >
+      {/* Delete panel — revealed by swiping left */}
+      <View
+        style={{
+          position: 'absolute',
+          right: 0,
+          top: 0,
+          bottom: 0,
+          width: SWIPE_WIDTH,
+          zIndex: 1,
+        }}
+      >
+        <Pressable
+          onPress={() => { closeSwipe(); onDelete(); }}
+          style={({ pressed }) => ({
+            flex: 1,
+            backgroundColor: pressed ? '#991b1b' : '#dc2626',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 4,
+            borderTopRightRadius: 12,
+            borderBottomRightRadius: 12,
+          })}
+        >
+          <Ionicons name="trash-outline" size={18} color="#fff" />
+          <Text style={{ color: '#fff', fontSize: 9, fontWeight: '900', letterSpacing: 0.8 }}>DELETE</Text>
+        </Pressable>
+      </View>
+
+      {/* Card content — slides left to reveal delete panel */}
+      <Animated.View
+        pointerEvents="box-none"
+        style={{ transform: [{ translateX }], zIndex: 2, backgroundColor: palette.card, borderRadius: 12, overflow: 'hidden' }}
+        {...panResponder.panHandlers}
+      >
+        <View style={{ padding: 12 }}>
+          <Pressable
+            onPress={() => {
+              if (swipeOpenRef.current) { closeSwipe(); return; }
+              onPress();
+            }}
+            onLongPress={onLongPress}
+            style={({ pressed }) => ({ opacity: pressed ? 0.8 : 1 })}
+          >
+            <View style={{ gap: 6 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Text style={{ color: palette.fg, fontSize: 13, fontWeight: '700', flex: 1 }} numberOfLines={1}>{userValue}</Text>
+                <Text style={{ color: palette.muted, fontSize: 12, fontWeight: '700' }} numberOfLines={1}>{ticketValue}</Text>
+              </View>
+
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Pressable disabled={!piValue} onPress={() => piValue ? Clipboard.setStringAsync(piValue) : undefined}>
+                  <Text style={{ color: piValue ? palette.accent : palette.muted, fontSize: 12, fontWeight: '800' }} numberOfLines={1}>{piValue || '-'}</Text>
+                </Pressable>
+                <Pressable disabled={!piValue} onPress={() => onOpenBarcode(piValue, 'pi')}>
+                  <Ionicons name="barcode-outline" size={14} color={piValue ? palette.fg : palette.muted} />
+                </Pressable>
+              </View>
+
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Text style={{ color: officeValue ? palette.fg : palette.muted, fontSize: 12, fontWeight: '700', flex: 1 }} numberOfLines={1}>{officeValue || '-'}</Text>
+                <Pressable disabled={!officeValue} onPress={() => onOpenBarcode(officeValue, 'office')}>
+                  <Ionicons name="barcode-outline" size={14} color={officeValue ? palette.fg : palette.muted} />
+                </Pressable>
+              </View>
+
+              {isExpanded ? <Text style={{ color: palette.fg, fontSize: 12, lineHeight: 17 }}>{notesValue}</Text> : null}
+              <Pressable
+                onPress={onToggleExpand}
+                style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-start', opacity: pressed ? 0.7 : 1 })}
+              >
+                <Ionicons name={isExpanded ? 'chevron-up-outline' : 'chevron-down-outline'} size={12} color={palette.accent} />
+                <Text style={{ color: palette.accent, fontSize: 11, fontWeight: '700' }}>{isExpanded ? 'Less' : 'More'}</Text>
+              </Pressable>
+            </View>
+
+            <View style={mainAppStyles.itemMetaRow}>
+              <View style={[mainAppStyles.typeBadge, { backgroundColor: `${palette.accent}22` }]}>
+                <Text style={{ color: palette.fg, fontSize: 12, fontWeight: '800' }}>{typeLabel}</Text>
+              </View>
+              <View style={[mainAppStyles.statusChip, { backgroundColor: used ? 'rgba(120, 130, 145, 0.18)' : 'rgba(34, 197, 94, 0.18)' }]}>
+                <View style={[mainAppStyles.statusDot, { backgroundColor: used ? '#93a1b5' : '#22c55e' }]} />
+                <Text style={{ color: used ? palette.muted : '#22c55e', fontSize: 12, fontWeight: '700' }}>{used ? 'Used' : 'Ready'}</Text>
+              </View>
+              {isCopied ? <Text style={{ color: palette.accent, fontSize: 12, fontWeight: '700' }}>Copied</Text> : null}
+            </View>
+          </Pressable>
+
+          <View style={[mainAppStyles.itemActions, { alignItems: 'center' }]}>
+            <Pressable style={({ pressed }) => [mainAppStyles.tinyBtn, { borderColor: palette.border, flexDirection: 'row', alignItems: 'center', gap: 6, opacity: pressed ? 0.75 : 1 }]} onPress={onCopy}>
+              <Ionicons name="copy-outline" size={14} color={palette.fg} />
+              {showActionLabels ? <Text style={{ color: palette.fg, fontSize: 11, fontWeight: '700' }}>Copy</Text> : null}
+            </Pressable>
+            <Pressable style={({ pressed }) => [mainAppStyles.tinyBtn, { borderColor: palette.border, flexDirection: 'row', alignItems: 'center', gap: 6, opacity: pressed ? 0.75 : 1 }]} onPress={onEdit}>
+              <Ionicons name="create-outline" size={14} color={palette.fg} />
+              {showActionLabels ? <Text style={{ color: palette.fg, fontSize: 11, fontWeight: '700' }}>Edit</Text> : null}
+            </Pressable>
+            <Pressable style={({ pressed }) => [mainAppStyles.tinyBtn, { borderColor: palette.border, flexDirection: 'row', alignItems: 'center', gap: 6, opacity: pressed ? 0.75 : 1 }]} onPress={onToggleUsed}>
+              <Ionicons name={used ? 'checkmark-circle-outline' : 'ellipse-outline'} size={14} color={palette.fg} />
+              {showActionLabels ? <Text style={{ color: palette.fg, fontSize: 11, fontWeight: '700' }}>{used ? 'Unuse' : 'Use'}</Text> : null}
+            </Pressable>
+            <Pressable style={({ pressed }) => [mainAppStyles.tinyBtn, { borderColor: palette.border, flexDirection: 'row', alignItems: 'center', gap: 6, opacity: pressed ? 0.75 : 1 }]} onPress={onDelete}>
+              <Ionicons name="trash-outline" size={14} color="#ef4444" />
+              {showActionLabels ? <Text style={{ color: '#ef4444', fontSize: 11, fontWeight: '700' }}>Delete</Text> : null}
+            </Pressable>
+          </View>
+        </View>
+      </Animated.View>
+    </View>
+  );
 }
 
 export function HistoryTab({
@@ -223,110 +442,40 @@ export function HistoryTab({
           </View>
         )}
         renderItem={({ item }) => {
-          const isSelected = selection.has(item.id);
           const isUrl = item.codeNormalized.startsWith('http://') || item.codeNormalized.startsWith('https://');
-          const typeLabel = formatType(visibleScanType(item.type));
-          const used = Boolean(item.used);
-          const barcodeValue = item.codeValue || item.codeNormalized;
-          const userValue = item.label || item.customLabel || '-';
-          const ticketValue = item.ticketNumber || '-';
-          const piValue = item.codeType === 'pi' || typeLabel === 'PI' ? barcodeValue : '';
-          const officeValue = item.officeCode || (item.codeType === 'office' || typeLabel === 'OFFICE' ? barcodeValue : '');
-          const notesValue = item.notes || '-';
-          const expanded = expandedId === item.id;
-
-          const handlePress = () => {
-            if (isUrl && selection.size === 0) {
-              Alert.alert('Open Link', `Do you want to open this URL?\n\n${item.codeNormalized}`, [
-                { text: 'Cancel', style: 'cancel' },
-                { text: 'Open', onPress: async () => { if (await Linking.canOpenURL(item.codeNormalized)) await Linking.openURL(item.codeNormalized); } },
-              ]);
-            } else if (selection.size > 0) {
-              onToggleSelection(item.id);
-            }
-          };
-
           return (
-            <View
-              style={[
-                mainAppStyles.card,
-                mainAppStyles.cardContained,
-                { backgroundColor: palette.card, borderColor: palette.border, marginBottom: 0 },
-                columns > 1 ? { flex: 1, minWidth: 0 } : null,
-                isSelected && { borderColor: palette.accent, borderWidth: 2 },
-              ]}
-            >
-              <Pressable onPress={handlePress} onLongPress={() => onLongPressSelection(item.id)} style={({ pressed }) => ({ opacity: pressed ? 0.8 : 1 })}>
-                <View style={{ gap: 6 }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                    <Text style={{ color: palette.fg, fontSize: 13, fontWeight: '700', flex: 1 }} numberOfLines={1}>{userValue}</Text>
-                    <Text style={{ color: palette.muted, fontSize: 12, fontWeight: '700' }} numberOfLines={1}>{ticketValue}</Text>
-                  </View>
-
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                    <Pressable disabled={!piValue} onPress={() => piValue ? Clipboard.setStringAsync(piValue) : undefined}>
-                      <Text style={{ color: piValue ? palette.accent : palette.muted, fontSize: 12, fontWeight: '800' }} numberOfLines={1}>{piValue || '-'}</Text>
-                    </Pressable>
-                    <Pressable disabled={!piValue} onPress={() => onOpenBarcode(piValue, 'pi')}>
-                      <Ionicons name="barcode-outline" size={14} color={piValue ? palette.fg : palette.muted} />
-                    </Pressable>
-                  </View>
-
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                    <Text style={{ color: officeValue ? palette.fg : palette.muted, fontSize: 12, fontWeight: '700', flex: 1 }} numberOfLines={1}>{officeValue || '-'}</Text>
-                    <Pressable disabled={!officeValue} onPress={() => onOpenBarcode(officeValue, 'office')}>
-                      <Ionicons name="barcode-outline" size={14} color={officeValue ? palette.fg : palette.muted} />
-                    </Pressable>
-                  </View>
-
-                  {expanded ? <Text style={{ color: palette.fg, fontSize: 12, lineHeight: 17 }}>{notesValue}</Text> : null}
-                  <Pressable onPress={() => setExpandedId(expanded ? null : item.id)} style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-start', opacity: pressed ? 0.7 : 1 })}>
-                    <Ionicons name={expanded ? 'chevron-up-outline' : 'chevron-down-outline'} size={12} color={palette.accent} />
-                    <Text style={{ color: palette.accent, fontSize: 11, fontWeight: '700' }}>{expanded ? 'Less' : 'More'}</Text>
-                  </Pressable>
-                </View>
-
-                <View style={mainAppStyles.itemMetaRow}>
-                  <View style={[mainAppStyles.typeBadge, { backgroundColor: `${palette.accent}22` }]}>
-                    <Text style={{ color: palette.fg, fontSize: 12, fontWeight: '800' }}>{typeLabel}</Text>
-                  </View>
-                  <View style={[mainAppStyles.statusChip, { backgroundColor: used ? 'rgba(120, 130, 145, 0.18)' : 'rgba(34, 197, 94, 0.18)' }]}>
-                    <View style={[mainAppStyles.statusDot, { backgroundColor: used ? '#93a1b5' : '#22c55e' }]} />
-                    <Text style={{ color: used ? palette.muted : '#22c55e', fontSize: 12, fontWeight: '700' }}>{used ? 'Used' : 'Ready'}</Text>
-                  </View>
-                  {copiedId === item.id ? <Text style={{ color: palette.accent, fontSize: 12, fontWeight: '700' }}>Copied</Text> : null}
-                </View>
-              </Pressable>
-
-              <View style={[mainAppStyles.itemActions, { alignItems: 'center' }]}>
-                <Pressable style={({ pressed }) => [mainAppStyles.tinyBtn, { borderColor: palette.border, flexDirection: 'row', alignItems: 'center', gap: 6, opacity: pressed ? 0.75 : 1 }]} onPress={() => copyValue(item)}>
-                  <Ionicons name="copy-outline" size={14} color={palette.fg} />
-                  {showActionLabels ? <Text style={{ color: palette.fg, fontSize: 11, fontWeight: '700' }}>Copy</Text> : null}
-                </Pressable>
-                <Pressable
-                  style={({ pressed }) => [mainAppStyles.tinyBtn, { borderColor: palette.border, flexDirection: 'row', alignItems: 'center', gap: 6, opacity: pressed ? 0.75 : 1 }]}
-                  onPress={() => {
-                    if (editLockRef.current) return;
-                    editLockRef.current = true;
-                    onEditItem(item);
-                    setTimeout(() => {
-                      editLockRef.current = false;
-                    }, 260);
-                  }}
-                >
-                  <Ionicons name="create-outline" size={14} color={palette.fg} />
-                  {showActionLabels ? <Text style={{ color: palette.fg, fontSize: 11, fontWeight: '700' }}>Edit</Text> : null}
-                </Pressable>
-                <Pressable style={({ pressed }) => [mainAppStyles.tinyBtn, { borderColor: palette.border, flexDirection: 'row', alignItems: 'center', gap: 6, opacity: pressed ? 0.75 : 1 }]} onPress={() => onToggleUsed(item.id)}>
-                  <Ionicons name={used ? 'checkmark-circle-outline' : 'ellipse-outline'} size={14} color={palette.fg} />
-                  {showActionLabels ? <Text style={{ color: palette.fg, fontSize: 11, fontWeight: '700' }}>{used ? 'Unuse' : 'Use'}</Text> : null}
-                </Pressable>
-                <Pressable style={({ pressed }) => [mainAppStyles.tinyBtn, { borderColor: palette.border, flexDirection: 'row', alignItems: 'center', gap: 6, opacity: pressed ? 0.75 : 1 }]} onPress={() => confirmDelete(item)}>
-                  <Ionicons name="trash-outline" size={14} color={palette.fg} />
-                  {showActionLabels ? <Text style={{ color: palette.fg, fontSize: 11, fontWeight: '700' }}>Delete</Text> : null}
-                </Pressable>
-              </View>
-            </View>
+            <HistoryItemCard
+              item={item}
+              palette={palette}
+              columns={columns}
+              showActionLabels={showActionLabels}
+              isSelected={selection.has(item.id)}
+              isCopied={copiedId === item.id}
+              isExpanded={expandedId === item.id}
+              visibleScanType={visibleScanType}
+              onPress={() => {
+                if (isUrl && selection.size === 0) {
+                  Alert.alert('Open Link', `Do you want to open this URL?\n\n${item.codeNormalized}`, [
+                    { text: 'Cancel', style: 'cancel' },
+                    { text: 'Open', onPress: async () => { if (await Linking.canOpenURL(item.codeNormalized)) await Linking.openURL(item.codeNormalized); } },
+                  ]);
+                } else if (selection.size > 0) {
+                  onToggleSelection(item.id);
+                }
+              }}
+              onLongPress={() => onLongPressSelection(item.id)}
+              onCopy={() => copyValue(item)}
+              onEdit={() => {
+                if (editLockRef.current) return;
+                editLockRef.current = true;
+                onEditItem(item);
+                setTimeout(() => { editLockRef.current = false; }, 260);
+              }}
+              onToggleUsed={() => onToggleUsed(item.id)}
+              onDelete={() => confirmDelete(item)}
+              onOpenBarcode={onOpenBarcode}
+              onToggleExpand={() => setExpandedId(expandedId === item.id ? null : item.id)}
+            />
           );
         }}
       />

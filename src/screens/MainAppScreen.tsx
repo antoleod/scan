@@ -67,6 +67,14 @@ import { SelectionFooter } from '../components/mainApp/SelectionFooter';
 import { SettingsTab } from '../components/mainApp/tabs/SettingsTab';
 import { hardDeleteAllNotes, hardDeleteAllTemplates, saveNotes as saveWorkNotes, saveTemplates as saveNoteTemplates } from '../core/notes';
 import { clearClipboardEntries } from '../core/clipboard';
+import { Toast, useToast } from '../components/Toast';
+import {
+  clearAppLocalStorage,
+  clearCacheStorage,
+  clearDomainCookies,
+  openFilePicker,
+  purgeIndexedDBByKeyword,
+} from '../core/dataSync';
 
 type Tab = 'scan' | 'history' | 'notes' | 'settings';
 type DateFilter = 'ALL' | 'TODAY' | 'WEEK' | 'MONTH';
@@ -171,6 +179,8 @@ function MainApp() {
   const [backupImportVisible, setBackupImportVisible] = useState(false);
   const [backupImportText, setBackupImportText] = useState('');
   const [backupBusy, setBackupBusy] = useState(false);
+
+  const { toast, show: showToast, hide: hideToast } = useToast();
 
   const scanBusyRef = useRef(false);
   const lastPayloadRef = useRef<{ value: string; ts: number }>({ value: '', ts: 0 });
@@ -649,10 +659,7 @@ function MainApp() {
       setBackupImportVisible(false);
       setBackupImportText('');
 
-      Alert.alert(
-        'Import complete',
-        `Settings restored. ${merged.addedHistory} history item(s) added, ${merged.skippedHistory} duplicate(s) skipped.`
-      );
+      showToast(`Import complete — ${merged.addedHistory} added, ${merged.skippedHistory} skipped`, 'success');
       await diag.info('backup.import.ok', {
         label,
         addedHistory: merged.addedHistory,
@@ -660,7 +667,7 @@ function MainApp() {
       });
       return true;
     } catch (error) {
-      Alert.alert('Import error', String(error));
+      showToast(`Import error: ${String(error)}`, 'error');
       await diag.error('backup.import.error', { message: String(error), label });
       return true;
     } finally {
@@ -852,8 +859,10 @@ function MainApp() {
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `oryxen_export_${Date.now()}.csv`;
+      link.download = `oryxen-history-${new Date().toISOString().slice(0, 10)}.csv`;
       link.click();
+      URL.revokeObjectURL(url);
+      showToast(`CSV exported — ${rows.length} record(s)`, 'success');
       return;
     }
 
@@ -886,10 +895,10 @@ function MainApp() {
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `oryxen_backup_${Date.now()}.json`;
+      link.download = `oryxen-backup-${new Date().toISOString().slice(0, 10)}.json`;
       link.click();
       URL.revokeObjectURL(url);
-      await copyTextToClipboard(json, 'Backup JSON copied to clipboard');
+      showToast('Backup downloaded successfully', 'success');
       return;
     }
 
@@ -907,28 +916,28 @@ function MainApp() {
     try {
       const text = await Clipboard.getStringAsync();
       if (!text.trim()) {
-        Alert.alert('Import backup', 'Clipboard is empty.');
+        showToast('Clipboard is empty', 'error');
         return;
       }
       const handled = await importBackupJson(text, 'clipboard');
       if (!handled) {
-        Alert.alert('Import backup', 'Clipboard does not contain a valid backup JSON.');
+        showToast('Clipboard does not contain a valid backup JSON', 'error');
       }
     } catch (error) {
-      Alert.alert('Import backup', String(error));
+      showToast(`Import error: ${String(error)}`, 'error');
     }
   }
 
   async function runBackupImport() {
     const text = backupImportText.trim();
     if (!text) {
-      Alert.alert('Import backup', 'Paste the backup JSON first.');
+      showToast('Paste the backup JSON first', 'error');
       return;
     }
 
     const handled = await importBackupJson(text, 'manual');
     if (!handled) {
-      Alert.alert('Import backup', 'The provided text is not a valid backup JSON.');
+      showToast('The provided text is not a valid backup JSON', 'error');
     }
   }
 
@@ -958,10 +967,16 @@ function MainApp() {
   async function recheckFirebase() {
     try {
       const rt = await recheckFirebaseRuntime();
-      setPersistenceMode(rt.enabled ? 'firebase' : 'local');
-      Alert.alert('Firebase', rt.enabled ? 'Configuration detected' : 'No configuration, local mode');
+      const enabled = rt.enabled;
+      setPersistenceMode(enabled ? 'firebase' : 'local');
+      showToast(
+        enabled
+          ? 'Mode: Authenticated | Persistence: Firebase'
+          : 'Mode: Offline | Persistence: localStorage',
+        enabled ? 'success' : 'info',
+      );
     } catch (error) {
-      Alert.alert('Firebase', `Error recheck: ${String(error)}`);
+      showToast(`Firebase recheck error: ${String(error)}`, 'error');
     }
   }
 
@@ -988,14 +1003,14 @@ function MainApp() {
       setLastSyncedAt(Date.now());
       await diag.info('firebase.sync.ok', { pushed: result.pushed, total: merged.length });
       if (showAlert) {
-        Alert.alert(
-          'Sync',
-          `OK. scans pushed=${result.pushed}, scans total=${merged.length}, notes=${notesSnap.serverNotes.length}, templates=${notesSnap.serverTemplates.length}`
+        showToast(
+          `Synced — ${result.pushed} pushed, ${merged.length} total, ${notesSnap.serverNotes.length} notes`,
+          'success',
         );
       }
     } catch (error) {
       await diag.error('firebase.sync.error', { message: String(error) });
-      if (showAlert) Alert.alert('Sync error', String(error));
+      if (showAlert) showToast(`Sync error: ${String(error)}`, 'error');
     } finally {
       syncBusyRef.current = false;
       setSyncBusy(false);
@@ -1067,20 +1082,31 @@ function MainApp() {
     await saveHistory([]);
     setHistory([]);
     setSelection(new Set());
+
+    // Clear history-related cookies, cache entries, and localStorage keys.
+    clearDomainCookies('history');
+    clearAppLocalStorage('history');
+    await clearCacheStorage('history');
+
     await diag.info('history.cleared');
-    Alert.alert(
-      'History',
+    showToast(
       remoteCleared
-        ? 'Hard delete complete. History was deleted from local cache and cloud.'
-        : 'Local history deleted. Cloud delete failed, check sync/permissions.',
+        ? 'History cleared from local cache and cloud'
+        : 'Local history cleared — cloud delete failed',
+      remoteCleared ? 'success' : 'error',
     );
   }
 
   async function hardDeleteNotesNow() {
     await hardDeleteAllNotes();
     await syncNow(false).catch(() => undefined);
+    // Purge localStorage, cookies, cache, and IndexedDB entries for notes.
+    clearDomainCookies('note');
+    clearAppLocalStorage('note');
+    await clearCacheStorage('note');
+    await purgeIndexedDBByKeyword('note');
     await diag.info('notes.hard_delete');
-    Alert.alert('Notes', 'Hard delete complete. Notes were deleted.');
+    showToast('Notes permanently deleted from all storage layers', 'success');
   }
 
   async function hardDeleteHistoryNow() {
@@ -1096,26 +1122,36 @@ function MainApp() {
     setHistory([]);
     setPendingCaptures([]);
     setSelection(new Set());
+    // Full purge: cookies, localStorage, cache, IndexedDB.
+    clearDomainCookies('history');
+    clearAppLocalStorage('history');
+    await clearCacheStorage('history');
+    await purgeIndexedDBByKeyword('history');
+    await purgeIndexedDBByKeyword('scan');
     await diag.info('history.hard_delete');
-    Alert.alert(
-      'History',
+    showToast(
       remoteCleared
-        ? 'Hard delete complete. History was deleted.'
-        : 'Hard delete local complete. Cloud delete failed, check rules/network.',
+        ? 'History permanently deleted — local and cloud'
+        : 'Local history deleted — cloud delete failed',
+      remoteCleared ? 'success' : 'error',
     );
   }
 
   async function hardDeleteClipboardNow() {
     await clearClipboardEntries();
+    clearAppLocalStorage('clipboard');
+    await purgeIndexedDBByKeyword('clipboard');
     await diag.info('clipboard.hard_delete');
-    Alert.alert('Clipboard', 'Hard delete complete. Clipboard memory was deleted.');
+    showToast('Clipboard permanently deleted from all storage layers', 'success');
   }
 
   async function hardDeleteTemplatesNow() {
     await hardDeleteAllTemplates();
     await syncNow(false).catch(() => undefined);
+    clearAppLocalStorage('template');
+    await purgeIndexedDBByKeyword('template');
     await diag.info('templates.hard_delete');
-    Alert.alert('Templates', 'Hard delete complete. Templates were deleted.');
+    showToast('Templates permanently deleted from all storage layers', 'success');
   }
 
   function resetEntryModal() {
@@ -1499,7 +1535,17 @@ function MainApp() {
               onExportCsv={exportCsv}
               onClearHistory={clearAllHistory}
               onExportBackup={exportBackup}
-              onOpenBackupImport={() => setBackupImportVisible(true)}
+              onOpenBackupImport={async () => {
+                if (Platform.OS === 'web') {
+                  const text = await openFilePicker('.json');
+                  if (text) {
+                    const handled = await importBackupJson(text, 'file');
+                    if (!handled) showToast('Selected file is not a valid backup JSON', 'error');
+                    return;
+                  }
+                }
+                setBackupImportVisible(true);
+              }}
               onRecheckFirebase={recheckFirebase}
               onSyncNow={syncNow}
               onLogout={logout}
@@ -1585,6 +1631,7 @@ function MainApp() {
         onImport={runBackupImport}
         onClose={() => setBackupImportVisible(false)}
       />
+        <Toast toast={toast} onHide={hideToast} />
         <SelectionFooter
           count={selection.size}
           palette={{ accent: palette.accent, card: palette.card, border: palette.border, fg: palette.fg }}
