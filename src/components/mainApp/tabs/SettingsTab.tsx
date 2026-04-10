@@ -114,6 +114,7 @@ export function SettingsTab({
   onLogout,
   syncBusy,
   userEmail,
+  userUidPrefix,
   isGuest,
   persistenceMode,
   visibleBarcodeTypes,
@@ -135,6 +136,7 @@ export function SettingsTab({
   onLogout: () => void;
   syncBusy: boolean;
   userEmail: string | null;
+  userUidPrefix: string | null;
   isGuest: boolean;
   persistenceMode: PersistenceMode;
   visibleBarcodeTypes: string[];
