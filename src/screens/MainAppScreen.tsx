@@ -1071,17 +1071,24 @@ function MainApp() {
   }, [user?.uid, persistenceMode]);
 
   async function clearAllHistory() {
+    // Pre-populate deletedHistoryIdsRef with ALL current IDs before Firestore deletion.
+    // This prevents the real-time onSnapshot listener from merging remaining docs back
+    // into state (and AsyncStorage) while the sequential deletion is still in progress.
+    history.forEach((item) => deletedHistoryIdsRef.current.add(item.id));
+
+    // Clear local state and AsyncStorage immediately so any listener callbacks
+    // that fire during deletion see an empty base to merge against.
+    setHistory([]);
+    setSelection(new Set());
+    await clearHistory();
+    await saveHistory([]);
+
     let remoteCleared = true;
     try {
       await clearScansInFirebase();
     } catch {
       remoteCleared = false;
     }
-
-    await clearHistory();
-    await saveHistory([]);
-    setHistory([]);
-    setSelection(new Set());
 
     // Clear history-related cookies, cache entries, and localStorage keys.
     clearDomainCookies('history');
@@ -1098,8 +1105,10 @@ function MainApp() {
   }
 
   async function hardDeleteNotesNow() {
+    // Do NOT call syncNow after this — syncNow calls fetchNotesFromFirebase which can
+    // serve stale in-memory SDK cache and restore notes we just deleted.
+    // hardDeleteAllNotes already clears AsyncStorage AND calls clearNotesInFirebase.
     await hardDeleteAllNotes();
-    await syncNow(false).catch(() => undefined);
     // Purge localStorage, cookies, cache, and IndexedDB entries for notes.
     clearDomainCookies('note');
     clearAppLocalStorage('note');
@@ -1110,18 +1119,27 @@ function MainApp() {
   }
 
   async function hardDeleteHistoryNow() {
+    // Pre-populate deletedHistoryIdsRef with ALL current IDs before Firestore deletion.
+    // The real-time onSnapshot listener filters by this ref, so without pre-populating it,
+    // each sequential deleteDoc call triggers the listener which merges remaining docs back
+    // into state and AsyncStorage — causing data to survive the delete and reappear on refresh.
+    history.forEach((item) => deletedHistoryIdsRef.current.add(item.id));
+
+    // Clear local state immediately so the listener sees an empty base.
+    setHistory([]);
+    setPendingCaptures([]);
+    setSelection(new Set());
+    await clearHistory();
+    await saveHistory([]);
+    await clearPendingCaptures();
+
     let remoteCleared = true;
     try {
       await clearScansInFirebase();
     } catch {
       remoteCleared = false;
     }
-    await clearHistory();
-    await saveHistory([]);
-    await clearPendingCaptures();
-    setHistory([]);
-    setPendingCaptures([]);
-    setSelection(new Set());
+
     // Full purge: cookies, localStorage, cache, IndexedDB.
     clearDomainCookies('history');
     clearAppLocalStorage('history');
@@ -1146,8 +1164,9 @@ function MainApp() {
   }
 
   async function hardDeleteTemplatesNow() {
+    // Do NOT call syncNow after this — same reason as hardDeleteNotesNow.
+    // hardDeleteAllTemplates already clears AsyncStorage AND calls clearTemplatesInFirebase.
     await hardDeleteAllTemplates();
-    await syncNow(false).catch(() => undefined);
     clearAppLocalStorage('template');
     await purgeIndexedDBByKeyword('template');
     await diag.info('templates.hard_delete');
