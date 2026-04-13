@@ -1,6 +1,24 @@
 import { AppSettings } from '../types';
 
 export type SmartNoteType = 'network' | 'device' | 'office' | 'asset' | 'general';
+export type SmartNoteItemKind = 'checkbox' | 'bullet' | 'numbered';
+
+export type SmartNoteItem = {
+  text: string;
+  checked: boolean;
+  index: number;
+  kind: SmartNoteItemKind;
+};
+
+export type SmartNoteModel = {
+  entityType: SmartNoteType;
+  entities: SmartNoteEntities;
+  hasEntities: boolean;
+  isChecklist: boolean;
+  isList: boolean;
+  items: SmartNoteItem[];
+  rawText: string;
+};
 
 export type SmartNoteEntities = {
   type: SmartNoteType;
@@ -54,4 +72,60 @@ export function detectNoteEntities(text: string, settings: AppSettings): SmartNo
     'general';
 
   return { type, ip, hostname, office, pi };
+}
+
+// ─── List / checklist detection ───────────────────────────────────────────────
+
+const CHECKBOX_RE = /^\s*\[([xX ]?)\]\s*/;
+const BULLET_RE   = /^\s*[-*•]\s+/;
+const NUMBER_RE   = /^\s*\d+[.)]\s+/;
+
+export function buildSmartNoteModel(text: string, entities: SmartNoteEntities): SmartNoteModel {
+  const rawText = String(text || '');
+  const hasEntities = entities.type !== 'general';
+
+  const lines = rawText.split('\n').map((l) => l.trimEnd());
+  const nonEmpty = lines.filter((l) => l.trim().length > 0);
+
+  let isChecklist = false;
+  let isList = false;
+  const items: SmartNoteItem[] = [];
+
+  if (nonEmpty.length >= 2) {
+    let listLineCount = 0;
+    let checkboxCount = 0;
+
+    for (const line of nonEmpty) {
+      if (CHECKBOX_RE.test(line)) { checkboxCount++; listLineCount++; }
+      else if (BULLET_RE.test(line) || NUMBER_RE.test(line)) { listLineCount++; }
+    }
+
+    const ratio = listLineCount / nonEmpty.length;
+    if (ratio >= 0.6) {
+      isList = true;
+      isChecklist = checkboxCount >= 2 || (checkboxCount > 0 && checkboxCount / listLineCount >= 0.5);
+
+      let numIndex = 0;
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        const checkboxMatch = CHECKBOX_RE.exec(line);
+        if (checkboxMatch) {
+          items.push({ text: line.replace(CHECKBOX_RE, '').trim(), checked: checkboxMatch[1].toLowerCase() === 'x', index: numIndex++, kind: 'checkbox' });
+          continue;
+        }
+        if (BULLET_RE.test(line)) {
+          items.push({ text: line.replace(BULLET_RE, '').trim(), checked: false, index: numIndex++, kind: 'bullet' });
+          continue;
+        }
+        if (NUMBER_RE.test(line)) {
+          items.push({ text: line.replace(NUMBER_RE, '').trim(), checked: false, index: numIndex++, kind: 'numbered' });
+          continue;
+        }
+        // Non-list line inside a mostly-list note — treat as plain item
+        items.push({ text: line.trim(), checked: false, index: numIndex++, kind: 'bullet' });
+      }
+    }
+  }
+
+  return { entityType: entities.type, entities, hasEntities, isChecklist, isList, items, rawText };
 }

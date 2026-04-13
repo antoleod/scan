@@ -306,10 +306,38 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
   }
 
   async function pasteImageFromClipboardToDraft() {
+    // Web: prefer native Clipboard API which preserves mime type and avoids black-JPEG issue
+    if (Platform.OS === 'web' && typeof navigator !== 'undefined' && navigator.clipboard?.read) {
+      try {
+        const items = await navigator.clipboard.read();
+        for (const item of items) {
+          const imageType = item.types.find((t) => t.startsWith('image/'));
+          if (imageType) {
+            const blob = await item.getType(imageType);
+            if (blob.size === 0) continue;
+            await new Promise<void>((resolve) => {
+              const reader = new FileReader();
+              reader.onload = () => {
+                const dataUri = String(reader.result || '');
+                if (dataUri) setDraftImages((current) => Array.from(new Set([dataUri, ...current])).slice(0, 6));
+                resolve();
+              };
+              reader.onerror = () => resolve();
+              reader.readAsDataURL(blob);
+            });
+            return;
+          }
+        }
+      } catch {
+        // fallthrough to expo-clipboard
+      }
+    }
+    // Native / fallback: expo-clipboard
     const getImageAsync = (Clipboard as unknown as { getImageAsync?: () => Promise<{ data: string } | null> }).getImageAsync;
     if (!getImageAsync) return;
     const image = await getImageAsync();
     if (!image?.data) return;
+    // expo-clipboard returns raw PNG base64 bytes
     const dataUri = `data:image/png;base64,${image.data}`;
     setDraftImages((current) => Array.from(new Set([dataUri, ...current])).slice(0, 6));
   }

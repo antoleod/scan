@@ -30,6 +30,7 @@ export interface AppSettings {
   historyAutoClearDays: number;
   staySignedIn: boolean;
   savePasswordEncrypted: boolean;
+  showRawText: boolean;
   smartNotes?: SmartNoteSettings;
 }
 

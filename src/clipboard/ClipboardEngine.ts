@@ -174,6 +174,9 @@ export async function compressImage(
           resolve(dataUrl);
           return;
         }
+        // Fill white background before drawing so transparent PNGs don't turn black in JPEG output
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, width, height);
         ctx.drawImage(image, 0, 0, width, height);
         resolve(canvas.toDataURL('image/jpeg', quality));
       } catch {

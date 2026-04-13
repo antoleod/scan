@@ -19,6 +19,7 @@ export const defaultSettings: AppSettings = {
   historyAutoClearDays: 0,
   staySignedIn: true,
   savePasswordEncrypted: false,
+  showRawText: false,
   smartNotes: {
     offices: ['Spinelli', 'Kohl', 'Strasbourg'],
     ipDetectionEnabled: true,
