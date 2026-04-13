@@ -129,3 +129,64 @@ export function buildSmartNoteModel(text: string, entities: SmartNoteEntities): 
 
   return { entityType: entities.type, entities, hasEntities, isChecklist, isList, items, rawText };
 }
+
+// ─── Inline text segmentation (for highlighted rendering) ─────────────────────
+
+export type NoteSegmentKind = 'plain' | 'pi' | 'hostname' | 'ip' | 'office';
+
+export type NoteSegment = {
+  text: string;
+  kind: NoteSegmentKind;
+};
+
+/**
+ * Splits `text` into segments where detected entities are tagged with their kind.
+ * Plain text between entities keeps its original content so the full note context
+ * is always visible — you can see which PI maps to which hostname on the same line.
+ */
+export function segmentNoteText(text: string, entities: SmartNoteEntities): NoteSegment[] {
+  const str = String(text || '');
+  if (!str) return [];
+
+  type Match = { start: number; end: number; kind: NoteSegmentKind };
+  const matches: Match[] = [];
+
+  function findAll(values: string[], kind: NoteSegmentKind) {
+    for (const val of values) {
+      if (!val) continue;
+      const escaped = val.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const re = new RegExp(escaped, 'gi');
+      let m: RegExpExecArray | null;
+      while ((m = re.exec(str)) !== null) {
+        matches.push({ start: m.index, end: m.index + m[0].length, kind });
+      }
+    }
+  }
+
+  findAll(entities.pi,       'pi');
+  findAll(entities.hostname, 'hostname');
+  findAll(entities.ip,       'ip');
+  findAll(entities.office,   'office');
+
+  if (matches.length === 0) return [{ text: str, kind: 'plain' }];
+
+  // Sort by position and drop overlapping matches (keep first / longest)
+  matches.sort((a, b) => a.start - b.start || b.end - a.end);
+  const clean: Match[] = [];
+  let cursor = 0;
+  for (const m of matches) {
+    if (m.start >= cursor) { clean.push(m); cursor = m.end; }
+  }
+
+  // Build interleaved plain + entity segments
+  const segments: NoteSegment[] = [];
+  let pos = 0;
+  for (const m of clean) {
+    if (m.start > pos) segments.push({ text: str.slice(pos, m.start), kind: 'plain' });
+    segments.push({ text: str.slice(m.start, m.end), kind: m.kind });
+    pos = m.end;
+  }
+  if (pos < str.length) segments.push({ text: str.slice(pos), kind: 'plain' });
+
+  return segments;
+}

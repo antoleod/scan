@@ -10,7 +10,7 @@ import {
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { detectNoteEntities, buildSmartNoteModel, SmartNoteEntities, SmartNoteModel } from '../core/smartNotes';
+import { detectNoteEntities, buildSmartNoteModel, segmentNoteText, SmartNoteEntities, SmartNoteModel, NoteSegment } from '../core/smartNotes';
 import { AppSettings } from '../types';
 
 type Palette = {
@@ -647,6 +647,15 @@ export function NoteCard({
   );
 }
 
+// ─── Entity token colors ──────────────────────────────────────────────────────
+
+const ENTITY_COLORS: Record<string, { text: string; bg: string; label: string }> = {
+  pi:       { text: '#FF9F43', bg: 'rgba(255,159,67,0.14)',  label: 'PI' },
+  hostname: { text: '#A970FF', bg: 'rgba(169,112,255,0.14)', label: 'Hostname' },
+  ip:       { text: '#4DA3FF', bg: 'rgba(77,163,255,0.14)',  label: 'IP' },
+  office:   { text: '#4ADE80', bg: 'rgba(74,222,128,0.14)',  label: 'Office' },
+};
+
 // ─── SmartEntityBlock ──────────────────────────────────────────────────────────
 
 function SmartEntityBlock({
@@ -655,12 +664,8 @@ function SmartEntityBlock({
   typeMeta,
   palette,
   expanded,
-  showOriginal,
-  showRawText,
-  onToggleOriginal,
   onPressOffice,
   onCopyValue,
-  preview,
 }: {
   smart: SmartNoteEntities;
   model: SmartNoteModel;
@@ -674,93 +679,94 @@ function SmartEntityBlock({
   onCopyValue: (value: string, label: 'IP' | 'Hostname') => void;
   preview: string;
 }) {
+  // Build segments once per render (text rarely changes)
+  const segments = React.useMemo(() => segmentNoteText(model.rawText, smart), [model.rawText, smart]);
+
+  // Which entity types are present (for the legend)
+  const legendItems = (['pi', 'hostname', 'ip', 'office'] as const).filter(
+    (kind) => smart[kind].length > 0,
+  );
+
+  // Pressing a highlighted token copies its value
+  function handleSegmentPress(seg: NoteSegment) {
+    if (seg.kind === 'ip')       { onCopyValue(seg.text, 'IP'); return; }
+    if (seg.kind === 'hostname') { onCopyValue(seg.text, 'Hostname'); return; }
+    if (seg.kind === 'office')   { onPressOffice(seg.text); return; }
+    // PI — no copy handler available, do nothing
+  }
+
   return (
-    <View style={{ gap: 8 }}>
-      <View style={{
-        borderRadius: 11,
-        borderWidth: 1,
-        borderColor: `${typeMeta.color}5a`,
-        backgroundColor: `${typeMeta.color}1c`,
-        shadowColor: typeMeta.color,
-        shadowOpacity: 0.35,
-        shadowRadius: 10,
-        shadowOffset: { width: 0, height: 0 },
-        elevation: 4,
-        padding: 10,
-        gap: 8,
-      }}>
-        <Text style={{ color: typeMeta.color, fontSize: 13, fontWeight: '800' }}>{typeMeta.title}</Text>
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
-          {smart.ip.length > 0 ? <Text style={{ color: '#4DA3FF', fontSize: 10, fontWeight: '800' }}>IP</Text> : null}
-          {smart.hostname.length > 0 ? <Text style={{ color: '#A970FF', fontSize: 10, fontWeight: '800' }}>Hostname</Text> : null}
-          {smart.office.length > 0 ? <Text style={{ color: '#4ADE80', fontSize: 10, fontWeight: '800' }}>Office</Text> : null}
-          {smart.pi.length > 0 ? <Text style={{ color: '#FF9F43', fontSize: 10, fontWeight: '800' }}>PI</Text> : null}
+    <View style={{ gap: 6 }}>
+      {/* ── Header row: type badge + legend ── */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
+        {/* Type badge */}
+        <View style={{
+          borderRadius: 6,
+          borderWidth: 1,
+          borderColor: `${typeMeta.color}55`,
+          backgroundColor: `${typeMeta.color}18`,
+          paddingHorizontal: 7,
+          paddingVertical: 3,
+        }}>
+          <Text style={{ color: typeMeta.color, fontSize: 10, fontWeight: '800', letterSpacing: 0.3 }}>
+            {typeMeta.title.toUpperCase()}
+          </Text>
         </View>
-        {smart.office.length > 0 ? (
-          <View style={{ gap: 4 }}>
-            <Text style={{ color: palette.textDim, fontSize: 11, fontWeight: '700' }}>Office:</Text>
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
-              {smart.office.map((office) => (
-                <Pressable key={office} onPress={() => onPressOffice(office)}>
-                  <Text style={{ color: '#4ADE80', fontSize: 12, fontWeight: '700' }}>{office}</Text>
-                </Pressable>
-              ))}
+
+        {/* Legend dots */}
+        {legendItems.map((kind) => {
+          const c = ENTITY_COLORS[kind];
+          return (
+            <View key={kind} style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+              <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: c.text }} />
+              <Text style={{ color: palette.textDim, fontSize: 10, fontWeight: '600' }}>{c.label}</Text>
             </View>
-          </View>
-        ) : null}
-        {smart.hostname.length > 0 ? (
-          <View style={{ gap: 4 }}>
-            <Text style={{ color: palette.textDim, fontSize: 11, fontWeight: '700' }}>Hostname:</Text>
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
-              {smart.hostname.map((hostname) => (
-                <Pressable key={hostname} onPress={() => onCopyValue(hostname, 'Hostname')}>
-                  <Text style={{ color: '#A970FF', fontSize: 12, fontWeight: '700' }}>{hostname}</Text>
-                </Pressable>
-              ))}
-            </View>
-          </View>
-        ) : null}
-        {smart.ip.length > 0 ? (
-          <View style={{ gap: 4 }}>
-            <Text style={{ color: palette.textDim, fontSize: 11, fontWeight: '700' }}>IP:</Text>
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
-              {smart.ip.map((ip) => (
-                <Pressable key={ip} onPress={() => onCopyValue(ip, 'IP')}>
-                  <Text style={{ color: '#4DA3FF', fontSize: 12, fontWeight: '700' }}>{ip}</Text>
-                </Pressable>
-              ))}
-            </View>
-          </View>
-        ) : null}
-        {smart.pi.length > 0 ? (
-          <View style={{ gap: 4 }}>
-            <Text style={{ color: palette.textDim, fontSize: 11, fontWeight: '700' }}>PI:</Text>
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
-              {smart.pi.map((pi) => (
-                <Text key={pi} style={{ color: '#FF9F43', fontSize: 12, fontWeight: '700' }}>{pi}</Text>
-              ))}
-            </View>
-          </View>
-        ) : null}
+          );
+        })}
       </View>
 
-      {/* If the note is also a list, render items below the entity block */}
+      {/* ── Highlighted note text ── */}
+      <View style={{
+        borderRadius: 10,
+        borderWidth: 1,
+        borderColor: `${typeMeta.color}28`,
+        backgroundColor: `${typeMeta.color}0a`,
+        padding: 10,
+      }}>
+        <Text style={{ fontSize: 13, lineHeight: 22 }} numberOfLines={expanded ? 0 : 6}>
+          {segments.map((seg, i) => {
+            if (seg.kind === 'plain') {
+              return (
+                <Text key={i} style={{ color: palette.textBody }}>
+                  {seg.text}
+                </Text>
+              );
+            }
+            const c = ENTITY_COLORS[seg.kind];
+            const isInteractive = seg.kind === 'ip' || seg.kind === 'hostname' || seg.kind === 'office';
+            return (
+              <Text
+                key={i}
+                onPress={isInteractive ? () => handleSegmentPress(seg) : undefined}
+                style={{
+                  color: c.text,
+                  backgroundColor: c.bg,
+                  fontWeight: '700',
+                  borderRadius: 3,
+                  // Small padding via letter-spacing trick (RN doesn't support paddingHorizontal on inline Text)
+                  letterSpacing: 0.2,
+                }}
+              >
+                {seg.text}
+              </Text>
+            );
+          })}
+        </Text>
+      </View>
+
+      {/* If the note is also a checklist, show it below */}
       {model.isList && model.items.length > 0 ? (
         <NoteListBlock model={model} palette={palette} expanded={expanded} />
-      ) : null}
-
-      {/* "Show original" toggle — only when showRawText setting is on */}
-      {showRawText ? (
-        <Pressable onPress={onToggleOriginal} hitSlop={8}>
-          <Text style={{ color: palette.textDim, fontSize: 11, fontWeight: '600' }}>
-            {showOriginal ? '▲ Hide original' : '▼ Show original'}
-          </Text>
-        </Pressable>
-      ) : null}
-      {showRawText && showOriginal ? (
-        <Text style={{ color: palette.textMuted, fontSize: 12, lineHeight: 18 }} numberOfLines={expanded ? 0 : 5}>
-          {preview}
-        </Text>
       ) : null}
     </View>
   );
