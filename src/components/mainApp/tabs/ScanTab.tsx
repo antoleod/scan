@@ -6,6 +6,7 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 
 import { ScanState } from '../../../types';
+import type { VoiceState } from '../../../hooks/useVoiceCommands';
 import { ScanFeedbackBanner } from '../ScanFeedbackBanner';
 import { ScanViewfinder } from '../ScanViewfinder';
 
@@ -62,6 +63,13 @@ export function ScanTab({
   laserAnim: _laserAnim,
   laserDuration: _laserDuration,
   onBarcodeScanned,
+  batchMode,
+  batchCount,
+  onToggleBatchMode,
+  onReviewBatch,
+  voiceState,
+  voiceSupported,
+  onToggleVoice,
 }: {
   palette: Palette;
   isCompactLayout: boolean;
@@ -88,6 +96,13 @@ export function ScanTab({
   laserAnim: unknown;
   laserDuration: number;
   onBarcodeScanned: (data: string) => void;
+  batchMode: boolean;
+  batchCount: number;
+  onToggleBatchMode: () => void;
+  onReviewBatch: () => void;
+  voiceState: VoiceState;
+  voiceSupported: boolean;
+  onToggleVoice: () => void;
 }) {
   const { width } = useWindowDimensions();
   const isDesktop = width >= 1024;
@@ -187,10 +202,27 @@ export function ScanTab({
 
       {/* ── Bottom panel (fixed, always visible) ── */}
       <View style={[styles.bottomPanel, isDesktop ? styles.bottomPanelDesktop : null]}>
+
+        {/* ── Batch mode bar ── */}
+        {batchMode ? (
+          <Pressable style={styles.batchBar} onPress={onReviewBatch}>
+            <View style={styles.batchBarLeft}>
+              <Ionicons name="layers" size={14} color={C.accent} />
+              <Text style={styles.batchBarLabel}>
+                Batch{batchCount > 0 ? `: ${batchCount} item${batchCount === 1 ? '' : 's'}` : ' — scanning…'}
+              </Text>
+            </View>
+            <Text style={styles.batchBarReview}>Review →</Text>
+          </Pressable>
+        ) : null}
+
         <View style={styles.scanStatusRow}>
           <View style={[styles.scanDot, { backgroundColor: cameraActive ? '#22c55e' : C.muted }]} />
-          <Text style={styles.scanStatusText}>{cameraActive ? (scanState === 'scanning' || scanState === 'detecting' ? 'Scanning active' : 'Scanner ready') : 'Scanner paused'}</Text>
+          <Text style={styles.scanStatusText}>
+            {cameraActive ? (scanState === 'scanning' || scanState === 'detecting' ? 'Scanning active' : 'Scanner ready') : 'Scanner paused'}
+          </Text>
         </View>
+
         <View style={styles.modeRow}>
           <Pressable style={[styles.modeBtn, styles.modeBtnActive]}>
             <Ionicons name="barcode-outline" size={14} color="#fff" />
@@ -202,8 +234,45 @@ export function ScanTab({
           </Pressable>
           <Pressable style={styles.modeBtn} onPress={onScanFromNfc} disabled={nfcBusy}>
             <MaterialCommunityIcons name="nfc-variant" size={14} color={C.tertiary} />
-            <Text style={[styles.modeText, styles.modeTextTertiary]}>{nfcBusy ? 'Reading...' : nfcReady ? 'NFC' : 'NFC'}</Text>
+            <Text style={[styles.modeText, styles.modeTextTertiary]}>{nfcBusy ? 'Reading...' : 'NFC'}</Text>
           </Pressable>
+
+          {/* Batch toggle */}
+          <Pressable
+            style={[styles.modeBtn, batchMode && styles.modeBtnBatch]}
+            onPress={onToggleBatchMode}
+          >
+            <Ionicons name="layers-outline" size={14} color={batchMode ? C.accent : C.muted} />
+            <Text style={[styles.modeText, batchMode && styles.modeTextBatch]}>Batch</Text>
+          </Pressable>
+
+          {/* Voice mic — only on web where Speech API is available */}
+          {voiceSupported ? (
+            <Pressable
+              style={[
+                styles.modeBtn,
+                voiceState === 'listening' && styles.modeBtnListening,
+                voiceState === 'processing' && styles.modeBtnProcessing,
+              ]}
+              onPress={onToggleVoice}
+            >
+              <Ionicons
+                name={voiceState === 'listening' ? 'mic' : 'mic-outline'}
+                size={14}
+                color={
+                  voiceState === 'listening' ? '#ef4444'
+                  : voiceState === 'processing' ? C.accent
+                  : C.muted
+                }
+              />
+              <Text style={[
+                styles.modeText,
+                voiceState === 'listening' && styles.modeTextListening,
+              ]}>
+                {voiceState === 'listening' ? 'Listening' : voiceState === 'processing' ? 'Processing' : 'Voice'}
+              </Text>
+            </Pressable>
+          ) : null}
         </View>
 
         {imageScanPreviewUri ? (
@@ -433,5 +502,55 @@ const styles = StyleSheet.create({
     color: C.accent,
     fontSize: 12,
     fontWeight: '600',
+  },
+
+  // ── Batch bar ──
+  batchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginHorizontal: 16,
+    marginBottom: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: `${C.accent}55`,
+    backgroundColor: `${C.accent}12`,
+  },
+  batchBarLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  batchBarLabel: {
+    color: C.accent,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  batchBarReview: {
+    color: C.accent,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+
+  // ── Batch / voice mode button variants ──
+  modeBtnBatch: {
+    borderColor: `${C.accent}55`,
+    backgroundColor: `${C.accent}12`,
+  },
+  modeTextBatch: {
+    color: C.accent,
+  },
+  modeBtnListening: {
+    borderColor: 'rgba(239,68,68,0.5)',
+    backgroundColor: 'rgba(239,68,68,0.1)',
+  },
+  modeBtnProcessing: {
+    borderColor: `${C.accent}55`,
+    backgroundColor: `${C.accent}12`,
+  },
+  modeTextListening: {
+    color: '#ef4444',
   },
 });

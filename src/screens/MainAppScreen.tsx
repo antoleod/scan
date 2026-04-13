@@ -68,6 +68,8 @@ import { SettingsTab } from '../components/mainApp/tabs/SettingsTab';
 import { hardDeleteAllNotes, hardDeleteAllTemplates, saveNotes as saveWorkNotes, saveTemplates as saveNoteTemplates } from '../core/notes';
 import { clearClipboardEntries } from '../core/clipboard';
 import { Toast, useToast } from '../components/Toast';
+import { BatchSessionModal } from '../components/mainApp/BatchSessionModal';
+import { useVoiceCommands } from '../hooks/useVoiceCommands';
 import {
   clearAppLocalStorage,
   clearCacheStorage,
@@ -181,6 +183,24 @@ function MainApp() {
   const [backupBusy, setBackupBusy] = useState(false);
 
   const { toast, show: showToast, hide: hideToast } = useToast();
+
+  // ── Batch mode ─────────────────────────────────────────────────────────────
+  const [batchMode, setBatchMode] = useState(false);
+  const [batchItems, setBatchItems] = useState<ScanRecord[]>([]);
+  const [batchModalVisible, setBatchModalVisible] = useState(false);
+  const [batchSaveBusy, setBatchSaveBusy] = useState(false);
+
+  // ── Voice commands ─────────────────────────────────────────────────────────
+  const { voiceState, isSupported: voiceSupported, toggle: toggleVoice } = useVoiceCommands({
+    onScan: () => takePictureAndScan(),
+    onNote: (text) => {
+      setActiveTab('notes');
+      showToast(`Note ready: "${text}"`, 'success');
+    },
+    onNavigate: (tab) => setActiveTab(tab),
+    onBatchToggle: () => setBatchMode((v) => !v),
+    onBatchSave: () => { if (batchItems.length > 0) saveBatchItems(); },
+  });
 
   const scanBusyRef = useRef(false);
   const lastPayloadRef = useRef<{ value: string; ts: number }>({ value: '', ts: 0 });
@@ -498,6 +518,69 @@ function MainApp() {
     }
   }
 
+  // ── Batch helpers ───────────────────────────────────────────────────────────
+
+  function addToBatch(raw: string, source: ScanRecord['source']) {
+    const built = buildScanRecord(raw, source, settings, templates);
+    if (!built) { showFeedback('error', 'Invalid code'); return; }
+    setBatchItems((prev) => {
+      const alreadyIn = prev.some((item) => item.codeNormalized === built.record.codeNormalized);
+      if (alreadyIn) { showFeedback('duplicate', `${built.record.codeNormalized} already in batch`); return prev; }
+      showFeedback('success', `+${built.record.codeNormalized}`);
+      return [built.record, ...prev];
+    });
+  }
+
+  async function saveBatchItems() {
+    if (batchSaveBusy || batchItems.length === 0) return;
+    setBatchSaveBusy(true);
+    try {
+      let saved = 0;
+      let skipped = 0;
+      let current = history;
+      for (const item of batchItems) {
+        const result = await addHistoryUnique(item);
+        if (result.inserted) { saved++; current = result.history; }
+        else skipped++;
+      }
+      setHistory(current);
+      setBatchItems([]);
+      setBatchMode(false);
+      setBatchModalVisible(false);
+      showToast(`Saved ${saved} item${saved === 1 ? '' : 's'}${skipped > 0 ? ` · ${skipped} duplicate${skipped === 1 ? '' : 's'} skipped` : ''}`, 'success');
+      queueAutoSync();
+    } finally {
+      setBatchSaveBusy(false);
+    }
+  }
+
+  function exportBatchCsv() {
+    if (batchItems.length === 0) return;
+    const header = 'code,type,source,date';
+    const rows = batchItems.map((item) =>
+      [item.codeNormalized, visibleScanType(item.type), item.source, item.date]
+        .map((v) => `"${String(v).replace(/"/g, '""')}"`).join(',')
+    );
+    const csv = [header, ...rows].join('\n');
+    if (Platform.OS === 'web') {
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `oryxen-batch-${new Date().toISOString().slice(0, 10)}.csv`;
+      link.click();
+      URL.revokeObjectURL(url);
+      showToast(`Batch CSV exported — ${batchItems.length} item(s)`, 'success');
+    }
+  }
+
+  function discardBatch() {
+    setBatchItems([]);
+    setBatchMode(false);
+    setBatchModalVisible(false);
+    showToast('Batch discarded', 'error');
+  }
+
   async function processIncomingScan(raw: string, source: ScanRecord['source']) {
     if (scanBusyRef.current) return;
     if (source === 'camera' && Date.now() < scanCooldownRef.current) return;
@@ -680,6 +763,15 @@ function MainApp() {
     if (data.startsWith('{') || data.startsWith('[')) {
       const handled = await importBackupJson(data, 'qr');
       if (handled) return;
+    }
+    // In batch mode, collect into the session instead of saving immediately.
+    if (batchMode) {
+      const now = Date.now();
+      if (lastPayloadRef.current.value === data && now - lastPayloadRef.current.ts < SCAN_TUNING.duplicateWindowMs) return;
+      lastPayloadRef.current = { value: data, ts: now };
+      addToBatch(data, 'camera');
+      restartScannerSessionSoon(400);
+      return;
     }
     void autoCaptureScannedBarcode(data);
     await processIncomingScan(data, 'camera');
@@ -1518,6 +1610,17 @@ function MainApp() {
                   diag.error('scan.handler.unhandled', { message: String(e) });
                 });
               }}
+              batchMode={batchMode}
+              batchCount={batchItems.length}
+              onToggleBatchMode={() => {
+                const next = !batchMode;
+                setBatchMode(next);
+                if (!next && batchItems.length > 0) setBatchModalVisible(true);
+              }}
+              onReviewBatch={() => setBatchModalVisible(true)}
+              voiceState={voiceState}
+              voiceSupported={voiceSupported}
+              onToggleVoice={toggleVoice}
             />
           ) : activeTab === 'history' ? (
             <HistoryTab
@@ -1651,6 +1754,17 @@ function MainApp() {
         onClose={() => setBackupImportVisible(false)}
       />
         <Toast toast={toast} onHide={hideToast} />
+        <BatchSessionModal
+          visible={batchModalVisible}
+          items={batchItems}
+          palette={palette}
+          saveBusy={batchSaveBusy}
+          onRemoveItem={(id) => setBatchItems((prev) => prev.filter((item) => item.id !== id))}
+          onSaveAll={saveBatchItems}
+          onExportCsv={exportBatchCsv}
+          onDiscard={discardBatch}
+          onClose={() => setBatchModalVisible(false)}
+        />
         <SelectionFooter
           count={selection.size}
           palette={{ accent: palette.accent, card: palette.card, border: palette.border, fg: palette.fg }}
