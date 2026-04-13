@@ -30,6 +30,23 @@ export interface AppSettings {
   historyAutoClearDays: number;
   staySignedIn: boolean;
   savePasswordEncrypted: boolean;
+  smartNotes?: SmartNoteSettings;
+}
+
+export interface SmartNoteSettings {
+  offices: string[];
+  ipDetectionEnabled: boolean;
+  detectionEnabled: {
+    ip: boolean;
+    hostname: boolean;
+    office: boolean;
+    asset: boolean;
+  };
+  regex: {
+    ip: string;
+    hostname: string;
+    pi: string;
+  };
 }
 
 export interface TemplateRule {

@@ -156,6 +156,7 @@ export function SettingsTab({
   const [groups, setGroups] = useState<SharedNoteGroup[]>([]);
   const [groupNameDraft, setGroupNameDraft] = useState('');
   const [inviteCodeDraft, setInviteCodeDraft] = useState('');
+  const [officeDraft, setOfficeDraft] = useState('');
 
   useEffect(() => subscribePwaInstallAvailability(setPwaInstallAvailable), []);
   useEffect(() => {
@@ -295,6 +296,172 @@ export function SettingsTab({
           <View style={styles.toggleRow}><Text style={[styles.toggleLabel, { color: palette.fg }]}>Auto detect</Text><Switch value={settings.autoDetect} onValueChange={(value) => onPatchSettings({ autoDetect: value, scanProfile: value ? 'auto' : settings.scanProfile })} /></View>
           <View style={styles.toggleRow}><Text style={[styles.toggleLabel, { color: palette.fg }]}>Open URL</Text><Switch value={settings.openUrls ?? true} onValueChange={(value) => onPatchSettings({ openUrls: value })} /></View>
           <View style={styles.toggleRow}><Text style={[styles.toggleLabel, { color: palette.fg }]}>OCR correction</Text><Switch value={settings.ocrCorrection} onValueChange={(value) => onPatchSettings({ ocrCorrection: value })} /></View>
+        </SectionCard>
+
+        <SectionCard title="Smart notes" subtitle="Entity detection and card rendering." accent={palette.accent} subtitleColor={palette.muted} cardBackground={palette.card} cardBorder={palette.border} defaultOpen>
+          <View style={styles.toggleRow}>
+            <Text style={[styles.toggleLabel, { color: palette.fg }]}>IP detection</Text>
+            <Switch
+              value={settings.smartNotes?.ipDetectionEnabled ?? true}
+              onValueChange={(value) => onPatchSettings({
+                smartNotes: {
+                  ...settings.smartNotes!,
+                  ipDetectionEnabled: value,
+                },
+              })}
+            />
+          </View>
+          <View style={styles.toggleRow}>
+            <Text style={[styles.toggleLabel, { color: palette.fg }]}>Detect IP</Text>
+            <Switch
+              value={settings.smartNotes?.detectionEnabled.ip ?? true}
+              onValueChange={(value) => onPatchSettings({
+                smartNotes: {
+                  ...settings.smartNotes!,
+                  detectionEnabled: {
+                    ...settings.smartNotes!.detectionEnabled,
+                    ip: value,
+                  },
+                },
+              })}
+            />
+          </View>
+          <View style={styles.toggleRow}>
+            <Text style={[styles.toggleLabel, { color: palette.fg }]}>Detect hostname</Text>
+            <Switch
+              value={settings.smartNotes?.detectionEnabled.hostname ?? true}
+              onValueChange={(value) => onPatchSettings({
+                smartNotes: {
+                  ...settings.smartNotes!,
+                  detectionEnabled: {
+                    ...settings.smartNotes!.detectionEnabled,
+                    hostname: value,
+                  },
+                },
+              })}
+            />
+          </View>
+          <View style={styles.toggleRow}>
+            <Text style={[styles.toggleLabel, { color: palette.fg }]}>Detect office</Text>
+            <Switch
+              value={settings.smartNotes?.detectionEnabled.office ?? true}
+              onValueChange={(value) => onPatchSettings({
+                smartNotes: {
+                  ...settings.smartNotes!,
+                  detectionEnabled: {
+                    ...settings.smartNotes!.detectionEnabled,
+                    office: value,
+                  },
+                },
+              })}
+            />
+          </View>
+          <View style={styles.toggleRow}>
+            <Text style={[styles.toggleLabel, { color: palette.fg }]}>Detect PI</Text>
+            <Switch
+              value={settings.smartNotes?.detectionEnabled.asset ?? true}
+              onValueChange={(value) => onPatchSettings({
+                smartNotes: {
+                  ...settings.smartNotes!,
+                  detectionEnabled: {
+                    ...settings.smartNotes!.detectionEnabled,
+                    asset: value,
+                  },
+                },
+              })}
+            />
+          </View>
+
+          <Text style={[styles.controlLabel, { color: palette.muted }]}>IP regex</Text>
+          <TextInput
+            style={[styles.input, { borderColor: palette.border, color: palette.fg, backgroundColor: palette.card }]}
+            value={settings.smartNotes?.regex.ip || ''}
+            onChangeText={(value) => onPatchSettings({
+              smartNotes: {
+                ...settings.smartNotes!,
+                regex: { ...settings.smartNotes!.regex, ip: value },
+              },
+            })}
+            placeholder="IPv4 regex"
+            placeholderTextColor={palette.muted}
+            autoCapitalize="none"
+          />
+          <Text style={[styles.controlLabel, { color: palette.muted }]}>Hostname regex</Text>
+          <TextInput
+            style={[styles.input, { borderColor: palette.border, color: palette.fg, backgroundColor: palette.card }]}
+            value={settings.smartNotes?.regex.hostname || ''}
+            onChangeText={(value) => onPatchSettings({
+              smartNotes: {
+                ...settings.smartNotes!,
+                regex: { ...settings.smartNotes!.regex, hostname: value },
+              },
+            })}
+            placeholder="Hostname regex"
+            placeholderTextColor={palette.muted}
+            autoCapitalize="none"
+          />
+          <Text style={[styles.controlLabel, { color: palette.muted }]}>PI regex</Text>
+          <TextInput
+            style={[styles.input, { borderColor: palette.border, color: palette.fg, backgroundColor: palette.card }]}
+            value={settings.smartNotes?.regex.pi || ''}
+            onChangeText={(value) => onPatchSettings({
+              smartNotes: {
+                ...settings.smartNotes!,
+                regex: { ...settings.smartNotes!.regex, pi: value },
+              },
+            })}
+            placeholder="PI regex"
+            placeholderTextColor={palette.muted}
+            autoCapitalize="none"
+          />
+
+          <Text style={[styles.controlLabel, { color: palette.muted }]}>Offices</Text>
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <TextInput
+              style={[styles.input, { flex: 1, borderColor: palette.border, color: palette.fg, backgroundColor: palette.card }]}
+              value={officeDraft}
+              onChangeText={setOfficeDraft}
+              placeholder="Add office"
+              placeholderTextColor={palette.muted}
+            />
+            <Pressable
+              style={[styles.bulkButton, { minWidth: 84, backgroundColor: activeAccent }]}
+              onPress={() => {
+                const nextOffice = officeDraft.trim();
+                if (!nextOffice) return;
+                const current = settings.smartNotes?.offices || [];
+                if (current.some((entry) => entry.toLowerCase() === nextOffice.toLowerCase())) {
+                  setOfficeDraft('');
+                  return;
+                }
+                onPatchSettings({
+                  smartNotes: {
+                    ...settings.smartNotes!,
+                    offices: [...current, nextOffice],
+                  },
+                });
+                setOfficeDraft('');
+              }}
+            >
+              <Text style={[styles.bulkButtonText, { color: '#111' }]}>Add</Text>
+            </Pressable>
+          </View>
+          <View style={styles.modeRow}>
+            {(settings.smartNotes?.offices || []).map((office) => (
+              <Pressable
+                key={office}
+                onPress={() => onPatchSettings({
+                  smartNotes: {
+                    ...settings.smartNotes!,
+                    offices: (settings.smartNotes?.offices || []).filter((entry) => entry !== office),
+                  },
+                })}
+                style={[styles.modeChip, { borderColor: palette.border, backgroundColor: palette.card }]}
+              >
+                <Text style={[styles.modeChipText, { color: palette.fg }]}>{office} ×</Text>
+              </Pressable>
+            ))}
+          </View>
         </SectionCard>
 
         <SectionCard title="Shared groups" subtitle="Create/join note groups." accent={palette.accent} subtitleColor={palette.muted} cardBackground={palette.card} cardBorder={palette.border}>

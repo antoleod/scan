@@ -10,6 +10,8 @@ import {
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { detectNoteEntities } from '../core/smartNotes';
+import { AppSettings } from '../types';
 
 type Palette = {
   bg: string;
@@ -145,6 +147,8 @@ export function NoteCard({
   onTogglePinned,
   onOpenImage,
   onCopy,
+  onCopyValue,
+  onPressOffice,
   onSaveToDevice: _onSaveToDevice,
   onShare,
   onOpenVersions,
@@ -154,6 +158,7 @@ export function NoteCard({
   onSetColor,
   onLongPress,
   onDoubleTap,
+  settings,
 }: {
   note: NoteItem;
   palette: Palette;
@@ -169,6 +174,8 @@ export function NoteCard({
   onTogglePinned: () => void;
   onOpenImage: (uri: string) => void;
   onCopy: () => void;
+  onCopyValue: (value: string, label: 'IP' | 'Hostname') => void;
+  onPressOffice: (office: string) => void;
   onSaveToDevice: () => void;
   onShare: () => void;
   onOpenVersions?: () => void;
@@ -178,6 +185,7 @@ export function NoteCard({
   onSetColor: (color: NoteColor) => void;
   onLongPress?: () => void;
   onDoubleTap?: () => void;
+  settings: AppSettings;
 }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const heartPulse = useRef(new Animated.Value(1)).current;
@@ -281,6 +289,22 @@ export function NoteCard({
   }, [note.updatedAt]);
 
   const borderLeftColor = noteColorHex(note.color, palette.border);
+  const smart = useMemo(() => detectNoteEntities(note.text, settings), [note.text, settings]);
+  const isSmart = smart.type !== 'general';
+  const typeMeta = useMemo(() => {
+    switch (smart.type) {
+      case 'network':
+        return { title: 'Network Note', color: '#4DA3FF' };
+      case 'device':
+        return { title: 'Device Note', color: '#A970FF' };
+      case 'office':
+        return { title: 'Office Note', color: '#4ADE80' };
+      case 'asset':
+        return { title: 'Asset Note', color: '#FF9F43' };
+      default:
+        return { title: 'General Note', color: palette.accent };
+    }
+  }, [palette.accent, smart.type]);
 
   // ── Swipe action handlers ────────────────────────────────────────────────
   const handleReminder  = () => { closeSwipe(); onSetReminder(); };
@@ -434,6 +458,80 @@ export function NoteCard({
                   textAlignVertical: 'top',
                 }}
               />
+            ) : isSmart ? (
+              <View style={{ gap: 8 }}>
+                <View style={{
+                  borderRadius: 11,
+                  borderWidth: 1,
+                  borderColor: `${typeMeta.color}5a`,
+                  backgroundColor: `${typeMeta.color}1c`,
+                  shadowColor: typeMeta.color,
+                  shadowOpacity: 0.35,
+                  shadowRadius: 10,
+                  shadowOffset: { width: 0, height: 0 },
+                  elevation: 4,
+                  padding: 10,
+                  gap: 8,
+                }}>
+                  <Text style={{ color: typeMeta.color, fontSize: 13, fontWeight: '800' }}>{typeMeta.title}</Text>
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+                    {smart.ip.length > 0 ? <Text style={{ color: '#4DA3FF', fontSize: 10, fontWeight: '800' }}>IP</Text> : null}
+                    {smart.hostname.length > 0 ? <Text style={{ color: '#A970FF', fontSize: 10, fontWeight: '800' }}>Hostname</Text> : null}
+                    {smart.office.length > 0 ? <Text style={{ color: '#4ADE80', fontSize: 10, fontWeight: '800' }}>Office</Text> : null}
+                    {smart.pi.length > 0 ? <Text style={{ color: '#FF9F43', fontSize: 10, fontWeight: '800' }}>PI</Text> : null}
+                  </View>
+
+                  {smart.office.length > 0 ? (
+                    <View style={{ gap: 4 }}>
+                      <Text style={{ color: palette.textDim, fontSize: 11, fontWeight: '700' }}>Office:</Text>
+                      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+                        {smart.office.map((office) => (
+                          <Pressable key={office} onPress={() => onPressOffice(office)}>
+                            <Text style={{ color: '#4ADE80', fontSize: 12, fontWeight: '700' }}>{office}</Text>
+                          </Pressable>
+                        ))}
+                      </View>
+                    </View>
+                  ) : null}
+                  {smart.hostname.length > 0 ? (
+                    <View style={{ gap: 4 }}>
+                      <Text style={{ color: palette.textDim, fontSize: 11, fontWeight: '700' }}>Hostname:</Text>
+                      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+                        {smart.hostname.map((hostname) => (
+                          <Pressable key={hostname} onPress={() => onCopyValue(hostname, 'Hostname')}>
+                            <Text style={{ color: '#A970FF', fontSize: 12, fontWeight: '700' }}>{hostname}</Text>
+                          </Pressable>
+                        ))}
+                      </View>
+                    </View>
+                  ) : null}
+                  {smart.ip.length > 0 ? (
+                    <View style={{ gap: 4 }}>
+                      <Text style={{ color: palette.textDim, fontSize: 11, fontWeight: '700' }}>IP:</Text>
+                      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+                        {smart.ip.map((ip) => (
+                          <Pressable key={ip} onPress={() => onCopyValue(ip, 'IP')}>
+                            <Text style={{ color: '#4DA3FF', fontSize: 12, fontWeight: '700' }}>{ip}</Text>
+                          </Pressable>
+                        ))}
+                      </View>
+                    </View>
+                  ) : null}
+                  {smart.pi.length > 0 ? (
+                    <View style={{ gap: 4 }}>
+                      <Text style={{ color: palette.textDim, fontSize: 11, fontWeight: '700' }}>PI:</Text>
+                      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+                        {smart.pi.map((pi) => (
+                          <Text key={pi} style={{ color: '#FF9F43', fontSize: 12, fontWeight: '700' }}>{pi}</Text>
+                        ))}
+                      </View>
+                    </View>
+                  ) : null}
+                </View>
+                <Text style={{ color: palette.textBody, fontSize: 12, lineHeight: 18 }} numberOfLines={expanded ? 0 : 3}>
+                  {preview}
+                </Text>
+              </View>
             ) : (
               <Text
                 style={{ color: palette.textBody, fontSize: 14, lineHeight: 21 }}

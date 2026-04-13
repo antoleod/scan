@@ -46,6 +46,7 @@ import { NoteCard } from '../../NoteCard';
 import { SmartNoteGeneratorModal } from '../../SmartNoteGeneratorModal';
 import { NoteDetailModal } from '../../NoteDetailModal';
 import { Toast, useToast } from '../../Toast';
+import { AppSettings } from '../../../types';
 
 type Palette = { bg: string; fg: string; accent: string; muted: string; card: string; border: string };
 type WorkspaceTab = 'notes' | 'templates' | 'clipboard';
@@ -118,7 +119,7 @@ function mergeTemplatesByNewest(local: NoteTemplate[], incoming: NoteTemplate[])
   return Array.from(map.values()).sort((a, b) => b.updatedAt - a.updatedAt);
 }
 
-export function NotesTab({ palette }: { palette: Palette }) {
+export function NotesTab({ palette, settings }: { palette: Palette; settings: AppSettings }) {
   const { user } = useAuth();
   const { width } = useWindowDimensions();
   const isDesktop = width >= 1024;
@@ -155,6 +156,7 @@ export function NotesTab({ palette }: { palette: Palette }) {
   const [searchText, setSearchText] = useState('');
   const [selectedNoteIds, setSelectedNoteIds] = useState<Set<string>>(new Set());
   const [dateFilter, setDateFilter] = useState<string | null>(null);
+  const [officeEntityFilter, setOfficeEntityFilter] = useState<string | null>(null);
   const draftInputRef = useRef<React.ElementRef<typeof TextInput> | null>(null);
   const templateInputRef = useRef<React.ElementRef<typeof TextInput> | null>(null);
 
@@ -267,8 +269,12 @@ export function NotesTab({ palette }: { palette: Palette }) {
         return d.toISOString().slice(0, 10) === dateFilter;
       });
     }
+    if (officeEntityFilter) {
+      const officeNeedle = officeEntityFilter.toLowerCase();
+      next = next.filter((n) => n.text.toLowerCase().includes(officeNeedle));
+    }
     return next;
-  }, [notes, searchText, filter, activeGroupId, dateFilter]);
+  }, [notes, searchText, filter, activeGroupId, dateFilter, officeEntityFilter]);
 
   const filteredTemplates = useMemo(() => {
     const q = templateSearch.trim().toLowerCase();
@@ -616,6 +622,7 @@ export function NotesTab({ palette }: { palette: Palette }) {
                       }
                       setSearchText('');
                       setFilter('all');
+                      setOfficeEntityFilter(null);
                     }}
                   >
                     <Text style={[mainAppStyles.btnText, { textAlign: 'center', color: '#000' }]}>{notes.length === 0 ? 'New note' : 'Clear filters'}</Text>
@@ -667,6 +674,14 @@ export function NotesTab({ palette }: { palette: Palette }) {
                             onTogglePinned={() => togglePinned(note.id).then(setNotes)}
                             onOpenImage={setPreviewNoteImageUri}
                             onCopy={() => forceCopyToClipboard(note.text).catch(() => undefined)}
+                            settings={settings}
+                            onCopyValue={(value, label) => {
+                              forceCopyToClipboard(value).then(() => showToast(`${label} copied`)).catch(() => undefined);
+                            }}
+                            onPressOffice={(office) => {
+                              setOfficeEntityFilter((current) => (current === office ? null : office));
+                              showToast(`Office filter: ${office}`);
+                            }}
                             onSaveToDevice={() => saveNoteToDevice(note).catch(() => undefined)}
                             onShare={() => setShareNote(note)}
                             onOpenVersions={() => setVersionNoteId(note.id)}

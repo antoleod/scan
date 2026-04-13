@@ -170,6 +170,22 @@ function sanitizeSettings(value: unknown): AppSettings {
       ? asString(source.laserSpeed, defaultSettings.laserSpeed)
       : defaultSettings.laserSpeed) as AppSettings['laserSpeed'],
     historyAutoClearDays: Math.max(0, Math.floor(asNumber(source.historyAutoClearDays, defaultSettings.historyAutoClearDays))),
+    smartNotes: {
+      ...defaultSettings.smartNotes!,
+      ...(isRecord(source.smartNotes) ? source.smartNotes : {}),
+      detectionEnabled: {
+        ...defaultSettings.smartNotes!.detectionEnabled,
+        ...(isRecord((source.smartNotes as Record<string, unknown>)?.detectionEnabled) ? (source.smartNotes as Record<string, unknown>).detectionEnabled as Record<string, unknown> : {}),
+      },
+      regex: {
+        ...defaultSettings.smartNotes!.regex,
+        ...(isRecord((source.smartNotes as Record<string, unknown>)?.regex) ? (source.smartNotes as Record<string, unknown>).regex as Record<string, unknown> : {}),
+      },
+      offices: Array.isArray((source.smartNotes as Record<string, unknown>)?.offices)
+        ? ((source.smartNotes as Record<string, unknown>).offices as unknown[]).map((entry) => asString(entry, '').trim()).filter(Boolean)
+        : defaultSettings.smartNotes!.offices,
+      ipDetectionEnabled: asBoolean((source.smartNotes as Record<string, unknown>)?.ipDetectionEnabled, defaultSettings.smartNotes!.ipDetectionEnabled),
+    },
   };
 }
 

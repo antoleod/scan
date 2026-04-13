@@ -1545,7 +1545,7 @@ function MainApp() {
               visibleScanType={visibleScanType}
             />
           ) : activeTab === 'notes' ? (
-            <NotesTab palette={palette} />
+            <NotesTab palette={palette} settings={settings} />
           ) : (
             <SettingsTab
               palette={palette}
