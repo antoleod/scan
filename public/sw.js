@@ -1,8 +1,16 @@
-const CACHE_NAME = 'oryxen-cache-v3';
-const STATIC_CACHE = 'oryxen-static-v3';
+const CACHE_NAME = 'oryxen-cache-v4';
+const STATIC_CACHE = 'oryxen-static-v4';
 
-// App shell — always cached
-const APP_SHELL = ['./', './index.html', './manifest.webmanifest'];
+// Detect the base path at runtime from the service worker's own URL.
+// e.g. if sw.js is at /oryxen/sw.js → BASE = "/oryxen"
+const BASE = self.location.pathname.replace(/\/sw\.js$/, '');
+
+// App shell — always cached on install
+const APP_SHELL = [
+  BASE + '/',
+  BASE + '/index.html',
+  BASE + '/manifest.webmanifest',
+];
 
 // File extensions considered static/immutable assets
 const STATIC_EXTENSIONS = /\.(js|css|woff2?|ttf|otf|eot|png|jpg|jpeg|gif|svg|ico|webp)(\?.*)?$/i;
@@ -10,7 +18,7 @@ const STATIC_EXTENSIONS = /\.(js|css|woff2?|ttf|otf|eot|png|jpg|jpeg|gif|svg|ico
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME)
-      .then((cache) => cache.addAll(APP_SHELL))
+      .then((cache) => cache.addAll(APP_SHELL).catch(() => {}))
       .then(() => self.skipWaiting())
   );
 });
@@ -32,7 +40,7 @@ self.addEventListener('fetch', (event) => {
 
   const url = new URL(request.url);
 
-  // Skip cross-origin requests (Firebase, Google APIs, etc.)
+  // Skip cross-origin requests (Firebase, Google APIs, CDNs, etc.)
   if (url.origin !== self.location.origin) return;
 
   // Static assets: cache-first, update in background (stale-while-revalidate)
@@ -51,7 +59,7 @@ self.addEventListener('fetch', (event) => {
   }
 
   // Navigation requests (HTML pages): network-first, fallback to cached shell
-  if (request.mode === 'navigate' || request.headers.get('accept')?.includes('text/html')) {
+  if (request.mode === 'navigate' || (request.headers.get('accept') || '').includes('text/html')) {
     event.respondWith(
       fetch(request)
         .then((response) => {
@@ -60,7 +68,7 @@ self.addEventListener('fetch', (event) => {
           return response;
         })
         .catch(() =>
-          caches.match('./index.html').then((cached) => cached || new Response('Offline', { status: 503 }))
+          caches.match(BASE + '/index.html').then((cached) => cached || new Response('Offline', { status: 503 }))
         )
     );
     return;

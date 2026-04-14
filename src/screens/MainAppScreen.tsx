@@ -1163,13 +1163,12 @@ function MainApp() {
   }, [user?.uid, persistenceMode]);
 
   // Re-start clipboard Firebase sync once the user is authenticated so Device B
-  // entries appear on Device A.  The engine starts before auth resolves, so the
-  // initial subscription is a no-op (currentUser is null).  This effect fires
-  // whenever the UID changes — on login it re-establishes the listener.
+  // entries appear on Device A.  Clipboard sync works independently of the scan
+  // history persistence mode — it only requires a valid user session.
   useEffect(() => {
-    if (!user?.uid || persistenceMode !== 'firebase') return;
+    if (!user?.uid) return;
     void reinitClipboardFirebaseSync();
-  }, [user?.uid, persistenceMode]);
+  }, [user?.uid]);
 
   async function clearAllHistory() {
     // Pre-populate deletedHistoryIdsRef with ALL current IDs before Firestore deletion.

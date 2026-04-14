@@ -797,20 +797,37 @@ export async function subscribeToClipboard(
 ): Promise<() => void> {
   const rt = await initFirebaseRuntime();
   if (!rt.enabled || !rt.auth || !rt.db) return () => {};
-  const user = rt.auth.currentUser;
-  if (!user) return () => {};
-  const ref = collection(rt.db, 'users', user.uid, 'clipboard');
-  const unsub = onSnapshot(
-    query(ref),
-    (snap) => {
-      const entries = snap.docs
-        .map((d) => ({ ...(d.data() as ClipEntry), id: d.id }))
-        .filter((e) => e.kind === 'text' && e.content && e.id);
-      callback(entries);
-    },
-    (err) => { diag.warn('clipboard.subscribe.error', { message: String(err) }); },
-  );
-  return unsub;
+
+  // Use onAuthStateChanged so the Firestore listener is (re-)established even
+  // when this function is called before Firebase has resolved the auth state.
+  // `currentUser` is null on the first tick after initializeApp, but
+  // onAuthStateChanged fires synchronously if the user is already signed in
+  // (persisted session) and asynchronously after the token is refreshed.
+  let firestoreUnsub: (() => void) | null = null;
+  const db = rt.db;
+
+  const authUnsub = onAuthStateChanged(rt.auth, (user) => {
+    // Tear down previous subscription (user changed or signed out)
+    if (firestoreUnsub) { firestoreUnsub(); firestoreUnsub = null; }
+    if (!user) return;
+
+    const ref = collection(db, 'users', user.uid, 'clipboard');
+    firestoreUnsub = onSnapshot(
+      query(ref),
+      (snap) => {
+        const entries = snap.docs
+          .map((d) => ({ ...(d.data() as ClipEntry), id: d.id }))
+          .filter((e) => e.kind === 'text' && e.content && e.id);
+        callback(entries);
+      },
+      (err) => { diag.warn('clipboard.subscribe.error', { message: String(err) }); },
+    );
+  });
+
+  return () => {
+    if (firestoreUnsub) { firestoreUnsub(); firestoreUnsub = null; }
+    authUnsub();
+  };
 }
 
 export async function fetchClipboardFromFirebase(): Promise<ClipEntry[]> {
@@ -855,7 +872,9 @@ export async function upsertClipboardEntryInFirebase(entry: ClipEntry): Promise<
 export async function syncClipboardWithFirebase(localTextEntries: ClipEntry[]): Promise<ClipEntry[]> {
   const rt = await initFirebaseRuntime();
   if (!rt.enabled || !rt.auth || !rt.db) return localTextEntries;
-  const user = rt.auth.currentUser;
+  const user = rt.auth.currentUser ?? await new Promise<import('firebase/auth').User | null>((resolve) => {
+    const unsub = onAuthStateChanged(rt.auth!, (u) => { unsub(); resolve(u); });
+  });
   if (!user) return localTextEntries;
 
   const ref = collection(rt.db, 'users', user.uid, 'clipboard');

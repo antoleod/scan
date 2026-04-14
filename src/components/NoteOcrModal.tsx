@@ -185,14 +185,12 @@ export function NoteOcrModal({ visible, palette, settings, onClose, onCreateNote
     onClose();
   }, [reset, onClose]);
 
-  const handlePickImage = useCallback(async () => {
+  const runOcrFromUri = useCallback(async (uri: string) => {
     setError(null);
+    setStep('ocr');
+    setProgress(0);
+    abortRef.current = false;
     try {
-      const uri = await pickImage();
-      if (!uri) return;
-      setStep('ocr');
-      setProgress(0);
-      abortRef.current = false;
       const text = await runOcr(uri, (p) => {
         if (!abortRef.current) setProgress(p);
       });
@@ -205,6 +203,43 @@ export function NoteOcrModal({ visible, palette, settings, onClose, onCreateNote
       setStep('idle');
     }
   }, []);
+
+  const handlePickImage = useCallback(async () => {
+    const uri = await pickImage();
+    if (!uri) return;
+    await runOcrFromUri(uri);
+  }, [runOcrFromUri]);
+
+  const handlePasteFromClipboard = useCallback(async () => {
+    setError(null);
+    try {
+      if (typeof navigator === 'undefined' || !navigator.clipboard?.read) {
+        setError('Clipboard image paste is not supported in this browser.');
+        return;
+      }
+      const items = await navigator.clipboard.read();
+      let dataUrl: string | null = null;
+      for (const item of items) {
+        const imageType = item.types.find((t) => t.startsWith('image/'));
+        if (!imageType) continue;
+        const blob = await item.getType(imageType);
+        dataUrl = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(String(reader.result ?? ''));
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
+        });
+        break;
+      }
+      if (!dataUrl) {
+        setError('No image found in clipboard. Copy an image first.');
+        return;
+      }
+      await runOcrFromUri(dataUrl);
+    } catch (err) {
+      setError(String((err as Error)?.message ?? err));
+    }
+  }, [runOcrFromUri]);
 
   const toggleField = useCallback((key: FieldKey) => {
     setFields((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -247,13 +282,17 @@ export function NoteOcrModal({ visible, palette, settings, onClose, onCreateNote
             {step === 'idle' && (
               <View style={s.center}>
                 <Ionicons name="image-outline" size={56} color={muted} />
-                <Text style={[s.hint, { color: muted }]}>Pick an image to extract text with OCR</Text>
+                <Text style={[s.hint, { color: muted }]}>Pick an image or paste from clipboard to extract text with OCR</Text>
                 {error && (
                   <Text style={[s.errorText, { color: '#f87171' }]}>{error}</Text>
                 )}
                 <Pressable style={[s.btn, { backgroundColor: accent }]} onPress={handlePickImage}>
                   <Ionicons name="folder-open-outline" size={18} color="#fff" />
                   <Text style={s.btnText}>Choose Image</Text>
+                </Pressable>
+                <Pressable style={[s.btnOutline, { borderColor: border, minWidth: 160 }]} onPress={handlePasteFromClipboard}>
+                  <Ionicons name="clipboard-outline" size={16} color={muted} />
+                  <Text style={[s.btnOutlineText, { color: muted }]}>Paste from Clipboard</Text>
                 </Pressable>
               </View>
             )}
