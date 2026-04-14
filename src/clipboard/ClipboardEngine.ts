@@ -268,6 +268,11 @@ class ClipboardEngine {
     }
   }
 
+  /** Re-initialise Firebase real-time sync after the user has signed in. */
+  async reinitFirebaseSync() {
+    await this.startFirebaseSync();
+  }
+
   async captureNow(): Promise<boolean> {
     const text = normalizeText(await readClipboardTextFromClick());
     if (!text) return false;
@@ -591,6 +596,13 @@ class ClipboardEngine {
       this.revokePolling();
       return;
     }
+    // Don't start polling until the user has explicitly granted clipboard-read permission.
+    // If we poll while in 'prompt' state the browser will show a permission dialog on every
+    // page load — we only want that dialog to appear when the user clicks "Capture".
+    if (this.permState !== 'granted') {
+      this.revokePolling();
+      return;
+    }
 
     this.revokePolling();
     this.pollTimer = setInterval(() => {
@@ -600,6 +612,7 @@ class ClipboardEngine {
 
   private async pollClipboard() {
     if (typeof document === 'undefined' || document.visibilityState !== 'visible') return;
+    if (this.permState !== 'granted') return;
     try {
       const text = normalizeText(await readClipboardText());
       if (!text) return;
@@ -691,4 +704,9 @@ export async function captureClipboardPasteText(text: string): Promise<boolean> 
 
 export async function importClipboardScreenshotFromManual(payload: ManualImageInput): Promise<boolean> {
   return engine.ingestManualImage(payload);
+}
+
+/** Call this once the user has authenticated so Firebase sync can be re-established. */
+export async function reinitClipboardFirebaseSync(): Promise<void> {
+  return engine.reinitFirebaseSync();
 }

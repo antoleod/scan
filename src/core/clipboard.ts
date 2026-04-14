@@ -22,6 +22,7 @@ export {
   updateClipboardEntryCategory,
   blobToDataUrl,
   captureClipboardPasteText,
+  reinitClipboardFirebaseSync,
 } from '../clipboard/ClipboardEngine';
 
 export {

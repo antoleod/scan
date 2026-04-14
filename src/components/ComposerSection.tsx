@@ -33,6 +33,7 @@ export const ComposerSection = forwardRef<TextInput, {
   onChangeGroup: (groupId: string) => void;
   onChangeText: (value: string) => void;
   onGenerate: () => void;
+  onOcr?: () => void;
   onAddImage: () => void;
   onTakePhoto: () => void;
   onPasteImage: () => void;
@@ -51,6 +52,7 @@ export const ComposerSection = forwardRef<TextInput, {
       onChangeGroup,
       onChangeText,
       onGenerate,
+      onOcr,
       onAddImage,
       onTakePhoto,
       onPasteImage,
@@ -84,6 +86,7 @@ export const ComposerSection = forwardRef<TextInput, {
       { key: 'camera', label: 'Camera', icon: 'camera-outline' as const, action: onTakePhoto, active: false },
       { key: 'photo', label: 'Gallery', icon: 'image-outline' as const, action: onAddImage, active: draftImages.length > 0 },
       { key: 'paste', label: 'Paste', icon: 'clipboard-text-outline' as const, action: onPasteImage, active: false },
+      { key: 'ocr', label: 'OCR', icon: 'text-recognition' as const, action: onOcr ?? (() => {}), active: false },
       { key: 'save', label: 'Save', icon: 'content-save-outline' as const, action: onSave, active: false },
       { key: 'generate', label: 'Generate', icon: 'auto-fix' as const, action: onGenerate, active: Boolean(generating) },
     ];

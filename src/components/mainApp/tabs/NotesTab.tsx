@@ -44,6 +44,7 @@ import { ComposerSection } from '../../ComposerSection';
 import { SearchFilterBar } from '../../SearchFilterBar';
 import { NoteCard } from '../../NoteCard';
 import { SmartNoteGeneratorModal } from '../../SmartNoteGeneratorModal';
+import { NoteOcrModal } from '../../NoteOcrModal';
 import { NoteDetailModal } from '../../NoteDetailModal';
 import { Toast, useToast } from '../../Toast';
 import { AppSettings } from '../../../types';
@@ -149,6 +150,7 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
   const [previewNoteImageUri, setPreviewNoteImageUri] = useState<string | null>(null);
   const [shareNote, setShareNote] = useState<NoteItem | null>(null);
   const [generatorVisible, setGeneratorVisible] = useState(false);
+  const [ocrVisible, setOcrVisible] = useState(false);
   const [detailNote, setDetailNote] = useState<NoteItem | null>(null);
   const [versionNoteId, setVersionNoteId] = useState<string | null>(null);
   const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
@@ -604,6 +606,7 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
                 onChangeGroup={setActiveGroupId}
                 onChangeText={setDraftText}
                 onGenerate={() => setGeneratorVisible(true)}
+                onOcr={() => setOcrVisible(true)}
                 onAddImage={() => addImageToDraft().catch(() => undefined)}
                 onTakePhoto={() => takePhotoToDraft().catch(() => undefined)}
                 onPasteImage={() => pasteImageFromClipboardToDraft().catch(() => undefined)}
@@ -960,6 +963,21 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
         onCreateTemplate={({ text, category }) => createTemplateFromSuggestion(text, category)}
       />
       </ScrollView>
+
+      {/* ── OCR: image → note ── */}
+      <NoteOcrModal
+        visible={ocrVisible}
+        palette={{ bg: uiPalette.surface, fg: uiPalette.textBody, accent: palette.accent, muted: uiPalette.textDim, card: uiPalette.surfaceAlt, border: uiPalette.chipBorder }}
+        settings={settings}
+        onClose={() => setOcrVisible(false)}
+        onCreateNote={async (text) => {
+          const groupId = activeGroupId === 'personal' ? undefined : activeGroupId;
+          const result = await addRichNoteUnique(text, 'general', [], groupId);
+          setNotes(result.notes);
+          setFilter('all');
+          showToast('Note created from image');
+        }}
+      />
 
       {/* ── Note detail (double-tap) ── */}
       <NoteDetailModal

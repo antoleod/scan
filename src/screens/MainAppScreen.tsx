@@ -66,7 +66,7 @@ import { ScanTab } from '../components/mainApp/tabs/ScanTab';
 import { SelectionFooter } from '../components/mainApp/SelectionFooter';
 import { SettingsTab } from '../components/mainApp/tabs/SettingsTab';
 import { hardDeleteAllNotes, hardDeleteAllTemplates, saveNotes as saveWorkNotes, saveTemplates as saveNoteTemplates } from '../core/notes';
-import { clearClipboardEntries } from '../core/clipboard';
+import { clearClipboardEntries, reinitClipboardFirebaseSync } from '../core/clipboard';
 import { Toast, useToast } from '../components/Toast';
 import { BatchSessionModal } from '../components/mainApp/BatchSessionModal';
 import { useVoiceCommands } from '../hooks/useVoiceCommands';
@@ -1160,6 +1160,15 @@ function MainApp() {
       if (realtimeSaveTimerRef.current) clearTimeout(realtimeSaveTimerRef.current);
       cleanupFn?.();
     };
+  }, [user?.uid, persistenceMode]);
+
+  // Re-start clipboard Firebase sync once the user is authenticated so Device B
+  // entries appear on Device A.  The engine starts before auth resolves, so the
+  // initial subscription is a no-op (currentUser is null).  This effect fires
+  // whenever the UID changes — on login it re-establishes the listener.
+  useEffect(() => {
+    if (!user?.uid || persistenceMode !== 'firebase') return;
+    void reinitClipboardFirebaseSync();
   }, [user?.uid, persistenceMode]);
 
   async function clearAllHistory() {
