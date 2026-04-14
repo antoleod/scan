@@ -224,6 +224,8 @@ class ClipboardEngine {
   private pollInterval = POLL_BASE;
   private noChangeCount = 0;
   private loadPromise: Promise<void> | null = null;
+  private firesyncTimer: ReturnType<typeof setTimeout> | null = null;
+  private firebaseUnsub: (() => void) | null = null;
 
   async ensureReady() {
     if (!this.loadPromise) {
@@ -231,6 +233,8 @@ class ClipboardEngine {
         this.permState = await getClipboardPermission();
         this.syncListeners();
         this.syncPolling();
+        // Merge remote entries on startup and start real-time listener
+        void this.startFirebaseSync();
       });
     }
     await this.loadPromise;
@@ -275,7 +279,8 @@ class ClipboardEngine {
   }
 
   async importScreenshot(dataUrl: string): Promise<boolean> {
-    const compressed = await compressImage(String(dataUrl || ''), { maxWidth: 1200, quality: 0.82 });
+    // 800px / 0.6 keeps clipboard images under ~80 KB — within localStorage limits
+    const compressed = await compressImage(String(dataUrl || ''), { maxWidth: 800, quality: 0.60 });
     return this.ingestImage(compressed, 'manual');
   }
 
@@ -375,6 +380,8 @@ class ClipboardEngine {
       window.removeEventListener('focus', this.onFocusRefresh);
     }
     this.revokePolling();
+    if (this.firesyncTimer) { clearTimeout(this.firesyncTimer); this.firesyncTimer = null; }
+    if (this.firebaseUnsub) { this.firebaseUnsub(); this.firebaseUnsub = null; }
   }
 
   private revokePolling() {
@@ -433,7 +440,73 @@ class ClipboardEngine {
   }
 
   private async persist() {
-    await AsyncStorage.setItem(CLIPBOARD_KEY, JSON.stringify(normalizeEntries(this.entries)));
+    // Only persist text entries to AsyncStorage — images are stored in-memory during
+    // the session but are too large for localStorage (5 MB limit on web).
+    const forStorage = normalizeEntries(this.entries).map((e) =>
+      e.kind === 'image' ? { ...e, imageDataUri: e.imageDataUri } : e,
+    );
+    try {
+      await AsyncStorage.setItem(CLIPBOARD_KEY, JSON.stringify(forStorage));
+    } catch {
+      // Storage full — retry with text-only (drop image data)
+      const textOnly = normalizeEntries(this.entries.filter((e) => e.kind === 'text'));
+      try {
+        await AsyncStorage.setItem(CLIPBOARD_KEY, JSON.stringify(textOnly));
+      } catch { /* ignore */ }
+    }
+    // Push text entries to Firebase with a 3-second debounce
+    this.scheduleFirebaseSync();
+  }
+
+  private scheduleFirebaseSync() {
+    if (this.firesyncTimer) clearTimeout(this.firesyncTimer);
+    this.firesyncTimer = setTimeout(() => { void this.runFirebaseSync(); }, 3000);
+  }
+
+  private async runFirebaseSync() {
+    try {
+      const { syncClipboardWithFirebase } = await import('../core/firebase');
+      const textEntries = this.entries.filter((e) => e.kind === 'text');
+      const remoteOnly = await syncClipboardWithFirebase(textEntries);
+      if (remoteOnly.length > 0) {
+        let changed = false;
+        for (const remote of remoteOnly) {
+          if (!this.entries.some((e) => e.id === remote.id)) {
+            const entry = toEntry({ ...remote });
+            if (entry) { this.entries.push(entry); changed = true; }
+          }
+        }
+        if (changed) {
+          this.entries = normalizeEntries(this.entries);
+          // persist without re-triggering another firebase sync
+          try {
+            await AsyncStorage.setItem(CLIPBOARD_KEY, JSON.stringify(normalizeEntries(this.entries)));
+          } catch { /* ignore */ }
+          this.emit();
+        }
+      }
+    } catch { /* Firebase not configured */ }
+  }
+
+  private async startFirebaseSync() {
+    try {
+      const { subscribeToClipboard } = await import('../core/firebase');
+      if (this.firebaseUnsub) { this.firebaseUnsub(); this.firebaseUnsub = null; }
+      this.firebaseUnsub = await subscribeToClipboard((remoteEntries) => {
+        let changed = false;
+        for (const remote of remoteEntries) {
+          if (!this.entries.some((e) => e.id === remote.id)) {
+            const entry = toEntry({ ...remote });
+            if (entry) { this.entries.push(entry); changed = true; }
+          }
+        }
+        if (changed) {
+          this.entries = normalizeEntries(this.entries);
+          void AsyncStorage.setItem(CLIPBOARD_KEY, JSON.stringify(normalizeEntries(this.entries))).catch(() => undefined);
+          this.emit();
+        }
+      });
+    } catch { /* Firebase not configured */ }
   }
 
   private onPaste = (event: ClipboardEvent) => {
@@ -452,7 +525,7 @@ class ClipboardEngine {
       void (async () => {
         const dataUrl = await blobToDataUrl(blob);
         if (!dataUrl) return;
-        const compressed = await compressImage(dataUrl, { maxWidth: 1200, quality: 0.82 });
+        const compressed = await compressImage(dataUrl, { maxWidth: 800, quality: 0.60 });
         await this.ingestImage(compressed, 'paste');
       })();
     }

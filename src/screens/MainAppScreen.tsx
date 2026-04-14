@@ -1251,6 +1251,11 @@ function MainApp() {
     await clearClipboardEntries();
     clearAppLocalStorage('clipboard');
     await purgeIndexedDBByKeyword('clipboard');
+    // Also clear from Firebase so it doesn't sync back on next load
+    try {
+      const { clearClipboardInFirebase } = await import('../core/clipboard');
+      await clearClipboardInFirebase();
+    } catch { /* ignore if Firebase not configured */ }
     await diag.info('clipboard.hard_delete');
     showToast('Clipboard permanently deleted from all storage layers', 'success');
   }

@@ -35,6 +35,26 @@ function classifyTitle(kind: ClipEntry['kind']) {
   return kind === 'image' ? 'Image' : 'Text';
 }
 
+function ImageThumb({ uri }: { uri: string }) {
+  const [failed, setFailed] = React.useState(false);
+  if (failed) {
+    return (
+      <View style={[styles.clipThumb, { alignItems: 'center', justifyContent: 'center', backgroundColor: '#1a1a1a' }]}>
+        <Ionicons name="image-outline" size={28} color="#555" />
+        <Text style={{ color: '#555', fontSize: 10, marginTop: 4 }}>Preview unavailable</Text>
+      </View>
+    );
+  }
+  return (
+    <Image
+      source={{ uri }}
+      style={styles.clipThumb}
+      resizeMode="cover"
+      onError={() => setFailed(true)}
+    />
+  );
+}
+
 export function ClipboardScreen({ palette, onSendToNote, onSendToTemplate }: Props) {
   const { width } = useWindowDimensions();
   const isDesktop = width >= 1024;
@@ -265,7 +285,9 @@ export function ClipboardScreen({ palette, onSendToNote, onSendToTemplate }: Pro
                         <Text style={{ color: palette.muted, fontSize: 10 }}>{new Date(entry.capturedAt).toLocaleDateString()} {new Date(entry.capturedAt).toLocaleTimeString()}</Text>
                         <Text style={{ color: palette.accent, fontSize: 10, fontWeight: '800' }}>{entry.category.toUpperCase()}</Text>
                       </View>
-                      {entry.kind === 'image' && entry.imageDataUri ? <Image source={{ uri: entry.imageDataUri }} style={styles.clipThumb} resizeMode="cover" /> : null}
+                      {entry.kind === 'image' && entry.imageDataUri ? (
+                        <ImageThumb uri={entry.imageDataUri} />
+                      ) : null}
                       <Text style={{ color: palette.fg, fontSize: 12 }} numberOfLines={2}>{entry.kind === 'image' ? 'Screenshot capture' : entry.content}</Text>
                       <Text style={{ color: palette.muted, fontSize: 10 }}>{classifyTitle(entry.kind)}</Text>
                       <View style={styles.actionsRow}>
@@ -345,7 +367,7 @@ const styles = StyleSheet.create({
   gridRow: { flexDirection: 'row', gap: 10, width: '100%', minWidth: 0 },
   dayRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minWidth: 0 },
   card: { borderWidth: 1, borderRadius: 12, padding: 12, gap: 8, minWidth: 0 },
-  clipThumb: { width: '100%', height: 96, borderRadius: 8, backgroundColor: '#111' },
+  clipThumb: { width: '100%', height: 96, borderRadius: 8, backgroundColor: '#1e1e1e' },
   cardHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
   actionsRow: { flexDirection: 'row', gap: 10, alignItems: 'center', flexWrap: 'wrap' },
   categoryChip: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 7, minHeight: 36, justifyContent: 'center' },

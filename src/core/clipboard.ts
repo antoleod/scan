@@ -24,6 +24,15 @@ export {
   captureClipboardPasteText,
 } from '../clipboard/ClipboardEngine';
 
+export {
+  clearClipboardInFirebase,
+  deleteClipboardEntryInFirebase,
+  fetchClipboardFromFirebase,
+  subscribeToClipboard,
+  syncClipboardWithFirebase,
+  upsertClipboardEntryInFirebase,
+} from './firebase';
+
 export type {
   ClipCategory as ClipboardCategory,
   ClipEntry as ClipboardEntry,

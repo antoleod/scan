@@ -785,3 +785,135 @@ export async function fetchSharedGroupNotesForCurrentUser(): Promise<NoteItem[]>
   }
   return notes;
 }
+
+// ─── Clipboard Firebase sync (text entries only — images too large for Firestore) ─
+
+import type { ClipEntry } from './clipboard.types';
+
+const CLIPBOARD_SYNC_LIMIT = 300; // max text entries to push to Firestore
+
+export async function subscribeToClipboard(
+  callback: (entries: ClipEntry[]) => void,
+): Promise<() => void> {
+  const rt = await initFirebaseRuntime();
+  if (!rt.enabled || !rt.auth || !rt.db) return () => {};
+  const user = rt.auth.currentUser;
+  if (!user) return () => {};
+  const ref = collection(rt.db, 'users', user.uid, 'clipboard');
+  const unsub = onSnapshot(
+    query(ref),
+    (snap) => {
+      const entries = snap.docs
+        .map((d) => ({ ...(d.data() as ClipEntry), id: d.id }))
+        .filter((e) => e.kind === 'text' && e.content && e.id);
+      callback(entries);
+    },
+    (err) => { diag.warn('clipboard.subscribe.error', { message: String(err) }); },
+  );
+  return unsub;
+}
+
+export async function fetchClipboardFromFirebase(): Promise<ClipEntry[]> {
+  const rt = await initFirebaseRuntime();
+  if (!rt.enabled || !rt.auth || !rt.db) return [];
+  const user = rt.auth.currentUser;
+  if (!user) return [];
+  try {
+    const ref = collection(rt.db, 'users', user.uid, 'clipboard');
+    const snap = await getDocs(query(ref));
+    return snap.docs
+      .map((d) => ({ ...(d.data() as ClipEntry), id: d.id }))
+      .filter((e) => e.kind === 'text' && e.content && e.id);
+  } catch {
+    return [];
+  }
+}
+
+export async function upsertClipboardEntryInFirebase(entry: ClipEntry): Promise<void> {
+  if (entry.kind !== 'text') return; // never sync images to Firestore
+  const rt = await initFirebaseRuntime();
+  if (!rt.enabled || !rt.auth || !rt.db) return;
+  const user = rt.auth.currentUser;
+  if (!user) return;
+  await setDoc(
+    doc(rt.db, 'users', user.uid, 'clipboard', entry.id),
+    {
+      id: entry.id,
+      kind: 'text',
+      content: entry.content,
+      category: entry.category,
+      source: entry.source,
+      capturedAt: entry.capturedAt,
+      sig: entry.sig,
+      uid: user.uid,
+      updatedAtServer: serverTimestamp(),
+    },
+    { merge: true },
+  );
+}
+
+export async function syncClipboardWithFirebase(localTextEntries: ClipEntry[]): Promise<ClipEntry[]> {
+  const rt = await initFirebaseRuntime();
+  if (!rt.enabled || !rt.auth || !rt.db) return localTextEntries;
+  const user = rt.auth.currentUser;
+  if (!user) return localTextEntries;
+
+  const ref = collection(rt.db, 'users', user.uid, 'clipboard');
+
+  // Fetch remote state
+  const snap = await getDocs(query(ref));
+  const remoteMap = new Map<string, ClipEntry>();
+  snap.forEach((d) => {
+    const e = { ...(d.data() as ClipEntry), id: d.id };
+    if (e.kind === 'text' && e.content) remoteMap.set(e.id, e);
+  });
+
+  // Push local entries that are newer or missing on remote
+  const toWrite = localTextEntries.slice(0, CLIPBOARD_SYNC_LIMIT);
+  for (const entry of toWrite) {
+    const remote = remoteMap.get(entry.id);
+    if (!remote || remote.capturedAt < entry.capturedAt) {
+      await setDoc(
+        doc(ref, entry.id),
+        {
+          id: entry.id,
+          kind: 'text',
+          content: entry.content,
+          category: entry.category,
+          source: entry.source,
+          capturedAt: entry.capturedAt,
+          sig: entry.sig,
+          uid: user.uid,
+          updatedAtServer: serverTimestamp(),
+        },
+        { merge: true },
+      );
+    }
+    remoteMap.delete(entry.id);
+  }
+
+  // Return remote-only entries so caller can merge them locally
+  return Array.from(remoteMap.values());
+}
+
+export async function deleteClipboardEntryInFirebase(entryId: string): Promise<void> {
+  const rt = await initFirebaseRuntime();
+  if (!rt.enabled || !rt.auth || !rt.db) return;
+  const user = rt.auth.currentUser;
+  if (!user) return;
+  try {
+    await deleteDoc(doc(rt.db, 'users', user.uid, 'clipboard', entryId));
+  } catch { /* ignore */ }
+}
+
+export async function clearClipboardInFirebase(): Promise<void> {
+  const rt = await initFirebaseRuntime();
+  if (!rt.enabled || !rt.auth || !rt.db) return;
+  const user = rt.auth.currentUser;
+  if (!user) return;
+  const ref = collection(rt.db, 'users', user.uid, 'clipboard');
+  const snap = await getDocs(query(ref));
+  for (const item of snap.docs) {
+    await deleteDoc(doc(ref, item.id));
+  }
+}
