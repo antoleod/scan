@@ -856,6 +856,7 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
         {workspaceTab === 'clipboard' ? (
           <ClipboardScreen
             palette={palette}
+            settings={settings}
             onSendToNote={sendClipboardToNote}
             onSendToTemplate={sendClipboardToTemplate}
           />

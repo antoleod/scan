@@ -10,6 +10,9 @@ import { addRichNoteUnique } from '../core/notes';
 import { ClipEntry } from '../core/clipboard.types';
 import { removeClipboardEntriesByDay, removeClipboardEntriesByIds, updateClipboardEntryCategory } from '../core/clipboard';
 import { MiniCalendar } from '../components/SearchFilterBar';
+import { detectNoteEntities, buildSmartNoteModel, segmentNoteText, SmartNoteEntities, SmartNoteModel, NoteSegment } from '../core/smartNotes';
+import { defaultSettings } from '../core/settings';
+import type { AppSettings } from '../types';
 
 type Palette = { bg: string; fg: string; accent: string; muted: string; card: string; border: string };
 
@@ -20,6 +23,7 @@ function toCal(p: Palette) {
 
 type Props = {
   palette: Palette;
+  settings?: AppSettings;
   onSendToNote?: (entry: ClipEntry) => Promise<void> | void;
   onSendToTemplate?: (entry: ClipEntry) => Promise<void> | void;
 };
@@ -55,7 +59,153 @@ function ImageThumb({ uri }: { uri: string }) {
   );
 }
 
-export function ClipboardScreen({ palette, onSendToNote, onSendToTemplate }: Props) {
+// ─── Entity colors (same palette as NoteCard) ────────────────────────────────
+
+const ENTITY_COLORS: Record<string, { text: string; bg: string; label: string }> = {
+  pi:       { text: '#FF9F43', bg: 'rgba(255,159,67,0.14)',  label: 'PI' },
+  hostname: { text: '#A970FF', bg: 'rgba(169,112,255,0.14)', label: 'Hostname' },
+  ip:       { text: '#4DA3FF', bg: 'rgba(77,163,255,0.14)',  label: 'IP' },
+  office:   { text: '#4ADE80', bg: 'rgba(74,222,128,0.14)',  label: 'Office' },
+};
+
+// ─── Smart list block (checkboxes / bullets / numbered) ──────────────────────
+
+function ClipListBlock({ model, palette, expanded }: { model: SmartNoteModel; palette: Palette; expanded: boolean }) {
+  const visibleItems = expanded ? model.items : model.items.slice(0, 5);
+  const hidden = model.items.length - visibleItems.length;
+  return (
+    <View style={{ gap: 5, marginTop: 2 }}>
+      {visibleItems.map((item) => (
+        <View key={item.index} style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8 }}>
+          {item.kind === 'checkbox' ? (
+            <View style={{
+              width: 15, height: 15, borderRadius: 3, borderWidth: 1.5,
+              borderColor: item.checked ? palette.accent : palette.muted,
+              backgroundColor: item.checked ? palette.accent : 'transparent',
+              alignItems: 'center', justifyContent: 'center', marginTop: 2, flexShrink: 0,
+            }}>
+              {item.checked ? <Ionicons name="checkmark" size={9} color="#000" /> : null}
+            </View>
+          ) : item.kind === 'numbered' ? (
+            <Text style={{ color: palette.muted, fontSize: 12, fontWeight: '600', width: 18, textAlign: 'right', flexShrink: 0, marginTop: 1 }}>
+              {item.index + 1}.
+            </Text>
+          ) : (
+            <View style={{ width: 4, height: 4, borderRadius: 2, backgroundColor: palette.accent, marginTop: 8, flexShrink: 0 }} />
+          )}
+          <Text style={{
+            color: item.checked ? palette.muted : palette.fg,
+            fontSize: 13, lineHeight: 20, flex: 1,
+            textDecorationLine: item.checked ? 'line-through' : 'none',
+          }}>
+            {item.text}
+          </Text>
+        </View>
+      ))}
+      {hidden > 0 ? (
+        <Text style={{ color: palette.muted, fontSize: 11 }}>+{hidden} more items</Text>
+      ) : null}
+    </View>
+  );
+}
+
+// ─── Smart entity block (inline highlighted text) ────────────────────────────
+
+function ClipEntityBlock({
+  smart, model, palette, expanded, onCopy,
+}: {
+  smart: SmartNoteEntities;
+  model: SmartNoteModel;
+  palette: Palette;
+  expanded: boolean;
+  onCopy: (value: string) => void;
+}) {
+  const segments = useMemo(() => segmentNoteText(model.rawText, smart), [model.rawText, smart]);
+  const legendItems = (['pi', 'hostname', 'ip', 'office'] as const).filter((k) => smart[k].length > 0);
+
+  // Pick an accent color based on which entity type dominates
+  const dominantKind = smart.ip.length ? 'ip' : smart.hostname.length ? 'hostname' : smart.pi.length ? 'pi' : 'office';
+  const dominantColor = ENTITY_COLORS[dominantKind].text;
+
+  return (
+    <View style={{ gap: 6 }}>
+      {/* Legend row */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
+        {legendItems.map((kind) => {
+          const c = ENTITY_COLORS[kind];
+          return (
+            <View key={kind} style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+              <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: c.text }} />
+              <Text style={{ color: palette.muted, fontSize: 10, fontWeight: '700' }}>{c.label}</Text>
+            </View>
+          );
+        })}
+      </View>
+
+      {/* Highlighted text block */}
+      <View style={{
+        borderRadius: 8, borderWidth: 1,
+        borderColor: `${dominantColor}28`,
+        backgroundColor: `${dominantColor}08`,
+        padding: 9,
+      }}>
+        <Text style={{ fontSize: 13, lineHeight: 22 }} numberOfLines={expanded ? 0 : 5}>
+          {segments.map((seg, i) => {
+            if (seg.kind === 'plain') {
+              return <Text key={i} style={{ color: palette.fg }}>{seg.text}</Text>;
+            }
+            const c = ENTITY_COLORS[seg.kind];
+            const copyable = seg.kind === 'ip' || seg.kind === 'hostname' || seg.kind === 'pi';
+            return (
+              <Text
+                key={i}
+                onPress={copyable ? () => onCopy(seg.text) : undefined}
+                style={{ color: c.text, backgroundColor: c.bg, fontWeight: '700', borderRadius: 3 }}
+              >
+                {seg.text}
+              </Text>
+            );
+          })}
+        </Text>
+      </View>
+
+      {/* If also a list, show below */}
+      {model.isList && model.items.length > 0 ? (
+        <ClipListBlock model={model} palette={palette} expanded={expanded} />
+      ) : null}
+    </View>
+  );
+}
+
+// ─── Unified smart body for a single clipboard text entry ────────────────────
+
+function ClipSmartBody({
+  text, palette, expanded, settings, onCopy,
+}: {
+  text: string;
+  palette: Palette;
+  expanded: boolean;
+  settings: AppSettings;
+  onCopy: (value: string) => void;
+}) {
+  const smart = useMemo(() => detectNoteEntities(text, settings), [text, settings]);
+  const model = useMemo(() => buildSmartNoteModel(text, smart), [text, smart]);
+  const hasEntities = smart.pi.length + smart.hostname.length + smart.ip.length + smart.office.length > 0;
+
+  if (hasEntities) {
+    return <ClipEntityBlock smart={smart} model={model} palette={palette} expanded={expanded} onCopy={onCopy} />;
+  }
+  if (model.isList) {
+    return <ClipListBlock model={model} palette={palette} expanded={expanded} />;
+  }
+  return (
+    <Text style={{ color: palette.fg, fontSize: 13, lineHeight: 20 }} numberOfLines={expanded ? 0 : 3}>
+      {text}
+    </Text>
+  );
+}
+
+export function ClipboardScreen({ palette, settings, onSendToNote, onSendToTemplate }: Props) {
   const { width } = useWindowDimensions();
   const isDesktop = width >= 1024;
   const desktopColumns = width >= 1600 ? 3 : width >= 1200 ? 2 : 1;
@@ -66,6 +216,8 @@ export function ClipboardScreen({ palette, onSendToNote, onSendToTemplate }: Pro
   const [selectedClipboardIds, setSelectedClipboardIds] = useState<Set<string>>(new Set());
   const [previewEntry, setPreviewEntry] = useState<ClipEntry | null>(null);
   const [lastTap, setLastTap] = useState<{ id: string; ts: number } | null>(null);
+  const [expandedClipId, setExpandedClipId] = useState<string | null>(null);
+  const resolvedSettings = settings ?? defaultSettings;
 
   const filteredClipboard = useMemo(() => {
     const q = searchText.trim().toLowerCase();
@@ -288,8 +440,21 @@ export function ClipboardScreen({ palette, onSendToNote, onSendToTemplate }: Pro
                       {entry.kind === 'image' && entry.imageDataUri ? (
                         <ImageThumb uri={entry.imageDataUri} />
                       ) : null}
-                      <Text style={{ color: palette.fg, fontSize: 12 }} numberOfLines={2}>{entry.kind === 'image' ? 'Screenshot capture' : entry.content}</Text>
-                      <Text style={{ color: palette.muted, fontSize: 10 }}>{classifyTitle(entry.kind)}</Text>
+                      {entry.kind === 'text' ? (
+                        <ClipSmartBody
+                          text={entry.content}
+                          palette={palette}
+                          expanded={expandedClipId === entry.id}
+                          settings={resolvedSettings}
+                          onCopy={(value) => {
+                            if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+                              void navigator.clipboard.writeText(value).catch(() => undefined);
+                            }
+                          }}
+                        />
+                      ) : (
+                        <Text style={{ color: palette.fg, fontSize: 12 }} numberOfLines={2}>Screenshot capture</Text>
+                      )}
                       <View style={styles.actionsRow}>
                         <Pressable
                           onPress={() => {
@@ -302,17 +467,30 @@ export function ClipboardScreen({ palette, onSendToNote, onSendToTemplate }: Pro
                         >
                           <Text style={{ color: palette.fg, fontSize: 10, fontWeight: '700' }}>{entry.category}</Text>
                         </Pressable>
-                        <Pressable onPress={() => sendToNote(entry).catch(() => undefined)}>
+                        <Pressable onPress={() => sendToNote(entry).catch(() => undefined)} hitSlop={8}>
                           <Ionicons name="document-text-outline" size={16} color={palette.fg} />
                         </Pressable>
                         {onSendToTemplate ? (
-                          <Pressable onPress={() => onSendToTemplate(entry)}>
+                          <Pressable onPress={() => onSendToTemplate(entry)} hitSlop={8}>
                             <Ionicons name="layers-outline" size={16} color={palette.fg} />
                           </Pressable>
                         ) : null}
-                        <Pressable onPress={() => setPreviewEntry(entry)}>
+                        <Pressable onPress={() => setPreviewEntry(entry)} hitSlop={8}>
                           <Ionicons name="eye-outline" size={16} color={palette.fg} />
                         </Pressable>
+                        {entry.kind === 'text' ? (
+                          <Pressable
+                            onPress={() => setExpandedClipId((prev) => prev === entry.id ? null : entry.id)}
+                            hitSlop={8}
+                            style={{ marginLeft: 'auto' }}
+                          >
+                            <Ionicons
+                              name={expandedClipId === entry.id ? 'chevron-up' : 'chevron-down'}
+                              size={15}
+                              color={palette.muted}
+                            />
+                          </Pressable>
+                        ) : null}
                       </View>
                     </Pressable>
                   );
@@ -335,9 +513,19 @@ export function ClipboardScreen({ palette, onSendToNote, onSendToTemplate }: Pro
             </View>
             {previewEntry?.kind === 'image' && previewEntry.imageDataUri ? (
               <Image source={{ uri: previewEntry.imageDataUri }} style={styles.previewImage} resizeMode="contain" />
-            ) : (
-              <Text style={{ color: palette.fg, fontSize: 13, lineHeight: 20 }}>{previewEntry?.content || ''}</Text>
-            )}
+            ) : previewEntry?.kind === 'text' && previewEntry.content ? (
+              <ClipSmartBody
+                text={previewEntry.content}
+                palette={palette}
+                expanded
+                settings={resolvedSettings}
+                onCopy={(value) => {
+                  if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+                    void navigator.clipboard.writeText(value).catch(() => undefined);
+                  }
+                }}
+              />
+            ) : null}
             <Text style={{ color: palette.muted, fontSize: 11, marginTop: 8 }}>Would you like to create a note with this item?</Text>
             <View style={styles.previewActions}>
               <Pressable style={[styles.previewBtn, { borderColor: palette.border }]} onPress={() => setPreviewEntry(null)}>
