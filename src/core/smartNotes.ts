@@ -130,6 +130,121 @@ export function buildSmartNoteModel(text: string, entities: SmartNoteEntities): 
   return { entityType: entities.type, entities, hasEntities, isChecklist, isList, items, rawText };
 }
 
+// ─── ServiceNow structured field parsing ──────────────────────────────────────
+
+export type ServiceNowField = {
+  key: string;        // normalized key: 'affected_end_user'
+  rawLabel: string;   // clean display label: 'Affected end user'
+  value: string;      // cleaned value text
+};
+
+export type ServiceNowModel = {
+  isStructured: boolean;
+  fields: ServiceNowField[];
+  freeText: string;   // lines that had no label|value structure
+  footer: string;     // text after a '---' separator
+};
+
+/** Field keys auto-hidden by default (sensitive / personal data). */
+export const SENSITIVE_FIELD_KEYS: ReadonlySet<string> = new Set([
+  'affected_end_user',
+  'business_phone',
+  'phone',
+]);
+
+// OCR junk that appears before labels: "> ", "»", "5k ", etc.
+const PREFIX_NOISE_RE = /^[\s>»*•!$]+(?:\d+[a-z]\s+)?/i;
+
+// Cleans OCR garbage from label names: "(?)","®","(7)","€)"
+const LABEL_CLEAN_RE = /\s*[\(®€©\)!]\s*|\s*\(\?\)\s*|\s*\(\d+\)\s*/g;
+
+// Trailing OCR noise patterns in values: "QQ HI O", " v", "oO |& ©", " O)"
+// Strips short uppercase artifacts and symbol clusters at the end of a value.
+const VALUE_TRAIL_RE = /(\s+(?:[A-Z]{1,2}\)?|QQ|xo?|oO?|HI\s*[A-Z]?|[€©&|]+\)?))+\s*$/g;
+
+function labelToKey(label: string): string {
+  return label
+    .replace(LABEL_CLEAN_RE, ' ')
+    .toLowerCase()
+    .trim()
+    .replace(/[\s()/]+/g, '_')
+    .replace(/[^a-z0-9_]/g, '')
+    .replace(/^_|_$/g, '');
+}
+
+function parsePipeLine(raw: string): { label: string; value: string } | null {
+  const line = raw.replace(PREFIX_NOISE_RE, '');
+  const pipeIdx = line.indexOf(' | ');
+  if (pipeIdx < 2) return null;
+
+  const cleanLabel = line.slice(0, pipeIdx).replace(LABEL_CLEAN_RE, ' ').trim();
+  if (cleanLabel.length < 2 || !/[a-zA-Z]/.test(cleanLabel)) return null;
+
+  // Take only the first pipe-segment as value to avoid swallowing OCR continuations
+  const rawValue = line.slice(pipeIdx + 3).split(' | ')[0];
+  const cleanValue = rawValue.replace(VALUE_TRAIL_RE, '').replace(/\)\s*$/, '').trim();
+
+  return { label: cleanLabel, value: cleanValue };
+}
+
+export function parseServiceNowFields(text: string): ServiceNowModel {
+  const lines = String(text || '').split('\n');
+  const fields: ServiceNowField[] = [];
+  const freeLines: string[] = [];
+  const footerLines: string[] = [];
+  let separatorSeen = false;
+  const seenKeys = new Set<string>();
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+
+    // Section separator (--- or ===)
+    if (/^[-=]{3,}$/.test(trimmed)) { separatorSeen = true; continue; }
+
+    if (separatorSeen) { footerLines.push(trimmed); continue; }
+
+    const parsed = parsePipeLine(trimmed);
+    if (parsed) {
+      const key = labelToKey(parsed.label);
+      if (key && !seenKeys.has(key)) {
+        seenKeys.add(key);
+        fields.push({ key, rawLabel: parsed.label, value: parsed.value });
+      }
+    } else {
+      freeLines.push(trimmed);
+    }
+  }
+
+  return {
+    isStructured: fields.length >= 2,
+    fields,
+    freeText: freeLines.join('\n').trim(),
+    footer: footerLines.join('\n').trim(),
+  };
+}
+
+/**
+ * Rebuild note text from a ServiceNowModel, omitting fields whose keys are in
+ * `hiddenKeys`. Preserves free-text lines and the footer separator block.
+ * Falls back to the original raw text when the model is not structured.
+ */
+export function buildRedactedText(model: ServiceNowModel, rawText: string, hiddenKeys: Set<string>): string {
+  if (!model.isStructured) return rawText;
+
+  const lines: string[] = [];
+
+  for (const field of model.fields) {
+    if (hiddenKeys.has(field.key)) continue;
+    lines.push(`${field.rawLabel} | ${field.value}`);
+  }
+
+  if (model.freeText) lines.push(model.freeText);
+  if (model.footer)   { lines.push('---'); lines.push(model.footer); }
+
+  return lines.join('\n');
+}
+
 // ─── Inline text segmentation (for highlighted rendering) ─────────────────────
 
 export type NoteSegmentKind = 'plain' | 'pi' | 'hostname' | 'ip' | 'office';

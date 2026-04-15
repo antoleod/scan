@@ -704,7 +704,7 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
                             }}
                             onTogglePinned={() => togglePinned(note.id).then(setNotes)}
                             onOpenImage={setPreviewNoteImageUri}
-                            onCopy={() => forceCopyToClipboard(note.text).catch(() => undefined)}
+                            onCopy={(text) => forceCopyToClipboard(text).catch(() => undefined)}
                             settings={settings}
                             onCopyValue={(value, label) => {
                               forceCopyToClipboard(value).then(() => showToast(`${label} copied`)).catch(() => undefined);

@@ -243,7 +243,9 @@ export async function syncScansWithFirebase(local: ScanRecord[]) {
     throw new Error(buildFirebaseDisabledErrorMessage(rt));
   }
 
-  const user = rt.auth.currentUser;
+  const user = rt.auth.currentUser ?? await new Promise<User | null>((resolve) => {
+    const unsub = onAuthStateChanged(rt.auth!, (u) => { unsub(); resolve(u); });
+  });
   if (!user) throw new Error('No authenticated session to sync.');
 
   const uid = user.uid;
@@ -310,18 +312,36 @@ export async function subscribeToScans(
 ): Promise<() => void> {
   const rt = await initFirebaseRuntime();
   if (!rt.enabled || !rt.auth || !rt.db) return () => {};
-  const user = rt.auth.currentUser;
-  if (!user) return () => {};
-  const scansRef = collection(rt.db, 'users', user.uid, 'scans');
-  return onSnapshot(query(scansRef), (snap) => {
-    const scans: ScanRecord[] = [];
-    snap.forEach((d) => {
-      const x = d.data() as ScanRecord;
-      if (x.deletedAt) return;
-      scans.push({ ...x, id: x.id || d.id });
-    });
-    callback(scans);
+
+  const db = rt.db;
+  let firestoreUnsub: (() => void) | null = null;
+
+  const authUnsub = onAuthStateChanged(rt.auth, (user) => {
+    if (firestoreUnsub) { firestoreUnsub(); firestoreUnsub = null; }
+    if (!user) return;
+
+    const scansRef = collection(db, 'users', user.uid, 'scans');
+    firestoreUnsub = onSnapshot(
+      query(scansRef),
+      (snap) => {
+        const scans: ScanRecord[] = [];
+        snap.forEach((d) => {
+          const x = d.data() as ScanRecord;
+          if (x.deletedAt) return;
+          scans.push({ ...x, id: x.id || d.id });
+        });
+        callback(scans);
+      },
+      async (error) => {
+        await diag.warn('scans.subscribe.error', { message: String(error) });
+      }
+    );
   });
+
+  return () => {
+    if (firestoreUnsub) { firestoreUnsub(); firestoreUnsub = null; }
+    authUnsub();
+  };
 }
 
 // Real-time listener for notes + templates changes (cross-device sync).
@@ -330,37 +350,50 @@ export async function subscribeToNotes(
 ): Promise<() => void> {
   const rt = await initFirebaseRuntime();
   if (!rt.enabled || !rt.auth || !rt.db) return () => {};
-  const user = rt.auth.currentUser;
-  if (!user) return () => {};
-  const notesRef = collection(rt.db, 'users', user.uid, 'notes');
-  const templatesRef = collection(rt.db, 'users', user.uid, 'noteTemplates');
 
-  let latestNotes: NoteItem[] = [];
-  let latestTemplates: NoteTemplate[] = [];
+  const db = rt.db;
+  let notesUnsub: (() => void) | null = null;
+  let templatesUnsub: (() => void) | null = null;
 
-  const notesUnsub = onSnapshot(
-    query(notesRef),
-    (snap) => {
-      latestNotes = snap.docs.map((d) => ({ ...(d.data() as NoteItem), id: d.id }));
-      callback({ notes: latestNotes, templates: latestTemplates });
-    },
-    async (error) => {
-      await diag.warn('notes.subscribe.notes.error', { message: String(error) });
-    }
-  );
+  function teardownFirestore() {
+    notesUnsub?.(); notesUnsub = null;
+    templatesUnsub?.(); templatesUnsub = null;
+  }
 
-  const templatesUnsub = onSnapshot(
-    query(templatesRef),
-    (snap) => {
-      latestTemplates = snap.docs.map((d) => ({ ...(d.data() as NoteTemplate), id: d.id }));
-      callback({ notes: latestNotes, templates: latestTemplates });
-    },
-    async (error) => {
-      await diag.warn('notes.subscribe.templates.error', { message: String(error) });
-    }
-  );
+  const authUnsub = onAuthStateChanged(rt.auth, (user) => {
+    teardownFirestore();
+    if (!user) return;
 
-  return () => { notesUnsub(); templatesUnsub(); };
+    let latestNotes: NoteItem[] = [];
+    let latestTemplates: NoteTemplate[] = [];
+
+    const notesRef     = collection(db, 'users', user.uid, 'notes');
+    const templatesRef = collection(db, 'users', user.uid, 'noteTemplates');
+
+    notesUnsub = onSnapshot(
+      query(notesRef),
+      (snap) => {
+        latestNotes = snap.docs.map((d) => ({ ...(d.data() as NoteItem), id: d.id }));
+        callback({ notes: latestNotes, templates: latestTemplates });
+      },
+      async (error) => {
+        await diag.warn('notes.subscribe.notes.error', { message: String(error) });
+      }
+    );
+
+    templatesUnsub = onSnapshot(
+      query(templatesRef),
+      (snap) => {
+        latestTemplates = snap.docs.map((d) => ({ ...(d.data() as NoteTemplate), id: d.id }));
+        callback({ notes: latestNotes, templates: latestTemplates });
+      },
+      async (error) => {
+        await diag.warn('notes.subscribe.templates.error', { message: String(error) });
+      }
+    );
+  });
+
+  return () => { teardownFirestore(); authUnsub(); };
 }
 
 export async function upsertNoteInFirebase(note: NoteItem): Promise<void> {

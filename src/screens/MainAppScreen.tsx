@@ -1137,13 +1137,51 @@ function MainApp() {
     subscribeToScans((serverScans) => {
       setHistory((current) => {
         const filtered = serverScans.filter((s) => !deletedHistoryIdsRef.current.has(s.id));
-        const localKeys = new Set(current.map((x) => historyKey(x)));
-        const newFromServer = filtered.filter((s) => !localKeys.has(historyKey(s)));
-        if (!newFromServer.length) return current;
-        const merged = [
-          ...current.map((x) => (x.status === 'pending' ? { ...x, status: 'sent' as const } : x)),
-          ...newFromServer,
-        ];
+
+        // Build a key→record map from current local state
+        const localByKey = new Map<string, ScanRecord>();
+        for (const x of current) localByKey.set(historyKey(x), x);
+
+        // Last-writer-wins: for each server record, replace local if server is newer
+        let changed = false;
+        const serverByKey = new Map<string, ScanRecord>();
+        for (const s of filtered) {
+          const key = historyKey(s);
+          serverByKey.set(key, s);
+          const local = localByKey.get(key);
+          if (!local) {
+            changed = true; // new record from server
+          } else {
+            const serverTs = Number(s.updatedAt ?? 0);
+            const localTs  = Number(local.updatedAt ?? 0);
+            if (serverTs > localTs) { changed = true; } // server version is newer
+          }
+        }
+
+        if (!changed) return current;
+
+        // Merge: use server version when server is newer, preserve local pending records
+        const merged: ScanRecord[] = [];
+        const seen = new Set<string>();
+        for (const x of current) {
+          const key = historyKey(x);
+          const server = serverByKey.get(key);
+          if (server) {
+            const serverTs = Number(server.updatedAt ?? 0);
+            const localTs  = Number(x.updatedAt ?? 0);
+            const resolved = serverTs > localTs ? server : x;
+            // Pending local records are not yet on server — keep them pending
+            merged.push(x.status === 'pending' ? x : { ...resolved, status: 'sent' as const });
+          } else {
+            merged.push(x.status === 'pending' ? x : { ...x, status: 'sent' as const });
+          }
+          seen.add(key);
+        }
+        // Append records that only exist on the server
+        for (const [key, s] of serverByKey) {
+          if (!seen.has(key)) merged.push(s);
+        }
+
         if (realtimeSaveTimerRef.current) clearTimeout(realtimeSaveTimerRef.current);
         realtimeSaveTimerRef.current = setTimeout(() => {
           saveHistory(merged).catch(() => undefined);
@@ -1169,6 +1207,22 @@ function MainApp() {
     if (!user?.uid) return;
     void reinitClipboardFirebaseSync();
   }, [user?.uid]);
+
+  // Network-reconnect sync: when the browser/device comes back online after a
+  // connectivity loss, push any pending local scans and pull the latest server
+  // state. Firestore listeners reconnect automatically, but the pending-push
+  // logic only runs on mount — this ensures it also runs on every reconnect.
+  useEffect(() => {
+    if (!user?.uid || persistenceMode !== 'firebase') return;
+    if (Platform.OS !== 'web') return; // Native: Firestore SDK handles reconnect internally
+
+    function handleOnline() {
+      syncNow(false).catch(() => undefined);
+    }
+
+    window.addEventListener('online', handleOnline);
+    return () => window.removeEventListener('online', handleOnline);
+  }, [user?.uid, persistenceMode]);
 
   async function clearAllHistory() {
     // Pre-populate deletedHistoryIdsRef with ALL current IDs before Firestore deletion.

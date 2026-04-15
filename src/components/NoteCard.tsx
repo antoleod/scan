@@ -10,8 +10,9 @@ import {
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { detectNoteEntities, buildSmartNoteModel, segmentNoteText, SmartNoteEntities, SmartNoteModel, NoteSegment } from '../core/smartNotes';
+import { detectNoteEntities, buildSmartNoteModel, segmentNoteText, parseServiceNowFields, buildRedactedText, SmartNoteEntities, SmartNoteModel, ServiceNowField, ServiceNowModel, NoteSegment, SENSITIVE_FIELD_KEYS } from '../core/smartNotes';
 import { AppSettings } from '../types';
+import { useFieldVisibility } from '../hooks/useFieldVisibility';
 
 type Palette = {
   bg: string;
@@ -173,7 +174,7 @@ export function NoteCard({
   onCancelEdit: () => void;
   onTogglePinned: () => void;
   onOpenImage: (uri: string) => void;
-  onCopy: () => void;
+  onCopy: (text: string) => void;
   onCopyValue: (value: string, label: 'IP' | 'Hostname') => void;
   onPressOffice: (office: string) => void;
   onSaveToDevice: () => void;
@@ -292,7 +293,8 @@ export function NoteCard({
   const smart = useMemo(() => detectNoteEntities(note.text, settings), [note.text, settings]);
   const isSmart = smart.type !== 'general';
   const model = useMemo(() => buildSmartNoteModel(note.text, smart), [note.text, smart]);
-  const [showOriginal, setShowOriginal] = React.useState(false);
+  const sfModel = useMemo(() => parseServiceNowFields(note.text), [note.text]);
+const { hiddenKeys, toggleField } = useFieldVisibility();
   const typeMeta = useMemo(() => {
     switch (smart.type) {
       case 'network':
@@ -460,6 +462,19 @@ export function NoteCard({
                   textAlignVertical: 'top',
                 }}
               />
+            ) : sfModel.isStructured ? (
+              <ServiceNowBlock
+                sfModel={sfModel}
+                smart={smart}
+                typeMeta={typeMeta}
+                palette={palette}
+                expanded={expanded}
+                hiddenKeys={hiddenKeys}
+                onToggleField={toggleField}
+                onPressOffice={onPressOffice}
+                onCopyValue={onCopyValue}
+                serviceNowBaseUrl={settings.serviceNowBaseUrl}
+              />
             ) : isSmart ? (
               <SmartEntityBlock
                 smart={smart}
@@ -467,12 +482,8 @@ export function NoteCard({
                 typeMeta={typeMeta}
                 palette={palette}
                 expanded={expanded}
-                showOriginal={showOriginal}
-                showRawText={settings.showRawText}
-                onToggleOriginal={() => setShowOriginal((v) => !v)}
                 onPressOffice={onPressOffice}
                 onCopyValue={onCopyValue}
-                preview={preview}
               />
             ) : model.isList ? (
               <NoteListBlock model={model} palette={palette} expanded={expanded} />
@@ -569,7 +580,12 @@ export function NoteCard({
                 </View>
               ) : (
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                  <ActionPill icon="copy-outline"         label="Copy"  color="#0891b2" onPress={onCopy} />
+                  <ActionPill icon="copy-outline"         label="Copy"  color="#0891b2" onPress={() => {
+                    const text = sfModel.isStructured
+                      ? buildRedactedText(sfModel, note.text, hiddenKeys)
+                      : note.text;
+                    onCopy(text);
+                  }} />
                   <ActionPill icon="share-social-outline" label="Share" color="#7c3aed" onPress={onShare} />
                   <ActionPill icon="create-outline"       label="Edit"  color="#059669" onPress={onStartEdit} />
 
@@ -656,6 +672,342 @@ const ENTITY_COLORS: Record<string, { text: string; bg: string; label: string }>
   office:   { text: '#4ADE80', bg: 'rgba(74,222,128,0.14)',  label: 'Office' },
 };
 
+// ─── ServiceNow: single field row ─────────────────────────────────────────────
+
+function SnFieldRow({
+  field,
+  smart,
+  palette,
+  isLast,
+  isNumber,
+  serviceNowBaseUrl,
+  onCopyValue,
+  onPressOffice,
+}: {
+  field: ServiceNowField;
+  smart: SmartNoteEntities;
+  palette: Palette;
+  isLast: boolean;
+  isNumber: boolean;
+  serviceNowBaseUrl: string;
+  onCopyValue: (value: string, label: 'IP' | 'Hostname') => void;
+  onPressOffice: (office: string) => void;
+}) {
+  const segments = useMemo(() => segmentNoteText(field.value, smart), [field.value, smart]);
+  const isTicket = isNumber && /^(INC|RITM|SCTASK|REQ|CHG)\d+$/i.test(field.value.trim());
+
+  function ticketTable(number: string): string {
+    const prefix = number.replace(/\d+$/, '').toUpperCase();
+    switch (prefix) {
+      case 'RITM': return 'sc_req_item';
+      case 'SCTASK': return 'sc_task';
+      case 'REQ':  return 'sc_request';
+      case 'CHG':  return 'change_request';
+      default:     return 'incident'; // INC
+    }
+  }
+
+  const ticketUrl = isTicket && serviceNowBaseUrl
+    ? `${serviceNowBaseUrl.replace(/\/$/, '')}/nav_to.do?uri=${ticketTable(field.value.trim())}.do?number=${field.value.trim()}`
+    : null;
+
+  return (
+    <View style={{
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      paddingVertical: 7,
+      borderBottomWidth: isLast ? 0 : 0.5,
+      borderBottomColor: palette.border,
+      gap: 10,
+      minHeight: 34,
+    }}>
+      {/* Label */}
+      <Text
+        style={{
+          width: 128,
+          flexShrink: 0,
+          color: palette.textMuted,
+          fontSize: 11,
+          fontWeight: '700',
+          letterSpacing: 0.3,
+          textTransform: 'uppercase',
+          paddingTop: 2,
+        }}
+        numberOfLines={2}
+      >
+        {field.rawLabel}
+      </Text>
+
+      {/* Value with entity highlights */}
+      <View style={{ flex: 1, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 2 }}>
+        {isTicket && ticketUrl ? (
+          // Ticket number — styled as a clickable chip
+          <View style={{
+            flexDirection: 'row', alignItems: 'center', gap: 5,
+            borderRadius: 6, borderWidth: 1,
+            borderColor: `${palette.accent}55`,
+            backgroundColor: `${palette.accent}12`,
+            paddingHorizontal: 8, paddingVertical: 3,
+          }}>
+            <Ionicons name="ticket-outline" size={12} color={palette.accent} />
+            <Text
+              style={{ color: palette.accent, fontSize: 13, fontWeight: '800', letterSpacing: 0.2 }}
+              onPress={ticketUrl ? () => {
+                import('react-native').then(({ Linking }) => Linking.openURL(ticketUrl).catch(() => undefined));
+              } : undefined}
+            >
+              {field.value.trim()}
+            </Text>
+          </View>
+        ) : (
+          <Text style={{ fontSize: 13, lineHeight: 20, flex: 1 }}>
+            {segments.map((seg, i) => {
+              if (seg.kind === 'plain') {
+                return <Text key={i} style={{ color: palette.textBody, fontWeight: '500' }}>{seg.text}</Text>;
+              }
+              const c = ENTITY_COLORS[seg.kind];
+              const interactive = seg.kind !== 'pi';
+              return (
+                <Text
+                  key={i}
+                  onPress={interactive ? () => {
+                    if (seg.kind === 'ip') onCopyValue(seg.text, 'IP');
+                    else if (seg.kind === 'hostname') onCopyValue(seg.text, 'Hostname');
+                    else if (seg.kind === 'office') onPressOffice(seg.text);
+                  } : undefined}
+                  style={{
+                    color: c.text,
+                    backgroundColor: c.bg,
+                    fontWeight: '700',
+                    borderRadius: 3,
+                    overflow: 'hidden',
+                  }}
+                >
+                  {seg.text}
+                </Text>
+              );
+            })}
+          </Text>
+        )}
+      </View>
+    </View>
+  );
+}
+
+// ─── ServiceNow: field visibility toggles panel ────────────────────────────────
+
+function FieldVisibilityPanel({
+  fields,
+  hiddenKeys,
+  onToggle,
+  palette,
+}: {
+  fields: ServiceNowField[];
+  hiddenKeys: Set<string>;
+  onToggle: (key: string) => void;
+  palette: Palette;
+}) {
+  return (
+    <View style={{
+      marginTop: 10,
+      borderTopWidth: 0.5,
+      borderTopColor: palette.border,
+      paddingTop: 8,
+      gap: 4,
+    }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 4 }}>
+        <Ionicons name="eye-outline" size={12} color={palette.textMuted} />
+        <Text style={{ color: palette.textMuted, fontSize: 10, fontWeight: '800', letterSpacing: 0.6 }}>
+          FIELD VISIBILITY
+        </Text>
+      </View>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+        {fields.map((field) => {
+          const hidden = hiddenKeys.has(field.key);
+          const isSensitive = SENSITIVE_FIELD_KEYS.has(field.key);
+          return (
+            <Pressable
+              key={field.key}
+              onPress={() => onToggle(field.key)}
+              style={({ pressed }) => ({
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 4,
+                paddingHorizontal: 8,
+                paddingVertical: 4,
+                borderRadius: 99,
+                borderWidth: 1,
+                borderColor: hidden ? palette.border : `${palette.accent}55`,
+                backgroundColor: hidden ? 'transparent' : `${palette.accent}10`,
+                opacity: pressed ? 0.75 : 1,
+              })}
+            >
+              <Ionicons
+                name={hidden ? 'eye-off-outline' : 'eye-outline'}
+                size={11}
+                color={hidden ? palette.textMuted : palette.accent}
+              />
+              {isSensitive && (
+                <Ionicons name="lock-closed-outline" size={9} color={palette.textMuted} />
+              )}
+              <Text style={{
+                fontSize: 10,
+                fontWeight: '700',
+                color: hidden ? palette.textMuted : palette.accent,
+                letterSpacing: 0.2,
+              }}>
+                {field.rawLabel}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
+// ─── ServiceNow: main structured block ────────────────────────────────────────
+
+function ServiceNowBlock({
+  sfModel,
+  smart,
+  typeMeta,
+  palette,
+  expanded,
+  hiddenKeys,
+  onToggleField,
+  onCopyValue,
+  onPressOffice,
+  serviceNowBaseUrl,
+}: {
+  sfModel: ServiceNowModel;
+  smart: SmartNoteEntities;
+  typeMeta: { title: string; color: string };
+  palette: Palette;
+  expanded: boolean;
+  hiddenKeys: Set<string>;
+  onToggleField: (key: string) => void;
+  onCopyValue: (value: string, label: 'IP' | 'Hostname') => void;
+  onPressOffice: (office: string) => void;
+  serviceNowBaseUrl: string;
+}) {
+  const visibleFields = sfModel.fields.filter((f) => !hiddenKeys.has(f.key));
+  const hiddenCount = sfModel.fields.length - visibleFields.length;
+  const displayFields = expanded ? visibleFields : visibleFields.slice(0, 6);
+  const moreCount = visibleFields.length - displayFields.length;
+
+  // Segment footer text for entity highlighting
+  const footerSegments = useMemo(
+    () => sfModel.footer ? segmentNoteText(sfModel.footer, smart) : [],
+    [sfModel.footer, smart],
+  );
+
+  return (
+    <View style={{ gap: 6 }}>
+      {/* Type badge + hidden-field count */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 6 }}>
+        <View style={{
+          borderRadius: 6, borderWidth: 1,
+          borderColor: `${typeMeta.color}55`,
+          backgroundColor: `${typeMeta.color}18`,
+          paddingHorizontal: 7, paddingVertical: 3,
+          flexDirection: 'row', alignItems: 'center', gap: 4,
+        }}>
+          <Ionicons name="document-text-outline" size={10} color={typeMeta.color} />
+          <Text style={{ color: typeMeta.color, fontSize: 10, fontWeight: '800', letterSpacing: 0.3 }}>
+            {typeMeta.title.toUpperCase()}
+          </Text>
+        </View>
+        {hiddenCount > 0 && (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+            <Ionicons name="eye-off-outline" size={10} color={palette.textMuted} />
+            <Text style={{ color: palette.textMuted, fontSize: 10 }}>
+              {hiddenCount} hidden
+            </Text>
+          </View>
+        )}
+      </View>
+
+      {/* Field rows */}
+      <View style={{
+        borderRadius: 10,
+        borderWidth: 1,
+        borderColor: `${typeMeta.color}28`,
+        backgroundColor: `${typeMeta.color}06`,
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+      }}>
+        {displayFields.map((field, i) => (
+          <SnFieldRow
+            key={field.key}
+            field={field}
+            smart={smart}
+            palette={palette}
+            isLast={i === displayFields.length - 1 && moreCount === 0}
+            isNumber={field.key === 'number'}
+            serviceNowBaseUrl={serviceNowBaseUrl}
+            onCopyValue={onCopyValue}
+            onPressOffice={onPressOffice}
+          />
+        ))}
+        {moreCount > 0 && (
+          <Text style={{ color: palette.textMuted, fontSize: 11, paddingVertical: 4 }}>
+            +{moreCount} more fields (expand to see all)
+          </Text>
+        )}
+      </View>
+
+      {/* Free text (non-field lines) */}
+      {sfModel.freeText ? (
+        <Text style={{ color: palette.textBody, fontSize: 12, lineHeight: 18, opacity: 0.75 }}>
+          {sfModel.freeText}
+        </Text>
+      ) : null}
+
+      {/* Footer (after ---) with entity highlights */}
+      {sfModel.footer ? (
+        <View style={{
+          borderTopWidth: 0.5,
+          borderTopColor: palette.border,
+          paddingTop: 6,
+          flexDirection: 'row',
+          flexWrap: 'wrap',
+          gap: 2,
+        }}>
+          <Text style={{ fontSize: 12, lineHeight: 20 }}>
+            {footerSegments.map((seg, i) => {
+              if (seg.kind === 'plain') {
+                return <Text key={i} style={{ color: palette.textBody }}>{seg.text}</Text>;
+              }
+              const c = ENTITY_COLORS[seg.kind];
+              return (
+                <Text
+                  key={i}
+                  onPress={seg.kind === 'office' ? () => onPressOffice(seg.text) : undefined}
+                  style={{ color: c.text, backgroundColor: c.bg, fontWeight: '700', borderRadius: 3 }}
+                >
+                  {seg.text}
+                </Text>
+              );
+            })}
+          </Text>
+        </View>
+      ) : null}
+
+      {/* Field visibility panel (only when expanded) */}
+      {expanded && (
+        <FieldVisibilityPanel
+          fields={sfModel.fields}
+          hiddenKeys={hiddenKeys}
+          onToggle={onToggleField}
+          palette={palette}
+        />
+      )}
+    </View>
+  );
+}
+
+
 // ─── SmartEntityBlock ──────────────────────────────────────────────────────────
 
 function SmartEntityBlock({
@@ -672,12 +1024,8 @@ function SmartEntityBlock({
   typeMeta: { title: string; color: string };
   palette: Palette;
   expanded: boolean;
-  showOriginal: boolean;
-  showRawText: boolean;
-  onToggleOriginal: () => void;
   onPressOffice: (office: string) => void;
   onCopyValue: (value: string, label: 'IP' | 'Hostname') => void;
-  preview: string;
 }) {
   // Build segments once per render (text rarely changes)
   const segments = React.useMemo(() => segmentNoteText(model.rawText, smart), [model.rawText, smart]);

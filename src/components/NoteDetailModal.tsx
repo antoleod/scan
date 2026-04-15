@@ -11,6 +11,8 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useCtrlEnterSave } from '../hooks/useCtrlEnterSave';
+import { parseServiceNowFields, buildRedactedText } from '../core/smartNotes';
+import { useFieldVisibility } from '../hooks/useFieldVisibility';
 
 type NoteCategory = 'general' | 'work';
 type NoteColor   = 'default' | 'amber' | 'mint' | 'sky' | 'rose';
@@ -78,6 +80,7 @@ export function NoteDetailModal({
   const [localTitle, setLocalTitle] = useState('');
   const [localText,  setLocalText]  = useState('');
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const { hiddenKeys } = useFieldVisibility();
   const bodyRef = useRef<TextInput>(null);
 
   // Sync from note when modal opens
@@ -170,7 +173,11 @@ export function NoteDetailModal({
 
             {/* Action icons */}
             <ToolBtn icon={note.pinned ? 'bookmark' : 'bookmark-outline'} color={note.pinned ? '#2563eb' : palette.textDim} onPress={() => onTogglePinned(note.id)} />
-            <ToolBtn icon="copy-outline"          color={palette.textDim} onPress={() => onCopy(localText)} />
+            <ToolBtn icon="copy-outline"          color={palette.textDim} onPress={() => {
+              const sfModel = parseServiceNowFields(localText);
+              const text = sfModel.isStructured ? buildRedactedText(sfModel, localText, hiddenKeys) : localText;
+              onCopy(text);
+            }} />
             <ToolBtn icon="share-social-outline"  color={palette.textDim} onPress={() => onShare(note.id)} />
             <ToolBtn icon={note.archived ? 'archive' : 'archive-outline'} color={palette.textDim} onPress={() => { onArchive(note.id); onClose(); }} />
 
