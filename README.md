@@ -1,4 +1,4 @@
-# Oryxen Scanner
+# MyKit
 
 Expo + React Native app in the repository root.
 

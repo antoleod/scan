@@ -1,11 +1,11 @@
 {
-  "name": "Oryxen Scanner",
-  "short_name": "Oryxen",
+  "name": "MyKit",
+  "short_name": "MyKit",
   "description": "Secure barcode & QR scanner workspace with offline-ready cloud sync.",
   "lang": "en-US",
-  "id": "/oryxen/",
-  "start_url": "/oryxen/",
-  "scope": "/oryxen/",
+  "id": "/MyKit/",
+  "start_url": "/MyKit/",
+  "scope": "/MyKit/",
   "display": "standalone",
   "display_override": ["window-controls-overlay", "standalone", "minimal-ui"],
   "orientation": "any",
@@ -15,25 +15,25 @@
   "prefer_related_applications": false,
   "icons": [
     {
-      "src": "/oryxen/icon-192.png",
+      "src": "/MyKit/icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/oryxen/icon-192.png",
+      "src": "/MyKit/icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "maskable"
     },
     {
-      "src": "/oryxen/icon-512.png",
+      "src": "/MyKit/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/oryxen/icon-512.png",
+      "src": "/MyKit/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
