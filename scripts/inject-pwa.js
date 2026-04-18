@@ -148,7 +148,7 @@ injectIfMissing(
 );
 
 // ── 6. Apple PWA ──────────────────────────────────────────────────────────────
-injectIfMissing(`<meta name="apple-mobile-web-app-capable" content="yes">`,             'apple-mobile-web-app-capable');
+// Removed apple-mobile-web-app-capable as it throws deprecation warnings in Chrome
 injectIfMissing(`<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">`, 'apple-mobile-web-app-status-bar-style');
 injectIfMissing(`<meta name="apple-mobile-web-app-title" content="MyKit">`,            'apple-mobile-web-app-title');
 injectIfMissing(`<link rel="apple-touch-icon" href="${basePath}/icon-192.png">`,         'apple-touch-icon');
