@@ -395,6 +395,23 @@ export function NoteCard({
                   {updatedAt}
                 </Text>
               </View>
+
+              {/* Added category chips here */}
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <View style={{ borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2, backgroundColor: palette.surfaceAlt }}>
+                  <Text style={{ color: palette.textMuted, fontSize: 9, fontWeight: '800', letterSpacing: 0.5, textTransform: 'uppercase' }}>
+                    {note.category}
+                  </Text>
+                </View>
+                {note.archived ? (
+                  <View style={{ borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2, backgroundColor: palette.surfaceAlt }}>
+                    <Text style={{ color: palette.textMuted, fontSize: 9, fontWeight: '800', letterSpacing: 0.5, textTransform: 'uppercase' }}>
+                      archived
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
+
               {selected !== undefined ? (
                 <View style={{
                   width: 24, height: 24, borderRadius: 12,
@@ -563,20 +580,8 @@ export function NoteCard({
 
             {/* ── Footer ── */}
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-              {/* Category + archived chips + word count */}
+              {/* Word count */}
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap', flex: 1 }}>
-                <View style={{ borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2, backgroundColor: palette.surfaceAlt }}>
-                  <Text style={{ color: palette.textMuted, fontSize: 10, fontWeight: '700', letterSpacing: 0.5, textTransform: 'uppercase' }}>
-                    {note.category}
-                  </Text>
-                </View>
-                {note.archived ? (
-                  <View style={{ borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2, backgroundColor: palette.surfaceAlt }}>
-                    <Text style={{ color: palette.textMuted, fontSize: 10, fontWeight: '700', letterSpacing: 0.5, textTransform: 'uppercase' }}>
-                      archived
-                    </Text>
-                  </View>
-                ) : null}
                 {expanded && wordCount.words > 0 ? (
                   <View style={{ borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2, backgroundColor: `${palette.accent}12`, borderWidth: 1, borderColor: `${palette.accent}28` }}>
                     <Text style={{ color: palette.accent, fontSize: 9, fontWeight: '700', letterSpacing: 0.4 }}>
