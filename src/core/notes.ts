@@ -583,7 +583,7 @@ export function buildAppointmentIcs(
   return [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
-    'PRODID:-//Oryxen//Templates//EN',
+    'PRODID:-//MyKit//Templates//EN',
     'CALSCALE:GREGORIAN',
     'METHOD:PUBLISH',
     'BEGIN:VEVENT',

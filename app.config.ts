@@ -4,11 +4,11 @@ const updatesEnabled = process.env.EXPO_PUBLIC_ENABLE_UPDATES === "true";
 const repoName = process.env.GITHUB_REPOSITORY?.split("/")[1];
 const baseUrl =
   process.env.EXPO_PUBLIC_BASE_URL ||
-  (process.env.GITHUB_ACTIONS === "true" && repoName ? `/${repoName}` : "/oryxen");
+  (process.env.GITHUB_ACTIONS === "true" && repoName ? `/${repoName}` : "/MyKit");
 
 const config: ExpoConfig = {
-  name: "Oryxen Scanner Mobile",
-  slug: "oryxen-scanner-mobile",
+  name: "MyKit Mobile",
+  slug: "mykit-mobile",
   version: "1.0.0",
   jsEngine: "jsc",
   orientation: "default",
@@ -21,10 +21,10 @@ const config: ExpoConfig = {
   },
   ios: {
     supportsTablet: true,
-    bundleIdentifier: "com.jdioses.oryxenscannermobile",
+    bundleIdentifier: "com.jdioses.MyKitscannermobile",
   },
   android: {
-    package: "com.jdioses.oryxenscannermobile",
+    package: "com.jdioses.MyKitscannermobile",
     permissions: ["NFC"],
     adaptiveIcon: {
       backgroundColor: "#E6F4FE",
@@ -38,8 +38,8 @@ const config: ExpoConfig = {
     favicon: "./assets/images/favicon.png",
     bundler: "metro",
     output: "single",
-    name: "Oryxen Scanner",
-    shortName: "Oryxen",
+    name: "MyKit",
+    shortName: "MyKit",
     description: "Secure scanner workspace with offline-ready web support.",
     themeColor: "#1A1A1A",
     backgroundColor: "#111111",

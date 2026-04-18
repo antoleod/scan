@@ -1,6 +1,6 @@
 /**
  * dataSync.ts — Web platform utilities for data export, import, and storage cleanup.
- * Covers: cookies, Cache Storage, localStorage (oryxen_ keys), IndexedDB, file picker.
+ * Covers: cookies, Cache Storage, localStorage (MyKit_ keys), IndexedDB, file picker.
  * All functions are safe no-ops on non-web platforms.
  */
 
@@ -15,8 +15,8 @@ export function clearDomainCookies(filter?: string): void {
     const name = c.trim().split('=')[0];
     if (!name) return;
     if (filter && !name.toLowerCase().includes(filter.toLowerCase())) return;
-    // Expire on root path and explicitly on oryxen.tech
-    document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 UTC;path=/;domain=oryxen.tech`;
+    // Expire on root path and explicitly on MyKit.tech
+    document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 UTC;path=/;domain=MyKit.tech`;
     document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 UTC;path=/`;
   });
 }
@@ -40,10 +40,10 @@ export async function clearCacheStorage(filter?: string): Promise<void> {
 
 // ─── localStorage Cleanup ────────────────────────────────────────────────────
 
-/** Remove all localStorage keys that start with `oryxen_`, optionally filtered further. */
+/** Remove all localStorage keys that start with `MyKit_`, optionally filtered further. */
 export function clearAppLocalStorage(keyFilter?: string): void {
   if (typeof localStorage === 'undefined') return;
-  const keys = Object.keys(localStorage).filter((k) => k.startsWith('oryxen_'));
+  const keys = Object.keys(localStorage).filter((k) => k.startsWith('MyKit_'));
   for (const key of keys) {
     if (!keyFilter || key.toLowerCase().includes(keyFilter.toLowerCase())) {
       localStorage.removeItem(key);
@@ -90,7 +90,7 @@ export function deleteIndexedDB(dbName: string): Promise<void> {
 /** Attempt to purge stores matching a keyword across common DB names. */
 export async function purgeIndexedDBByKeyword(keyword: string): Promise<void> {
   if (typeof indexedDB === 'undefined') return;
-  const dbNames = ['RCTAsyncLocalStorage', 'OryxenDB', 'oryxen', 'barra', 'scan', 'expo'];
+  const dbNames = ['RCTAsyncLocalStorage', 'MyKitDB', 'MyKit', 'barra', 'scan', 'expo'];
   const storeVariants = [keyword, `${keyword}s`, `${keyword}Store`];
   await Promise.all(
     dbNames.flatMap((db) => storeVariants.map((store) => purgeIndexedDBStore(db, store))),
@@ -100,7 +100,7 @@ export async function purgeIndexedDBByKeyword(keyword: string): Promise<void> {
 /** Delete all known app-related IndexedDB databases. */
 export async function purgeAllRelatedIndexedDB(): Promise<void> {
   if (typeof indexedDB === 'undefined') return;
-  const dbNames = ['RCTAsyncLocalStorage', 'OryxenDB', 'oryxen', 'barra', 'scan', 'expo'];
+  const dbNames = ['RCTAsyncLocalStorage', 'MyKitDB', 'MyKit', 'barra', 'scan', 'expo'];
   await Promise.all(dbNames.map(deleteIndexedDB));
 }
 

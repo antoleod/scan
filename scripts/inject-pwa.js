@@ -82,7 +82,7 @@ try {
 
 let html = fs.readFileSync(htmlPath, 'utf-8');
 
-// Detect base path from existing script src, e.g. src="/oryxen/_expo/..."
+// Detect base path from existing script src, e.g. src="/MyKit/_expo/..."
 const baseMatch = html.match(/src="(\/[^/"][^"]*)\/_expo\//);
 const basePath  = baseMatch ? baseMatch[1] : '';
 
@@ -90,8 +90,8 @@ const icon192Url = `${basePath}/icon-192.png`;
 const icon512Url = `${basePath}/icon-512.png`;
 
 const manifest = {
-  name:        'Oryxen Scanner',
-  short_name:  'Oryxen',
+  name:        'MyKit',
+  short_name:  'MyKit',
   description: 'Secure barcode & QR scanner workspace with offline-ready cloud sync.',
   lang:        'en-US',
   id:          `${basePath}/`,
@@ -150,7 +150,7 @@ injectIfMissing(
 // ── 6. Apple PWA ──────────────────────────────────────────────────────────────
 injectIfMissing(`<meta name="apple-mobile-web-app-capable" content="yes">`,             'apple-mobile-web-app-capable');
 injectIfMissing(`<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">`, 'apple-mobile-web-app-status-bar-style');
-injectIfMissing(`<meta name="apple-mobile-web-app-title" content="Oryxen">`,            'apple-mobile-web-app-title');
+injectIfMissing(`<meta name="apple-mobile-web-app-title" content="MyKit">`,            'apple-mobile-web-app-title');
 injectIfMissing(`<link rel="apple-touch-icon" href="${basePath}/icon-192.png">`,         'apple-touch-icon');
 
 // ── 7. Edge / Windows ────────────────────────────────────────────────────────

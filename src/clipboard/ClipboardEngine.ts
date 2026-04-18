@@ -3,8 +3,8 @@ import { Platform } from 'react-native';
 
 import type { ClipCategory, ClipEntry, ClipKind, ClipSource, PermState } from '../core/clipboard.types';
 
-const CLIPBOARD_KEY = '@oryxen_clipboard_v2';
-const LEGACY_CLIPBOARD_KEY = '@oryxen_clipboard_v1';
+const CLIPBOARD_KEY = '@MyKit_clipboard_v2';
+const LEGACY_CLIPBOARD_KEY = '@MyKit_clipboard_v1';
 const POLL_BASE = 1200;
 const POLL_SLOW = 3500;
 const MAX_ENTRIES = 3000;

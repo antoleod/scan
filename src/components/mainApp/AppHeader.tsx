@@ -14,15 +14,26 @@ type Palette = {
 };
 
 function LogoMark({ accent, foreground }: { accent: string; foreground: string }) {
+  const scaleAnim = useRef(new Animated.Value(0.95)).current;
+  
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(scaleAnim, { toValue: 1.05, duration: 1200, useNativeDriver: true }),
+        Animated.timing(scaleAnim, { toValue: 0.95, duration: 1200, useNativeDriver: true }),
+      ])
+    ).start();
+  }, [scaleAnim]);
+
   return (
-    <View style={[mainAppStyles.logoShell, { width: 32, height: 32, borderColor: accent, backgroundColor: accent, borderRadius: 8 }]}>
+    <Animated.View style={[mainAppStyles.logoShell, { width: 32, height: 32, borderColor: accent, backgroundColor: accent, borderRadius: 8, transform: [{ scale: scaleAnim }] }]}>
       <View style={mainAppStyles.logoBars}>
         <View style={[mainAppStyles.logoBar, { height: 16, backgroundColor: foreground }]} />
         <View style={[mainAppStyles.logoBarThin, { height: 12, backgroundColor: foreground }]} />
         <View style={[mainAppStyles.logoBar, { height: 18, backgroundColor: foreground }]} />
         <View style={[mainAppStyles.logoBarThin, { height: 14, backgroundColor: foreground }]} />
       </View>
-    </View>
+    </Animated.View>
   );
 }
 
@@ -110,7 +121,7 @@ export function AppHeader({
       <View style={[mainAppStyles.brandBlock, { gap: 10 }]}>
         <LogoMark accent={palette.accent} foreground="#000000" />
         <Text style={{ color: palette.fg, fontSize: 15, fontWeight: '700', letterSpacing: 0.2 }} numberOfLines={1}>
-          Oryxen Scanner
+          MyKit
         </Text>
       </View>
 

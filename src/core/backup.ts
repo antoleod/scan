@@ -197,7 +197,7 @@ export function buildBackupBundle(input: {
   return {
     version: APP_BACKUP_VERSION,
     exportedAt: new Date().toISOString(),
-    app: 'oryxen-scanner',
+    app: 'mykit',
     kind: 'full',
     settings: sanitizeSettings(input.settings),
     templates: input.templates.slice(),
@@ -220,7 +220,7 @@ export function parseBackupBundle(raw: string): AppBackupBundle | null {
       return {
         version: APP_BACKUP_VERSION,
         exportedAt: new Date().toISOString(),
-        app: 'oryxen-scanner',
+        app: 'mykit',
         kind: 'history',
         settings: null,
         templates: [],
@@ -241,7 +241,7 @@ export function parseBackupBundle(raw: string): AppBackupBundle | null {
     return {
       version: APP_BACKUP_VERSION,
       exportedAt: asString(parsed.exportedAt, new Date().toISOString()),
-      app: asString(parsed.app, 'oryxen-scanner'),
+      app: asString(parsed.app, 'mykit'),
       kind: parsed.kind === 'history' ? 'history' : 'full',
       settings,
       templates,

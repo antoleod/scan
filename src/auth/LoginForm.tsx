@@ -40,74 +40,74 @@ import { isValidIdentifier } from '../core/validation';
 import { useCtrlEnterSave } from '../hooks/useCtrlEnterSave';
 import { useAuth } from './useAuth';
 
-const fullBrandingText = 'ORYXEN TECH \u00b7 ORYXEN SCANNER \u00b7 SECURE TRAIL';
+const fullBrandingText = 'MyKit TECH \u00b7 MyKit \u00b7 SECURE TRAIL';
 
 // Inject premium CSS animations (web only)
 function usePremiumCssEffects() {
   useEffect(() => {
     if (Platform.OS !== 'web' || typeof document === 'undefined') return;
-    const id = 'oryxen-premium-css';
+    const id = 'MyKit-premium-css';
     if (document.getElementById(id)) return;
     const style = document.createElement('style');
     style.id = id;
     style.textContent = `
-      @keyframes oryxen-orb-drift-a {
+      @keyframes MyKit-orb-drift-a {
         0%,100% { transform: translate(0,0) scale(1); opacity:0.07; }
         33%      { transform: translate(-24px,18px) scale(1.1); opacity:0.13; }
         66%      { transform: translate(16px,-12px) scale(0.92); opacity:0.09; }
       }
-      @keyframes oryxen-orb-drift-b {
+      @keyframes MyKit-orb-drift-b {
         0%,100% { transform: translate(0,0) scale(1); opacity:0.05; }
         40%      { transform: translate(20px,28px) scale(1.08); opacity:0.11; }
         70%      { transform: translate(-14px,8px) scale(0.95); opacity:0.07; }
       }
-      @keyframes oryxen-orb-drift-c {
+      @keyframes MyKit-orb-drift-c {
         0%,100% { transform: translate(0,0) scale(1); opacity:0.06; }
         50%      { transform: translate(10px,-22px) scale(1.12); opacity:0.12; }
       }
-      @keyframes oryxen-shimmer-sweep {
+      @keyframes MyKit-shimmer-sweep {
         0%   { transform: translateX(-120%); }
         100% { transform: translateX(220%); }
       }
-      @keyframes oryxen-glow-pulse {
+      @keyframes MyKit-glow-pulse {
         0%,100% { opacity:0.18; transform: scale(1); }
         50%     { opacity:0.38; transform: scale(1.06); }
       }
-      @keyframes oryxen-ring-rotate {
+      @keyframes MyKit-ring-rotate {
         from { transform: rotate(0deg); }
         to   { transform: rotate(360deg); }
       }
-      .oryxen-orb-a {
+      .MyKit-orb-a {
         position:absolute; border-radius:50%; filter:blur(72px); pointer-events:none;
-        animation: oryxen-orb-drift-a 9s ease-in-out infinite;
+        animation: MyKit-orb-drift-a 9s ease-in-out infinite;
       }
-      .oryxen-orb-b {
+      .MyKit-orb-b {
         position:absolute; border-radius:50%; filter:blur(90px); pointer-events:none;
-        animation: oryxen-orb-drift-b 12s ease-in-out infinite;
+        animation: MyKit-orb-drift-b 12s ease-in-out infinite;
         animation-delay: -4s;
       }
-      .oryxen-orb-c {
+      .MyKit-orb-c {
         position:absolute; border-radius:50%; filter:blur(60px); pointer-events:none;
-        animation: oryxen-orb-drift-c 15s ease-in-out infinite;
+        animation: MyKit-orb-drift-c 15s ease-in-out infinite;
         animation-delay: -8s;
       }
-      .oryxen-card-shimmer {
+      .MyKit-card-shimmer {
         position:absolute; inset:0; pointer-events:none; overflow:hidden; border-radius:14px;
       }
-      .oryxen-card-shimmer::after {
+      .MyKit-card-shimmer::after {
         content:'';
         position:absolute; top:0; bottom:0; width:60%;
         background: linear-gradient(90deg, transparent, rgba(255,255,255,0.055), transparent);
-        animation: oryxen-shimmer-sweep 4s ease-in-out infinite;
+        animation: MyKit-shimmer-sweep 4s ease-in-out infinite;
         animation-delay: 1.5s;
       }
-      .oryxen-glow-halo {
+      .MyKit-glow-halo {
         position:absolute; border-radius:50%; pointer-events:none;
-        animation: oryxen-glow-pulse 3s ease-in-out infinite;
+        animation: MyKit-glow-pulse 3s ease-in-out infinite;
       }
-      .oryxen-ring-spin {
+      .MyKit-ring-spin {
         position:absolute; border-radius:50%; pointer-events:none;
-        animation: oryxen-ring-rotate 12s linear infinite;
+        animation: MyKit-ring-rotate 12s linear infinite;
       }
     `;
     document.head.appendChild(style);
@@ -589,9 +589,9 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
         {/* Premium ambient orbs – CSS on web, Reanimated on native */}
         {Platform.OS === 'web' ? (
           <View style={StyleSheet.absoluteFill} pointerEvents="none">
-            <View {...({ className: 'oryxen-orb-a' } as any)} style={{ width: 360, height: 360, top: -80, left: -80, backgroundColor: theme.primary + '33' }} />
-            <View {...({ className: 'oryxen-orb-b' } as any)} style={{ width: 280, height: 280, bottom: -60, right: -60, backgroundColor: theme.secondary + '28' }} />
-            <View {...({ className: 'oryxen-orb-c' } as any)} style={{ width: 220, height: 220, top: '40%', left: '55%', backgroundColor: theme.primary + '22' }} />
+            <View {...({ className: 'MyKit-orb-a' } as any)} style={{ width: 360, height: 360, top: -80, left: -80, backgroundColor: theme.primary + '33' }} />
+            <View {...({ className: 'MyKit-orb-b' } as any)} style={{ width: 280, height: 280, bottom: -60, right: -60, backgroundColor: theme.secondary + '28' }} />
+            <View {...({ className: 'MyKit-orb-c' } as any)} style={{ width: 220, height: 220, top: '40%', left: '55%', backgroundColor: theme.primary + '22' }} />
           </View>
         ) : (
           <View style={StyleSheet.absoluteFill} pointerEvents="none">
@@ -660,7 +660,7 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
                   <View key={i} style={[styles.barcodeStripe, { backgroundColor: theme.secondary, height: '100%', opacity: fx.stripeOpacity, width: (i % 3 === 0) ? 6 : 2 }]} />
                 ))}
               </View>
-              <Text style={[styles.oryxenText, { color: theme.secondary, opacity: fx.textOpacity }]}>ORYXEN.TECH</Text>
+              <Text style={[styles.MyKitText, { color: theme.secondary, opacity: fx.textOpacity }]}>MyKit.TECH</Text>
             </View>
 
             {/* Bottom branding watermark with barcode and version */}
@@ -714,7 +714,7 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
                     },
                   ]}
                 >
-                  Oryxen Scanner
+                  MyKit
                 </Text>
                 {/* Shimmer sweep across logo */}
                 <Animated.View style={[styles.logoShimmerStrip, logoShimmerStyle, { backgroundColor: `${theme.text}` }]} pointerEvents="none" />
@@ -762,7 +762,7 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
           <Animated.View style={[styles.formCard, { backgroundColor: theme.surface, borderColor: theme.border }, cardEntranceStyle]}>
             {/* Web shimmer overlay via CSS */}
             {Platform.OS === 'web' && (
-              <View {...({ className: 'oryxen-card-shimmer' } as any)} style={StyleSheet.absoluteFill} pointerEvents="none" />
+              <View {...({ className: 'MyKit-card-shimmer' } as any)} style={StyleSheet.absoluteFill} pointerEvents="none" />
             )}
             <View style={styles.field}>
               <Text style={[styles.label, { color: theme.secondary }]}>USERNAME OR EMAIL</Text>
@@ -777,7 +777,7 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
                     shadowOpacity: focusedField === 'username' ? 0.35 : 0,
                   },
                 ]}
-                placeholder="jcdioses or jdioses@oryxen.tech"
+                placeholder="jcdioses or jdioses@MyKit.tech"
                 placeholderTextColor={theme.textSecondary}
                 value={username}
                 onChangeText={(text) => {
@@ -978,7 +978,7 @@ const styles = StyleSheet.create({
   leftWatermark: { position: 'absolute', top: 0, bottom: 0, left: 0, width: 32, alignItems: 'center', justifyContent: 'center', gap: 8 },
   leftBarcode: { height: 80, flexDirection: 'row', alignItems: 'center', gap: 1 },
   barcodeStripe: { borderRadius: 1 },
-  oryxenText: { fontSize: 6, fontWeight: '700', letterSpacing: 1.5, opacity: 0.12, transform: [{ rotate: '-90deg' }] },
+  MyKitText: { fontSize: 6, fontWeight: '700', letterSpacing: 1.5, opacity: 0.12, transform: [{ rotate: '-90deg' }] },
   brandingWatermark: { position: 'absolute', bottom: 24, left: 40, right: 40, alignItems: 'center', gap: 4 },
   brandingLaser: { position: 'absolute', top: 0, bottom: 0, width: 40, opacity: 0.08 },
   brandingBarcode: { flexDirection: 'row', alignItems: 'flex-end', height: 28, gap: 1, overflow: 'hidden' },

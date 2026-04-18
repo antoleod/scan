@@ -1,8 +1,8 @@
-const CACHE_NAME = 'oryxen-cache-v4';
-const STATIC_CACHE = 'oryxen-static-v4';
+const CACHE_NAME = 'MyKit-cache-v4';
+const STATIC_CACHE = 'MyKit-static-v4';
 
 // Detect the base path at runtime from the service worker's own URL.
-// e.g. if sw.js is at /oryxen/sw.js → BASE = "/oryxen"
+// e.g. if sw.js is at /MyKit/sw.js → BASE = "/MyKit"
 const BASE = self.location.pathname.replace(/\/sw\.js$/, '');
 
 // App shell — always cached on install

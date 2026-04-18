@@ -8,7 +8,7 @@ import { useEffect, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SENSITIVE_FIELD_KEYS } from '../core/smartNotes';
 
-const STORAGE_KEY = '@oryxen_field_visibility_v1';
+const STORAGE_KEY = '@MyKit_field_visibility_v1';
 
 // ─── Module-level singleton state ─────────────────────────────────────────────
 

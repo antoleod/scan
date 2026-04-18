@@ -104,8 +104,8 @@ export default function AuthScreen() {
       <AuthBackgroundEffects />
       <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content}>
         <View style={styles.brandArea}>
-          <Text style={styles.kicker}>ORYXEN TECH</Text>
-          <Text style={styles.title}>ORYXEN SCANNER</Text>
+          <Text style={styles.kicker}>MyKit TECH</Text>
+          <Text style={styles.title}>MyKit</Text>
           <Text style={styles.subtitle}>{view === 'register' ? 'Create account' : 'Recover password'}</Text>
         </View>
 

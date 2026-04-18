@@ -53,7 +53,7 @@ type Palette = { bg: string; fg: string; accent: string; muted: string; card: st
 type WorkspaceTab = 'notes' | 'templates' | 'clipboard';
 type NoteFilter = 'all' | 'work' | 'pinned' | 'archived';
 
-const DRAFT_KEY = '@oryxen_notes_draft_v2';
+const DRAFT_KEY = '@MyKit_notes_draft_v2';
 
 function detectAutoCategory(text: string): NoteCategory {
   const value = String(text || '').toUpperCase();

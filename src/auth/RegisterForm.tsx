@@ -162,7 +162,7 @@ export default function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
   const [isSuccess, setIsSuccess] = useState(false);
   const normalizedUsername = username.trim().toLowerCase().replace(/\s+/g, '');
   const usernameValid = /^[a-z0-9._-]{3,}$/.test(normalizedUsername);
-  const normalizedEmail = `${normalizedUsername}@oryxen.tech`;
+  const normalizedEmail = `${normalizedUsername}@MyKit.tech`;
 
   const emailValid = usernameValid && isValidEmail(normalizedEmail);
   const passwordValid = password.length >= 6;
@@ -330,7 +330,7 @@ export default function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
           autoCorrect={false}
         />
         <Text style={{ color: theme.textSecondary, fontSize: 11, marginTop: 6 }}>
-          Email generated: {normalizedUsername ? normalizedEmail : '@oryxen.tech'}
+          Email generated: {normalizedUsername ? normalizedEmail : '@MyKit.tech'}
         </Text>
         <Text style={{ color: theme.textSecondary, fontSize: 11, marginTop: 2 }}>Create account will be sent to Firebase Auth.</Text>
       </View>

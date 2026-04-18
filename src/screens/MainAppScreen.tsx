@@ -456,7 +456,7 @@ function MainApp() {
         return;
       }
 
-      const path = `${FileSystem.cacheDirectory}oryxen_share_${Date.now()}.txt`;
+      const path = `${FileSystem.cacheDirectory}MyKit_share_${Date.now()}.txt`;
       await FileSystem.writeAsStringAsync(path, text);
       await Sharing.shareAsync(path, { mimeType: 'text/plain' });
       setSelection(new Set());
@@ -567,7 +567,7 @@ function MainApp() {
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `oryxen-batch-${new Date().toISOString().slice(0, 10)}.csv`;
+      link.download = `MyKit-batch-${new Date().toISOString().slice(0, 10)}.csv`;
       link.click();
       URL.revokeObjectURL(url);
       showToast(`Batch CSV exported — ${batchItems.length} item(s)`, 'success');
@@ -951,14 +951,14 @@ function MainApp() {
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `oryxen-history-${new Date().toISOString().slice(0, 10)}.csv`;
+      link.download = `MyKit-history-${new Date().toISOString().slice(0, 10)}.csv`;
       link.click();
       URL.revokeObjectURL(url);
       showToast(`CSV exported — ${rows.length} record(s)`, 'success');
       return;
     }
 
-    const path = `${FileSystem.cacheDirectory}oryxen_export_${Date.now()}.csv`;
+    const path = `${FileSystem.cacheDirectory}MyKit_export_${Date.now()}.csv`;
     await FileSystem.writeAsStringAsync(path, csv);
     await Sharing.shareAsync(path, { mimeType: 'text/csv' });
   }
@@ -987,14 +987,14 @@ function MainApp() {
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `oryxen-backup-${new Date().toISOString().slice(0, 10)}.json`;
+      link.download = `MyKit-backup-${new Date().toISOString().slice(0, 10)}.json`;
       link.click();
       URL.revokeObjectURL(url);
       showToast('Backup downloaded successfully', 'success');
       return;
     }
 
-    const path = `${FileSystem.cacheDirectory}oryxen_backup_${Date.now()}.json`;
+    const path = `${FileSystem.cacheDirectory}mykit_backup_${Date.now()}.json`;
     await FileSystem.writeAsStringAsync(path, json);
 
     if (await Sharing.isAvailableAsync()) {
@@ -1046,12 +1046,12 @@ function MainApp() {
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `oryxen_logs_${Date.now()}.json`;
+      link.download = `MyKit_logs_${Date.now()}.json`;
       link.click();
       return;
     }
 
-    const path = `${FileSystem.cacheDirectory}oryxen_logs_${Date.now()}.json`;
+    const path = `${FileSystem.cacheDirectory}MyKit_logs_${Date.now()}.json`;
     await FileSystem.writeAsStringAsync(path, await diag.getJson());
     await Sharing.shareAsync(path, { mimeType: 'application/json' });
   }
@@ -1624,7 +1624,7 @@ function MainApp() {
       <AppLayout>
         <AppHeader
           palette={palette}
-          email={user?.email || 'gean@oryxen.tech'}
+          email={user?.email || 'gean@MyKit.tech'}
           onPressEmail={() => setActiveTab('settings')}
           syncBusy={syncBusy}
           lastSyncedAt={lastSyncedAt}

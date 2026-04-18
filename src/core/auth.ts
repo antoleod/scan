@@ -1,4 +1,4 @@
-const DEFAULT_EMAIL_DOMAIN = 'oryxen.tech';
+const DEFAULT_EMAIL_DOMAIN = 'MyKit.tech';
 
 export function normalizeIdentifier(input: string) {
   const value = input.trim().toLowerCase();
