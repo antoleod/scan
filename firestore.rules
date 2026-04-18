@@ -119,12 +119,15 @@ service cloud.firestore {
         allow create, update: if isOwner(uid) && templateValid();
         allow delete: if isOwner(uid);
       }
+
+      match /clipboard/{entryId} {
+        allow read, write: if isOwner(uid);
+      }
     }
 
     match /noteGroups/{groupId} {
-      // Needed so signed-in users can look up a group by invite code.
-      // Group notes remain protected by member checks below.
-      allow read: if signedIn();
+      allow read: if signedIn()
+        && (resource.data.members.hasAny([request.auth.uid]) || resource.data.ownerUid == request.auth.uid);
 
       allow create: if signedIn()
         && request.resource.data.ownerUid == request.auth.uid

@@ -29,6 +29,7 @@ export {
   clearClipboardInFirebase,
   deleteClipboardEntryInFirebase,
   fetchClipboardFromFirebase,
+  resetClipboardCloudSyncCache,
   subscribeToClipboard,
   syncClipboardWithFirebase,
   upsertClipboardEntryInFirebase,

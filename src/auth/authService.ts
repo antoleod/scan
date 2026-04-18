@@ -9,7 +9,10 @@ import {
   sendResetPasswordEmail,
 } from '../core/firebase';
 
-import { FirebaseGuardState } from './authTypes';
+
+import { FirebaseGuardState, type LoginOptions } from './authTypes';
+
+export type { LoginOptions } from './authTypes';
 
 function readFirebaseErrorCode(error: unknown): string {
   if (typeof error === 'object' && error && 'code' in error) {
@@ -81,10 +84,10 @@ export async function getFirebaseGuardState(): Promise<FirebaseGuardState> {
   };
 }
 
-export async function login(email: string, password: string): Promise<User> {
+export async function login(email: string, password: string, options?: LoginOptions): Promise<User> {
   await diag.info('auth.login.attempt', { emailDomain: (email.split('@')[1] || '').toLowerCase() || 'n/a' });
   try {
-    return await loginWithEmail(email, password);
+    return await loginWithEmail(email, password, { persistSession: options?.persistSession ?? true });
   } catch (error) {
     const friendly = toFriendlyAuthError(error);
     await diag.warn('auth.login.error', { reason: friendly, raw: readFirebaseErrorCode(error) || readFirebaseErrorMessage(error) });

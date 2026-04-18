@@ -4,6 +4,9 @@ import { FirebaseOptionalEnvKey, FirebaseRequiredEnvKey } from '../core/firebase
 
 export type AuthView = 'login' | 'register' | 'forgot';
 
+/** Web: maps to Firebase `setPersistence` (local vs session). No password is stored locally. */
+export type LoginOptions = { persistSession?: boolean };
+
 export interface FirebaseGuardState {
   enabled: boolean;
   message: string;
@@ -17,7 +20,7 @@ export interface AuthContextValue {
   isGuest: boolean;
   firebase: FirebaseGuardState;
   enterAsGuest: () => void;
-  login: (email: string, password: string) => Promise<User>;
+  login: (email: string, password: string, options?: LoginOptions) => Promise<User>;
   register: (email: string, password: string) => Promise<User>;
   sendPasswordReset: (email: string) => Promise<void>;
   logout: () => Promise<void>;

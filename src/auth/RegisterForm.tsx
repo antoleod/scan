@@ -278,15 +278,6 @@ export default function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
     try {
       await register(normalizedEmail, password);
       setIsSuccess(true);
-      // Web Credential Management API support
-      if (Platform.OS === 'web' && typeof window !== 'undefined' && 'credentials' in navigator && (window as any).PasswordCredential) {
-        try {
-          const cred = new (window as any).PasswordCredential({ id: normalizedEmail, password: password });
-          await navigator.credentials.store(cred);
-        } catch (e) {
-          console.warn('Web credential store error:', e);
-        }
-      }
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : 'Could not create the account.');
     } finally {

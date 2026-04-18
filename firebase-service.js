@@ -1,14 +1,14 @@
-﻿import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import {
     getAuth,
     GoogleAuthProvider,
     signInWithPopup,
-    signInWithEmailAndPassword,
-    createUserWithEmailAndPassword,
+    signInWithCustomToken,
     onAuthStateChanged,
     signOut,
     getAdditionalUserInfo,
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-functions.js";
 import {
     initializeFirestore,
     persistentLocalCache,
@@ -22,7 +22,6 @@ import {
     serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
-const FAKE_DOMAIN = "@barrascanner.local";
 const ENV_ERROR =
     "Firebase is not available in this environment. Define runtime config via /__/firebase/init.json or window.__BARRA_FIREBASE_CONFIG__.";
 
@@ -164,33 +163,19 @@ export const fbService = {
             return { success: false, error: "Invalid username." };
         }
 
-        const email = `${sanitizedUsername}${FAKE_DOMAIN}`;
-        const password = pin.toString().padEnd(6, "0");
-
         try {
-            const result = await signInWithEmailAndPassword(runtime.auth, email, password);
+            const functions = getFunctions(runtime.app);
+            const fn = httpsCallable(functions, "pinSession");
+            const { data } = await fn({ username: sanitizedUsername, pin });
+            const customToken = data?.customToken;
+            if (!customToken) {
+                return { success: false, error: "Authentication failed." };
+            }
+            const result = await signInWithCustomToken(runtime.auth, customToken);
             return { success: true, user: result.user };
         } catch (error) {
-            const createAccountCodes = [
-                "auth/invalid-credential",
-                "auth/user-not-found",
-                "auth/wrong-password",
-                "auth/invalid-login-credentials",
-            ];
-
-            if (createAccountCodes.includes(error.code)) {
-                try {
-                    const newResult = await createUserWithEmailAndPassword(runtime.auth, email, password);
-                    await this.createUserProfile(newResult.user);
-                    return { success: true, user: newResult.user, isNew: true };
-                } catch (createError) {
-                    if (createError.code === "auth/email-already-in-use") {
-                        return { success: false, error: "Incorrect PIN." };
-                    }
-                    return { success: false, error: "Could not create account." };
-                }
-            }
-            return { success: false, error: `Authentication error: ${error.code}` };
+            const message = error?.message || String(error);
+            return { success: false, error: message };
         }
     },
 

@@ -2,17 +2,19 @@ import { Platform } from 'react-native';
 import { FirebaseApp, getApp, getApps, initializeApp } from 'firebase/app';
 import {
   Auth,
+  browserLocalPersistence,
+  browserSessionPersistence,
   createUserWithEmailAndPassword,
   getAuth,
   initializeAuth,
   onAuthStateChanged,
   sendPasswordResetEmail,
+  setPersistence,
   signInWithEmailAndPassword,
   signOut,
   User,
 } from 'firebase/auth';
 import {
-  arrayUnion,
   Firestore,
   collection,
   deleteDoc,
@@ -24,9 +26,11 @@ import {
   query,
   serverTimestamp,
   setDoc,
-  updateDoc,
   where,
 } from 'firebase/firestore';
+import { getFunctions, httpsCallable } from 'firebase/functions';
+
+import { loadSettings } from './settings';
 
 import { ScanRecord } from '../types';
 import type { NoteItem, NoteTemplate } from './notes';
@@ -49,6 +53,7 @@ const OPTIONAL_FIREBASE_ENV = [
   'EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET',
   'EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID',
   'EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID',
+  'EXPO_PUBLIC_FIREBASE_FUNCTIONS_REGION',
 ] as const;
 
 export type FirebaseRequiredEnvKey = (typeof REQUIRED_FIREBASE_ENV)[number];
@@ -75,8 +80,14 @@ function env(name: string): string {
     EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET: process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET,
     EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
     EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID: process.env.EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID,
+    EXPO_PUBLIC_FIREBASE_FUNCTIONS_REGION: process.env.EXPO_PUBLIC_FIREBASE_FUNCTIONS_REGION,
   };
   return String(vars[name] || '').trim();
+}
+
+function firebaseFunctionsRegion(): string {
+  const r = env('EXPO_PUBLIC_FIREBASE_FUNCTIONS_REGION');
+  return r || 'us-central1';
 }
 
 function resolveFirebaseConfig() {
@@ -201,10 +212,22 @@ export async function onFirebaseAuthState(cb: (user: User | null) => void) {
   return onAuthStateChanged(rt.auth, cb);
 }
 
-export async function loginWithEmail(email: string, password: string): Promise<User> {
+export async function loginWithEmail(
+  email: string,
+  password: string,
+  options?: { persistSession?: boolean },
+): Promise<User> {
   const rt = await initFirebaseRuntime();
   if (!rt.enabled || !rt.auth) {
     throw new Error(buildFirebaseDisabledErrorMessage(rt));
+  }
+
+  const persistSession = options?.persistSession ?? true;
+  if (Platform.OS === 'web') {
+    await setPersistence(
+      rt.auth,
+      persistSession ? browserLocalPersistence : browserSessionPersistence,
+    );
   }
 
   const res = await signInWithEmailAndPassword(rt.auth, email.trim(), password);
@@ -676,20 +699,22 @@ export async function createSharedNoteGroup(name: string): Promise<SharedNoteGro
 
 export async function joinSharedNoteGroup(inviteCodeInput: string): Promise<SharedNoteGroup | null> {
   const rt = await initFirebaseRuntime();
-  if (!rt.enabled || !rt.auth || !rt.db) throw new Error(buildFirebaseDisabledErrorMessage(rt));
+  if (!rt.enabled || !rt.auth || !rt.app) throw new Error(buildFirebaseDisabledErrorMessage(rt));
   const user = rt.auth.currentUser;
   if (!user) throw new Error('No authenticated session to join a group.');
   const inviteCode = normalizeInviteCode(inviteCodeInput);
   if (!inviteCode) return null;
 
-  const groupsRef = collection(rt.db, 'noteGroups');
-  const snap = await getDocs(query(groupsRef, where('inviteCode', '==', inviteCode)));
-  if (snap.empty) return null;
-  const first = snap.docs[0];
-  const base = first.data() as SharedNoteGroup;
-  const nextMembers = Array.from(new Set([...(base.members || []), user.uid]));
-  await updateDoc(doc(rt.db, 'noteGroups', first.id), { members: arrayUnion(user.uid), updatedAt: serverTimestamp() });
-  return { ...base, id: first.id, members: nextMembers };
+  try {
+    const functions = getFunctions(rt.app, firebaseFunctionsRegion());
+    const joinFn = httpsCallable(functions, 'joinSharedNoteGroupByInvite');
+    const result = await joinFn({ inviteCode });
+    const data = result.data as { ok?: boolean; group?: SharedNoteGroup };
+    if (!data?.ok || !data.group) return null;
+    return data.group;
+  } catch {
+    return null;
+  }
 }
 
 export async function fetchSharedGroupsForCurrentUser(): Promise<SharedNoteGroup[]> {
@@ -825,9 +850,28 @@ import type { ClipEntry } from './clipboard.types';
 
 const CLIPBOARD_SYNC_LIMIT = 300; // max text entries to push to Firestore
 
+let clipboardCloudSyncResolved: boolean | null = null;
+
+async function isClipboardCloudSyncEnabled(): Promise<boolean> {
+  if (clipboardCloudSyncResolved !== null) return clipboardCloudSyncResolved;
+  try {
+    const s = await loadSettings();
+    clipboardCloudSyncResolved = s.clipboardCloudSync === true;
+  } catch {
+    clipboardCloudSyncResolved = false;
+  }
+  return clipboardCloudSyncResolved;
+}
+
+/** Call after changing settings at runtime so the next sync respects the new flag. */
+export function resetClipboardCloudSyncCache(): void {
+  clipboardCloudSyncResolved = null;
+}
+
 export async function subscribeToClipboard(
   callback: (entries: ClipEntry[]) => void,
 ): Promise<() => void> {
+  if (!(await isClipboardCloudSyncEnabled())) return () => {};
   const rt = await initFirebaseRuntime();
   if (!rt.enabled || !rt.auth || !rt.db) return () => {};
 
@@ -864,6 +908,7 @@ export async function subscribeToClipboard(
 }
 
 export async function fetchClipboardFromFirebase(): Promise<ClipEntry[]> {
+  if (!(await isClipboardCloudSyncEnabled())) return [];
   const rt = await initFirebaseRuntime();
   if (!rt.enabled || !rt.auth || !rt.db) return [];
   const user = rt.auth.currentUser;
@@ -881,6 +926,7 @@ export async function fetchClipboardFromFirebase(): Promise<ClipEntry[]> {
 
 export async function upsertClipboardEntryInFirebase(entry: ClipEntry): Promise<void> {
   if (entry.kind !== 'text') return; // never sync images to Firestore
+  if (!(await isClipboardCloudSyncEnabled())) return;
   const rt = await initFirebaseRuntime();
   if (!rt.enabled || !rt.auth || !rt.db) return;
   const user = rt.auth.currentUser;
@@ -903,6 +949,7 @@ export async function upsertClipboardEntryInFirebase(entry: ClipEntry): Promise<
 }
 
 export async function syncClipboardWithFirebase(localTextEntries: ClipEntry[]): Promise<ClipEntry[]> {
+  if (!(await isClipboardCloudSyncEnabled())) return localTextEntries;
   const rt = await initFirebaseRuntime();
   if (!rt.enabled || !rt.auth || !rt.db) return localTextEntries;
   const user = rt.auth.currentUser ?? await new Promise<import('firebase/auth').User | null>((resolve) => {
@@ -949,6 +996,7 @@ export async function syncClipboardWithFirebase(localTextEntries: ClipEntry[]): 
 }
 
 export async function deleteClipboardEntryInFirebase(entryId: string): Promise<void> {
+  if (!(await isClipboardCloudSyncEnabled())) return;
   const rt = await initFirebaseRuntime();
   if (!rt.enabled || !rt.auth || !rt.db) return;
   const user = rt.auth.currentUser;
@@ -959,6 +1007,7 @@ export async function deleteClipboardEntryInFirebase(entryId: string): Promise<v
 }
 
 export async function clearClipboardInFirebase(): Promise<void> {
+  if (!(await isClipboardCloudSyncEnabled())) return;
   const rt = await initFirebaseRuntime();
   if (!rt.enabled || !rt.auth || !rt.db) return;
   const user = rt.auth.currentUser;

@@ -1,7 +1,6 @@
-﻿﻿import { Ionicons } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
-import * as LocalAuthentication from 'expo-local-authentication';
 import { useEffect, useMemo, useState, useRef } from 'react';
 import {
   ActivityIndicator,
@@ -32,13 +31,11 @@ import { useAppTheme } from '../constants/theme';
 import { normalizeIdentifier } from '../core/auth';
 import {
   clearSavedCredentials,
-  loadEncryptedCredentials,
   loadLastIdentifier,
-  saveEncryptedCredentials,
   saveLastIdentifier,
 } from '../core/auth-storage';
 import { isDeviceOnline } from '../core/network';
-import { loadSettings } from '../core/settings';
+import { loadSettings, saveSettings } from '../core/settings';
 import { isValidIdentifier } from '../core/validation';
 import { useCtrlEnterSave } from '../hooks/useCtrlEnterSave';
 import { useAuth } from './useAuth';
@@ -199,13 +196,11 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
   const [pin, setPin] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [isBiometricSupported, setIsBiometricSupported] = useState(false);
   const [connectionState, setConnectionState] = useState<'checking' | 'connected' | 'limited' | 'error'>('checking');
   const [errors, setErrors] = useState<{ username?: string; pin?: string }>({});
   const [focusedField, setFocusedField] = useState<'username' | 'pin' | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
   const [rememberPassword, setRememberPassword] = useState(false);
-  const [hasAutoAttempted, setHasAutoAttempted] = useState(false);
 
   const pinInputRef = useRef<TextInput>(null);
   const glitchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -331,7 +326,6 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
   }, [isWeb, isIOS, themeName]);
 
   const normalizedUsername = username.trim().toLowerCase();
-  const firebaseApiKey = process.env.EXPO_PUBLIC_FIREBASE_API_KEY;
   const firebaseEmail = normalizeIdentifier(username);
 
   useEffect(() => {
@@ -480,6 +474,8 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
   useEffect(() => {
     let cancelled = false;
 
+    void clearSavedCredentials().catch(() => undefined);
+
     loadLastIdentifier()
       .then((stored) => {
         if (!cancelled && stored) setUsername(stored);
@@ -492,23 +488,8 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
       })
       .catch(() => undefined);
 
-    loadEncryptedCredentials()
-      .then((saved) => {
-        if (!saved || cancelled) return;
-        setUsername(saved.identifier);
-        setPin(saved.password);
-        setRememberPassword(true);
-      })
-      .catch(() => undefined);
-
     const checkConnection = async () => {
-      const hasHardware = await LocalAuthentication.hasHardwareAsync();
-      const isEnrolled = await LocalAuthentication.isEnrolledAsync();
-      if (!cancelled && hasHardware && isEnrolled) {
-        setIsBiometricSupported(true);
-      }
-
-      if (!firebaseApiKey) {
+      if (!process.env.EXPO_PUBLIC_FIREBASE_API_KEY) {
         if (!cancelled) setConnectionState('error');
         return;
       }
@@ -518,36 +499,14 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
         return;
       }
 
-      try {
-        const response = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:createAuthUri?key=${firebaseApiKey}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ identifier: 'connectivity-check@company.com', continueUri: 'http://localhost' }),
-        });
-
-        await response.json().catch(() => null);
-        if (!cancelled) setConnectionState('connected');
-      } catch (error) {
-        if (!cancelled) setConnectionState('limited');
-        console.warn('[Firebase] Connection check failed:', error instanceof Error ? error.message : error);
-      }
+      if (!cancelled) setConnectionState('connected');
     };
 
     checkConnection();
     return () => {
       cancelled = true;
     };
-  }, [firebaseApiKey]);
-
-  // Auto-trigger biometrics if enabled and supported
-  useEffect(() => {
-    if (isBiometricSupported && rememberPassword && !hasAutoAttempted && !isLoading && !authError) {
-      setHasAutoAttempted(true);
-      // Slight delay for UI and keyboard stabilization
-      const timer = setTimeout(() => void handleBiometricAuth(), 800);
-      return () => clearTimeout(timer);
-    }
-  }, [isBiometricSupported, rememberPassword]);
+  }, []);
 
   const validate = () => {
     const newErrors: { username?: string; pin?: string } = {};
@@ -573,49 +532,6 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
     return valid;
   };
 
-  const handleBiometricAuth = async () => {
-    try {
-      const authTypes = await LocalAuthentication.supportedAuthenticationTypesAsync();
-      let promptMessage = 'Use biometrics';
-      
-      if (Platform.OS === 'ios') {
-        if (authTypes.includes(LocalAuthentication.AuthenticationType.FACIAL_RECOGNITION)) {
-          promptMessage = 'Use Face ID';
-        } else if (authTypes.includes(LocalAuthentication.AuthenticationType.FINGERPRINT)) {
-          promptMessage = 'Use Touch ID';
-        }
-      } else if (Platform.OS === 'android') {
-        if (authTypes.includes(LocalAuthentication.AuthenticationType.FINGERPRINT)) {
-          promptMessage = 'Use fingerprint';
-        }
-      }
-
-      const result = await LocalAuthentication.authenticateAsync({
-        promptMessage,
-        fallbackLabel: 'Use PIN',
-        disableDeviceFallback: false,
-      });
-
-      if (result.success) {
-        setIsLoading(true);
-        const saved = await loadEncryptedCredentials();
-        if (saved) {
-          await login(saved.identifier, saved.password);
-          if (Platform.OS !== 'web') {
-            await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-          }
-        } else {
-          setAuthError('No saved credentials are available for biometrics.');
-        }
-      }
-    } catch (error) {
-      console.error('Biometric error:', error);
-      setAuthError('Biometric authentication failed.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   const handleCopyLoginId = async () => {
     if (!normalizedUsername) return;
     await Clipboard.setStringAsync(firebaseEmail);
@@ -634,21 +550,10 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
     setIsLoading(true);
     setAuthError(null);
     try {
-      await login(firebaseEmail, pin);
+      await login(firebaseEmail, pin, { persistSession: rememberPassword });
       await saveLastIdentifier(username);
-      if (rememberPassword) {
-        await saveEncryptedCredentials(firebaseEmail, pin);
-      } else {
-        await clearSavedCredentials();
-      }
-      if (Platform.OS === 'web' && typeof window !== 'undefined' && 'credentials' in navigator && typeof (window as any).PasswordCredential !== 'undefined') {
-        try {
-          const cred = new (window as any).PasswordCredential({ id: username, password: pin });
-          await navigator.credentials.store(cred);
-        } catch {
-          // Credential Management API not available or blocked.
-        }
-      }
+      const prev = await loadSettings();
+      await saveSettings({ ...prev, savePasswordEncrypted: rememberPassword });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Sign-in isn't available right now.";
       setAuthError(message);
@@ -997,21 +902,6 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
                 </Pressable>
               </Animated.View>
 
-              {isBiometricSupported && (
-                <Pressable
-                  style={[styles.biometricButton, { borderColor: theme.border, backgroundColor: theme.inputBg }]}
-                  onPress={handleBiometricAuth}
-                  disabled={isLoading}
-                >
-                  {({ pressed }) => (
-                    <Ionicons 
-                      name="finger-print" 
-                      size={24} 
-                      color={pressed ? theme.secondary : theme.text} 
-                    />
-                  )}
-                </Pressable>
-              )}
             </View>
 
             {/* Tooltip Copied */}
@@ -1149,7 +1039,6 @@ const styles = StyleSheet.create({
   rememberLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   rememberText: { fontSize: 12, fontWeight: '600' },
   actionRow: { flexDirection: 'row', gap: 10, alignItems: 'center' },
-  biometricButton: { width: 48, height: 48, borderRadius: 10, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   primaryButton: { borderRadius: 10, overflow: 'hidden' },
   primaryDisabled: { opacity: 0.6 },
   primaryButtonInner: { height: 48, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },

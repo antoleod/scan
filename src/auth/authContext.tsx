@@ -7,6 +7,7 @@ import { onFirebaseAuthState } from '../core/firebase';
 import { loadSettings } from '../core/settings';
 
 import { getFirebaseGuardState, login, logout, register, sendPasswordReset } from './authService';
+import type { LoginOptions } from './authTypes';
 import { AuthContextValue, FirebaseGuardState } from './authTypes';
 
 const defaultFirebaseGuard: FirebaseGuardState = {
@@ -106,8 +107,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     void diag.info('auth.guest.enabled');
   };
 
-  const loginWithEmailPassword = async (email: string, password: string) => {
-    const authenticatedUser = await login(email, password);
+  const loginWithEmailPassword = async (email: string, password: string, options?: LoginOptions) => {
+    const authenticatedUser = await login(email, password, options);
     setIsGuest(false);
     setUser(authenticatedUser);
     await saveLastAuthTimestamp(Date.now());

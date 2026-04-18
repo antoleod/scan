@@ -1,4 +1,4 @@
-﻿import AsyncStorage from '@react-native-async-storage/async-storage';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AppSettings } from '../types';
 
 const KEY = 'barra_settings';
@@ -19,6 +19,7 @@ export const defaultSettings: AppSettings = {
   historyAutoClearDays: 0,
   staySignedIn: true,
   savePasswordEncrypted: false,
+  clipboardCloudSync: false,
   showRawText: false,
   smartNotes: {
     offices: ['Spinelli', 'Kohl', 'Strasbourg'],
@@ -45,6 +46,7 @@ export async function loadSettings(): Promise<AppSettings> {
     const parsed = {
       ...defaultSettings,
       ...rawParsed,
+      clipboardCloudSync: rawParsed.clipboardCloudSync === true,
       smartNotes: {
         ...defaultSettings.smartNotes,
         ...(rawParsed.smartNotes || {}),
