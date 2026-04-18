@@ -358,6 +358,14 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
     }
   }
 
+  async function duplicateNote(note: NoteItem) {
+    const dupText = note.text + (note.text.trim() ? ' (copy)' : '(copy)');
+    const groupId = note.groupId || (activeGroupId === 'personal' ? undefined : activeGroupId);
+    const result = await addRichNoteUnique(dupText, note.category, note.attachments ?? [], groupId);
+    setNotes(result.notes);
+    showToast('Note duplicated');
+  }
+
   async function sendClipboardToNote(entry: ClipboardEntry) {
     setWorkspaceTab('notes');
     if (entry.kind === 'image' && entry.imageDataUri) {
@@ -721,6 +729,7 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
                             onDelete={() => handleRemoveNote(note.id).then(setNotes)}
                             onSetColor={(color) => setNoteColor(note.id, color).then(setNotes)}
                             onDoubleTap={() => setDetailNote(note)}
+                            onDuplicate={() => duplicateNote(note).catch(() => undefined)}
                           />
                         </View>
                       );

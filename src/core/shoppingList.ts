@@ -11,6 +11,7 @@ export type ShoppingItem = {
   label: string;       // "Lard / tocino"
   quantity: string;    // "1,5" | "400" | ""
   unit: string;        // "kg" | "g" | "piezas" | ""
+  price?: string;      // optional price per item (user-entered)
   checked: boolean;
   rawLine: string;     // original line preserved verbatim
 };

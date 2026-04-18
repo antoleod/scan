@@ -161,6 +161,7 @@ export function NoteCard({
   onSetColor,
   onLongPress,
   onDoubleTap,
+  onDuplicate,
   settings,
 }: {
   note: NoteItem;
@@ -188,6 +189,7 @@ export function NoteCard({
   onSetColor: (color: NoteColor) => void;
   onLongPress?: () => void;
   onDoubleTap?: () => void;
+  onDuplicate?: () => void;
   settings: AppSettings;
 }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -299,6 +301,12 @@ export function NoteCard({
   const isShopping = useMemo(() => isShoppingList(note.text), [note.text]);
   const shoppingModel = useMemo(() => isShopping ? parseShoppingList(note.text) : null, [isShopping, note.text]);
   const { hiddenKeys, toggleField } = useFieldVisibility();
+  // Word / char count for the footer stat chip
+  const wordCount = useMemo(() => {
+    const t = note.text.trim();
+    if (!t) return { words: 0, chars: 0 };
+    return { words: t.split(/\s+/).length, chars: t.length };
+  }, [note.text]);
   const typeMeta = useMemo(() => {
     switch (smart.type) {
       case 'network':
@@ -555,8 +563,8 @@ export function NoteCard({
 
             {/* ── Footer ── */}
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-              {/* Category + archived chips */}
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              {/* Category + archived chips + word count */}
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap', flex: 1 }}>
                 <View style={{ borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2, backgroundColor: palette.surfaceAlt }}>
                   <Text style={{ color: palette.textMuted, fontSize: 10, fontWeight: '700', letterSpacing: 0.5, textTransform: 'uppercase' }}>
                     {note.category}
@@ -566,6 +574,13 @@ export function NoteCard({
                   <View style={{ borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2, backgroundColor: palette.surfaceAlt }}>
                     <Text style={{ color: palette.textMuted, fontSize: 10, fontWeight: '700', letterSpacing: 0.5, textTransform: 'uppercase' }}>
                       archived
+                    </Text>
+                  </View>
+                ) : null}
+                {expanded && wordCount.words > 0 ? (
+                  <View style={{ borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2, backgroundColor: `${palette.accent}12`, borderWidth: 1, borderColor: `${palette.accent}28` }}>
+                    <Text style={{ color: palette.accent, fontSize: 9, fontWeight: '700', letterSpacing: 0.4 }}>
+                      {wordCount.words}w · {wordCount.chars}c
                     </Text>
                   </View>
                 ) : null}
@@ -598,6 +613,9 @@ export function NoteCard({
                     onCopy(text);
                   }} />
                   <ActionPill icon="share-social-outline" label="Share" color="#7c3aed" onPress={onShare} />
+                  {onDuplicate ? (
+                    <ActionPill icon="copy-outline" label="Dupe" color="#F59E0B" onPress={onDuplicate} />
+                  ) : null}
                   <ActionPill icon="create-outline"       label="Edit"  color="#059669" onPress={onStartEdit} />
 
                   {/* Chevron toggle — reliable on PC; also works on mobile alongside swipe */}
