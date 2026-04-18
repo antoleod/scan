@@ -11,6 +11,8 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { detectNoteEntities, buildSmartNoteModel, segmentNoteText, parseServiceNowFields, buildRedactedText, SmartNoteEntities, SmartNoteModel, ServiceNowField, ServiceNowModel, NoteSegment, SENSITIVE_FIELD_KEYS } from '../core/smartNotes';
+import { isShoppingList, parseShoppingList } from '../core/shoppingList';
+import { ShoppingListBlock } from './ShoppingListBlock';
 import { AppSettings } from '../types';
 import { useFieldVisibility } from '../hooks/useFieldVisibility';
 
@@ -294,7 +296,9 @@ export function NoteCard({
   const isSmart = smart.type !== 'general';
   const model = useMemo(() => buildSmartNoteModel(note.text, smart), [note.text, smart]);
   const sfModel = useMemo(() => parseServiceNowFields(note.text), [note.text]);
-const { hiddenKeys, toggleField } = useFieldVisibility();
+  const isShopping = useMemo(() => isShoppingList(note.text), [note.text]);
+  const shoppingModel = useMemo(() => isShopping ? parseShoppingList(note.text) : null, [isShopping, note.text]);
+  const { hiddenKeys, toggleField } = useFieldVisibility();
   const typeMeta = useMemo(() => {
     switch (smart.type) {
       case 'network':
@@ -484,6 +488,13 @@ const { hiddenKeys, toggleField } = useFieldVisibility();
                 expanded={expanded}
                 onPressOffice={onPressOffice}
                 onCopyValue={onCopyValue}
+              />
+            ) : isShopping && shoppingModel ? (
+              <ShoppingListBlock
+                model={shoppingModel}
+                palette={palette}
+                expanded={expanded}
+                onRawTextChange={onChangeEditingText}
               />
             ) : model.isList ? (
               <NoteListBlock model={model} palette={palette} expanded={expanded} />
