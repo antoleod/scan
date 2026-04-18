@@ -1,4 +1,4 @@
-ï»¿import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Alert, Linking, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -458,7 +458,7 @@ export function SettingsTab({
                 })}
                 style={[styles.modeChip, { borderColor: palette.border, backgroundColor: palette.card }]}
               >
-                <Text style={[styles.modeChipText, { color: palette.fg }]}>{office} Ã—</Text>
+                <Text style={[styles.modeChipText, { color: palette.fg }]}>{office} ×</Text>
               </Pressable>
             ))}
           </View>
@@ -498,7 +498,7 @@ export function SettingsTab({
           </View>
           {groups.length ? groups.map((g) => (
             <Text key={g.id} style={[styles.helperLine, { color: palette.muted }]}>
-              {g.name} Â· code: {g.inviteCode} Â· members: {g.members?.length || 0}
+              {g.name} · code: {g.inviteCode} · members: {g.members?.length || 0}
             </Text>
           )) : <Text style={[styles.helperLine, { color: palette.muted }]}>No groups yet.</Text>}
         </SectionCard>
@@ -524,7 +524,7 @@ export function SettingsTab({
                   'Manual install',
                   manualText ||
                     (browserSupport === 'chromium'
-                      ? 'Use browser menu (â‹®) > Install app. If it does not appear, refresh and interact with the app for a few seconds.'
+                      ? 'Use browser menu (?) > Install app. If it does not appear, refresh and interact with the app for a few seconds.'
                       : 'Use your browser install option (Add to Home screen / Install app).')
                 );
               }}
