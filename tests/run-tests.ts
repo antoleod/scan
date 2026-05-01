@@ -6,6 +6,7 @@ import { generateBarcode } from "../src/core/barcode";
 import { extractFields } from "../src/core/extract";
 import { historyKey } from "../src/core/history";
 import { defaultSettings, piLogic } from "../src/core/settings";
+import { detectGroceryItem, formatShoppingList, isLikelyShoppingList, searchGroceryCatalog } from "../src/utils/groceryDetection";
 
 let passed = 0;
 let failed = 0;
@@ -163,6 +164,51 @@ run("generateBarcode falls back to Code128 for incompatible selected formats", (
   assert.equal(result.finalFormat, "CODE128");
   assert.equal(result.forced, true);
   assert.equal(result.reason, "Selected format incompatible");
+});
+
+run("grocery detection recognizes multilingual French shopping list", () => {
+  const input = [
+    "Pommes de terre",
+    "Oignons",
+    "Ail",
+    "Haché porc et veau",
+    "Blanc de poulet",
+    "Cabillaud",
+    "Pommes rouges pour l’école",
+    "Raisin vert",
+    "Avocat",
+    "3 poires",
+    "Lardons",
+    "Crème liquide verte",
+    "Mozzarella",
+    "Pain pour l’école",
+    "Jambon pour l’école",
+    "Jus d’orange",
+    "Jus de pommes",
+    "Salade",
+    "Concombre",
+    "Eau",
+  ].join("\n");
+
+  assert.equal(isLikelyShoppingList(input), true);
+  assert.equal(detectGroceryItem("Pommes de terre").itemId, "potato");
+  assert.equal(detectGroceryItem("3 poires").itemId, "pear");
+  assert.equal(detectGroceryItem("3 poires").detectedQuantity, "3");
+  assert.equal(detectGroceryItem("Cabillaud").itemId, "cod");
+});
+
+run("grocery catalog search supports aliases across languages", () => {
+  assert.equal(searchGroceryCatalog("patata")[0]?.id, "potato");
+  assert.equal(searchGroceryCatalog("aardappel")[0]?.id, "potato");
+  assert.equal(searchGroceryCatalog("école").some((item) => item.id === "school_bread"), true);
+  assert.equal(searchGroceryCatalog("jus").some((item) => item.id === "orange_juice"), true);
+});
+
+run("shopping formatter preserves accents and user quantities", () => {
+  const formatted = formatShoppingList("Pommes de terre\n3 poires\nCrème liquide verte", { language: "fr" });
+  assert.match(formatted, /Pommes de terre — 1 kg/);
+  assert.match(formatted, /- 3 poires/);
+  assert.match(formatted, /Crème liquide verte/);
 });
 
 console.log("\n-------------------");

@@ -8,6 +8,16 @@ import {
   Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import Animated, {
+  Easing,
+  FadeIn,
+  FadeInDown,
+  withRepeat,
+  withTiming,
+  useSharedValue,
+  useAnimatedStyle,
+  interpolate,
+} from 'react-native-reanimated';
 
 import { useAuth } from './useAuth';
 import { useAppTheme } from '../constants/theme';
@@ -20,6 +30,11 @@ export default function BiometricLockScreen() {
   const [isUnlocking, setIsUnlocking] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Animations
+  const scanPulse = useSharedValue(0);
+  const iconGlow = useSharedValue(0);
+  const successPulse = useSharedValue(0);
+
   useEffect(() => {
     const loadUsername = async () => {
       const username = await loadLastIdentifier();
@@ -27,6 +42,33 @@ export default function BiometricLockScreen() {
     };
     loadUsername();
   }, []);
+
+  // Animate scan pulse
+  useEffect(() => {
+    scanPulse.value = withRepeat(
+      withTiming(1, { duration: 2000, easing: Easing.inOut(Easing.quad) }),
+      -1,
+      true
+    );
+  }, [scanPulse]);
+
+  // Animate icon glow
+  useEffect(() => {
+    iconGlow.value = withRepeat(
+      withTiming(1, { duration: 2800, easing: Easing.inOut(Easing.sin) }),
+      -1,
+      false
+    );
+  }, [iconGlow]);
+
+  const scanPulseStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(scanPulse.value, [0, 1], [0.3, 0.8]),
+    transform: [{ scale: interpolate(scanPulse.value, [0, 1], [0.9, 1.15]) }],
+  }));
+
+  const iconGlowStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(iconGlow.value, [0, 0.5, 1], [0.2, 0.6, 0.2]),
+  }));
 
   useEffect(() => {
     // Auto-trigger biometric on mount
@@ -70,7 +112,8 @@ export default function BiometricLockScreen() {
   return (
     <View style={[styles.container, { backgroundColor: theme.surface }]}>
       {/* Background accent */}
-      <View
+      <Animated.View
+        entering={FadeIn.duration(600)}
         style={[
           styles.accentBlob,
           { backgroundColor: theme.secondary + '15' },
@@ -78,8 +121,24 @@ export default function BiometricLockScreen() {
       />
 
       {/* Icon and title */}
-      <View style={styles.content}>
+      <Animated.View entering={FadeInDown.delay(200).duration(500)} style={styles.content}>
         <View style={styles.iconContainer}>
+          {/* Animated pulse rings */}
+          <Animated.View
+            style={[
+              styles.pulseRing,
+              { borderColor: theme.secondary },
+              scanPulseStyle,
+            ]}
+          />
+          <Animated.View
+            style={[
+              styles.glowRing,
+              { borderColor: theme.secondary },
+              iconGlowStyle,
+            ]}
+          />
+
           <View
             style={[
               styles.iconBg,
@@ -105,9 +164,11 @@ export default function BiometricLockScreen() {
         )}
 
         {error && (
-          <Text style={[styles.errorText, { color: theme.error }]}>
-            {error}
-          </Text>
+          <Animated.View entering={FadeIn.duration(300)}>
+            <Text style={[styles.errorText, { color: theme.error }]}>
+              {error}
+            </Text>
+          </Animated.View>
         )}
 
         <Pressable
@@ -135,7 +196,7 @@ export default function BiometricLockScreen() {
             </>
           )}
         </Pressable>
-      </View>
+      </Animated.View>
 
       {/* This screen doesn't allow password fallback here —
           that's handled by AuthScreen routing based on isBiometricLocked state */}
@@ -165,6 +226,25 @@ const styles = StyleSheet.create({
   },
   iconContainer: {
     marginBottom: 32,
+    position: 'relative',
+    width: 140,
+    height: 140,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pulseRing: {
+    position: 'absolute',
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    borderWidth: 1,
+  },
+  glowRing: {
+    position: 'absolute',
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    borderWidth: 1,
   },
   iconBg: {
     width: 100,

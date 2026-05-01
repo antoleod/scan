@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Image, Linking, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View, Alert } from 'react-native';
+import { ActivityIndicator, Image, Linking, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import * as ImagePicker from 'expo-image-picker';
@@ -22,6 +22,7 @@ import {
   NoteTemplate,
   addRichNoteUnique,
   addTemplate,
+  clearDraftFlag,
   createBranchFromNoteVersion,
   mergeNoteVersion,
   updateTemplate,
@@ -35,8 +36,13 @@ import {
   updateNoteTitle,
   buildAppointmentIcs,
 } from '../../../core/notes';
+import { detectSmartWorkflow, type SmartWorkflowDetection, type SmartWorkflowType } from '../../../core/smartNoteWorkflows';
+import { findMedication } from '../../../core/euMedicationDatabase';
+import { isShoppingList, parseShoppingList, shoppingListToText } from '../../../core/shoppingList';
+import { safeText } from '../../../utils/groceryDetection';
 import { ClipboardEntry } from '../../../core/clipboard.types';
 import { loadDeletedNoteKeys, markDeletedNoteKey, noteStorageKey } from '../../../core/noteDeletions';
+import { WorkflowMetadata } from '../../../core/notes';
 import { ClipboardScreen } from '../../../screens/ClipboardScreen';
 import { mainAppStyles } from '../styles';
 import { TabBar } from '../../TabBar';
@@ -44,6 +50,9 @@ import { ComposerSection } from '../../ComposerSection';
 import { SearchFilterBar } from '../../SearchFilterBar';
 import { NoteCard } from '../../NoteCard';
 import { SmartNoteGeneratorModal } from '../../SmartNoteGeneratorModal';
+import { SmartWorkflowCard } from '../../SmartWorkflowCard';
+import { MedicationWorkflowModal } from '../../MedicationWorkflowModal';
+import { ShoppingWorkflowModal } from '../../ShoppingWorkflowModal';
 import { NoteOcrModal } from '../../NoteOcrModal';
 import { NoteDetailModal } from '../../NoteDetailModal';
 import { Toast, useToast } from '../../Toast';
@@ -51,7 +60,7 @@ import { AppSettings } from '../../../types';
 
 type Palette = { bg: string; fg: string; accent: string; muted: string; card: string; border: string };
 type WorkspaceTab = 'notes' | 'templates' | 'clipboard';
-type NoteFilter = 'all' | 'work' | 'pinned' | 'archived';
+type NoteFilter = 'all' | 'work' | 'pinned' | 'draft' | 'archived';
 
 const DRAFT_KEY = '@MyKit_notes_draft_v2';
 
@@ -131,8 +140,10 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
   const [templates, setTemplates] = useState<NoteTemplate[]>([]);
 
   const [draftText, setDraftText] = useState('');
+  const draftTextValue = String(draftText || '');
   const [draftImages, setDraftImages] = useState<string[]>([]);
   const [manualCategory, setManualCategory] = useState<NoteCategory | null>(null);
+  const [detectedWorkflow, setDetectedWorkflow] = useState<SmartWorkflowDetection | null>(null);
   const [filter, setFilter] = useState<NoteFilter>('all');
   const [expandedNoteId, setExpandedNoteId] = useState<string | null>(null);
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
@@ -154,7 +165,13 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
   const [detailNote, setDetailNote] = useState<NoteItem | null>(null);
   const [versionNoteId, setVersionNoteId] = useState<string | null>(null);
   const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
+  const [workflowModalType, setWorkflowModalType] = useState<SmartWorkflowType | null>(null);
+  const [workflowModalData, setWorkflowModalData] = useState<Record<string, unknown>>({});
+  const [draftAutoSaveStatus, setDraftAutoSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
   const { toast, show: showToast, hide: hideToast } = useToast();
+
+  const draftAutoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const draftAutoSaveClearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [searchText, setSearchText] = useState('');
   const [selectedNoteIds, setSelectedNoteIds] = useState<Set<string>>(new Set());
   const [dateFilter, setDateFilter] = useState<string | null>(null);
@@ -169,8 +186,17 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
   const serverNotesRef = useRef<NoteItem[]>([]);
   const sharedNotesRef = useRef<NoteItem[]>([]);
 
-  const autoCategory = useMemo(() => detectAutoCategory(draftText), [draftText]);
+  const autoCategory = useMemo(() => detectAutoCategory(draftTextValue), [draftTextValue]);
   const activeCategory = manualCategory || autoCategory;
+
+  function handleDraftTextChange(value: unknown) {
+    if (typeof value === 'string') {
+      setDraftText(value);
+      return;
+    }
+    const nativeText = (value as { nativeEvent?: { text?: unknown } })?.nativeEvent?.text;
+    setDraftText(typeof nativeText === 'string' ? nativeText : String(value || ''));
+  }
 
   async function handleRemoveNote(id: string): Promise<NoteItem[]> {
     const existing = notes.find((item) => item.id === id);
@@ -249,13 +275,81 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
     }).catch(() => undefined);
   }, []);
 
+  // Auto-save draft after 10 seconds of inactivity
   useEffect(() => {
-    AsyncStorage.setItem(DRAFT_KEY, JSON.stringify({ text: draftText, images: draftImages, category: manualCategory, updatedAt: Date.now() })).catch(() => undefined);
-  }, [draftText, draftImages, manualCategory, workspaceTab]);
+    // Only auto-save when in notes tab with non-empty content
+    const hasContent = draftTextValue.trim().length > 0;
+    if (workspaceTab !== 'notes' || (!hasContent && draftImages.length === 0)) {
+      if (draftAutoSaveTimerRef.current) {
+        clearTimeout(draftAutoSaveTimerRef.current);
+        draftAutoSaveTimerRef.current = null;
+      }
+      return;
+    }
+
+    // Cancel previous timer (user is still typing)
+    if (draftAutoSaveTimerRef.current) {
+      clearTimeout(draftAutoSaveTimerRef.current);
+      draftAutoSaveTimerRef.current = null;
+    }
+
+    if (draftAutoSaveClearTimerRef.current) {
+      clearTimeout(draftAutoSaveClearTimerRef.current);
+      draftAutoSaveClearTimerRef.current = null;
+    }
+
+    // Set new timer (save after 10 seconds of inactivity)
+    draftAutoSaveTimerRef.current = setTimeout(async () => {
+      setDraftAutoSaveStatus('saving');
+      try {
+        await AsyncStorage.setItem(
+          DRAFT_KEY,
+          JSON.stringify({ text: draftTextValue, images: draftImages, category: manualCategory, updatedAt: Date.now() })
+        );
+        setDraftAutoSaveStatus('saved');
+
+        // Clear "saved" status after 2 seconds
+        draftAutoSaveClearTimerRef.current = setTimeout(() => {
+          setDraftAutoSaveStatus('idle');
+        }, 2000);
+      } catch {
+        setDraftAutoSaveStatus('idle');
+      }
+    }, 10000); // 10 seconds
+
+    return () => {
+      if (draftAutoSaveTimerRef.current) {
+        clearTimeout(draftAutoSaveTimerRef.current);
+        draftAutoSaveTimerRef.current = null;
+      }
+    };
+  }, [draftTextValue, draftImages, manualCategory, workspaceTab]);
+
+  // Real-time workflow detection while typing
+  useEffect(() => {
+    if (!draftTextValue.trim()) {
+      setDetectedWorkflow(null);
+      return;
+    }
+
+    // Allow short text if it contains a known medication
+    const hasMedication = findMedication(draftTextValue) !== null;
+    if (draftTextValue.length < 3 && !hasMedication) {
+      setDetectedWorkflow(null);
+      return;
+    }
+
+    const detection = detectSmartWorkflow(draftTextValue);
+    if (detection.type !== 'none' && detection.confidence >= 0.65) {
+      setDetectedWorkflow(detection);
+    } else {
+      setDetectedWorkflow(null);
+    }
+  }, [draftTextValue]);
 
   const filteredNotes = useMemo(() => {
-    const q = searchText.trim().toLowerCase();
-    let next = q ? notes.filter((n) => `${n.text} ${(n.attachments || []).join(' ')} ${n.category}`.toLowerCase().includes(q)) : notes;
+    const q = String(searchText || '').trim().toLowerCase();
+    let next = q ? notes.filter((n) => `${String(n.text || '')} ${(n.attachments || []).join(' ')} ${n.category}`.toLowerCase().includes(q)) : notes;
     if (activeGroupId === 'personal') {
       next = next.filter((n) => !n.groupId);
     } else {
@@ -263,6 +357,7 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
     }
     if (filter === 'work') next = next.filter((n) => n.category === 'work');
     if (filter === 'pinned') next = next.filter((n) => n.pinned);
+    if (filter === 'draft') next = next.filter((n) => n.draft);
     if (filter === 'archived') next = next.filter((n) => n.archived);
     if (filter !== 'archived') next = next.filter((n) => !n.archived);
     if (dateFilter) {
@@ -273,13 +368,13 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
     }
     if (officeEntityFilter) {
       const officeNeedle = officeEntityFilter.toLowerCase();
-      next = next.filter((n) => n.text.toLowerCase().includes(officeNeedle));
+      next = next.filter((n) => String(n.text || '').toLowerCase().includes(officeNeedle));
     }
     return next;
   }, [notes, searchText, filter, activeGroupId, dateFilter, officeEntityFilter]);
 
   const filteredTemplates = useMemo(() => {
-    const q = templateSearch.trim().toLowerCase();
+    const q = String(templateSearch || '').trim().toLowerCase();
     if (!q) return templates;
     return templates.filter((t) => `${t.name} ${t.to || ''} ${t.subject} ${t.body}`.toLowerCase().includes(q));
   }, [templates, templateSearch]);
@@ -346,16 +441,62 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
 
   async function saveDraftAsNote() {
     const groupId = activeGroupId === 'personal' ? undefined : activeGroupId;
-    const result = await addRichNoteUnique(draftText, activeCategory, draftImages, groupId);
+    const shoppingModel = isShoppingList(draftTextValue) ? parseShoppingList(draftTextValue) : null;
+    const noteText = shoppingModel?.isShoppingList && shoppingModel.items.length >= 4
+      ? shoppingListToText(shoppingModel.items)
+      : draftTextValue;
+    const noteCategory = shoppingModel?.isShoppingList && shoppingModel.items.length >= 4
+      ? 'shopping'
+      : activeCategory;
+    const result = await addRichNoteUnique(noteText, noteCategory, draftImages, groupId, true);
     setNotes(result.notes);
     if (result.inserted) {
       showToast('Note saved');
       setFilter('all');
+
+      // Detect smart workflows (medication, shopping, reminder, task)
+      if (draftTextValue.trim().length > 0) {
+        const detection = detectSmartWorkflow(draftTextValue);
+        if (detection.type !== 'none' && detection.confidence >= 0.65) {
+          setDetectedWorkflow(detection);
+        }
+      }
+
+      // Cancel any pending auto-save timer
+      if (draftAutoSaveTimerRef.current) {
+        clearTimeout(draftAutoSaveTimerRef.current);
+        draftAutoSaveTimerRef.current = null;
+      }
+
+      // Clear draft from AsyncStorage after successful save
+      await AsyncStorage.removeItem(DRAFT_KEY);
+
       setDraftText('');
       setDraftImages([]);
       setManualCategory(null);
-      await AsyncStorage.removeItem(DRAFT_KEY);
+      setDraftAutoSaveStatus('idle');
     }
+  }
+
+  async function createMedicationFollowUpNote(metadata: WorkflowMetadata, sourceText?: string) {
+    const groupId = activeGroupId === 'personal' ? undefined : activeGroupId;
+    const med = String(metadata.medicationName || '').trim();
+    if (!med) return;
+    const followLabel = String(metadata.followUpLabel || 'in 2h').trim();
+    const reason = String(metadata.reason || '').trim();
+    const dose = String(metadata.doseText || '').trim();
+    const lines = [
+      `Medication Follow-up`,
+      `Medication: ${med}`,
+      dose ? `Dose: ${dose}` : '',
+      reason ? `Reason: ${reason}` : '',
+      `Reminder: ${followLabel}`,
+      sourceText ? `Source: ${sourceText}` : '',
+    ].filter(Boolean);
+    const noteText = lines.join('\n');
+    const result = await addRichNoteUnique(noteText, 'health', [], groupId);
+    setNotes(result.notes);
+    if (result.inserted) setFilter('all');
   }
 
   function handleRemoveImage(index: number) {
@@ -363,8 +504,8 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
   }
 
   async function handleOcrAppendText(ocrText: string) {
-    const updatedText = draftText.trim()
-      ? `${draftText}\n\n--- Extracted text ---\n${ocrText}`
+    const updatedText = draftTextValue.trim()
+      ? `${draftTextValue}\n\n--- Extracted text ---\n${ocrText}`
       : ocrText;
     setDraftText(updatedText);
     // Smart workflow detection will happen on the next text change or save
@@ -376,7 +517,8 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
   }
 
   async function duplicateNote(note: NoteItem) {
-    const dupText = note.text + (note.text.trim() ? ' (copy)' : '(copy)');
+    const noteText = String(note.text || '');
+    const dupText = noteText + (noteText.trim() ? ' (copy)' : '(copy)');
     const groupId = note.groupId || (activeGroupId === 'personal' ? undefined : activeGroupId);
     const result = await addRichNoteUnique(dupText, note.category, note.attachments ?? [], groupId);
     setNotes(result.notes);
@@ -448,8 +590,9 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
 
   async function createQuickReminderFromNote(note: NoteItem) {
     const start = new Date(Date.now() + 60 * 60 * 1000);
-    const title = note.text.trim().slice(0, 48) || 'Note reminder';
-    const body = note.text.trim() || 'Reminder generated from note';
+    const noteText = String(note.text || '');
+    const title = noteText.trim().slice(0, 48) || 'Note reminder';
+    const body = noteText.trim() || 'Reminder generated from note';
     const ics = buildAppointmentIcs(title, body, '', start, 30);
 
     if (Platform.OS === 'web' && typeof window !== 'undefined') {
@@ -477,7 +620,7 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
       '',
       note.category.toUpperCase(),
       '',
-      note.text.trim(),
+      String(note.text || '').trim(),
       '',
       ...(note.attachments || []).map((attachment, index) => `Attachment ${index + 1}: ${attachment}`),
     ].join('\n');
@@ -619,17 +762,17 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
 
         {workspaceTab === 'notes' ? (
           <>
-            <View style={{ width: '100%', gap: 24, paddingHorizontal: 16, paddingTop: 24, paddingBottom: 128, alignSelf: 'stretch', minWidth: 0 }}>
+            <View style={{ width: '100%', gap: 10, paddingHorizontal: 16, paddingTop: 16, paddingBottom: 50, alignSelf: 'stretch', minWidth: 0 }}>
               <ComposerSection
                 ref={draftInputRef}
                 palette={uiPalette}
                 activeGroupId={activeGroupId}
                 groups={groups}
-                draftText={draftText}
+                draftText={draftTextValue}
                 draftImages={draftImages}
                 activeCategory={activeCategory}
                 onChangeGroup={setActiveGroupId}
-                onChangeText={setDraftText}
+                onChangeText={handleDraftTextChange}
                 onGenerate={() => setGeneratorVisible(true)}
                 onOcr={() => setOcrVisible(true)}
                 onAddImage={() => addImageToDraft().catch(() => undefined)}
@@ -637,11 +780,75 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
                 onPasteImage={() => pasteImageFromClipboardToDraft().catch(() => undefined)}
                 onSave={() => saveDraftAsNote().catch(() => undefined)}
                 onSetCategory={setManualCategory}
+                onQuickTemplateMedication={(medicationText) => {
+                  const medicationTemplateText = String(medicationText || '');
+                  const meds = medicationTemplateText
+                    .split(',')
+                    .map((entry) => String(entry || '').trim())
+                    .filter(Boolean);
+                  if (meds.length === 0) return;
+                  const primaryMedication = meds[0];
+                  const nextText = draftTextValue ? `${draftTextValue}\n${medicationTemplateText}` : medicationTemplateText;
+                  setDraftText(nextText);
+                  setWorkflowModalData({
+                    medicationName: primaryMedication,
+                    medicationNames: meds,
+                    reason: 'Quick template',
+                  });
+                  setWorkflowModalType('medication');
+                }}
+                onQuickTemplateShopping={(itemsText) => {
+                  const shoppingTemplateText = safeText(itemsText);
+                  if (!shoppingTemplateText) return;
+                  setDraftText(shoppingTemplateText);
+                  setManualCategory('shopping');
+                  showToast('Shopping item added');
+                }}
                 onRemoveImage={handleRemoveImage}
                 onOcrAppendText={handleOcrAppendText}
                 onOcrReplaceText={handleOcrReplaceText}
                 generating={false}
               />
+
+              {/* ── Auto-save status indicator ── */}
+              {draftAutoSaveStatus !== 'idle' && (
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 8,
+                    paddingHorizontal: 12,
+                    paddingVertical: 8,
+                    borderRadius: 8,
+                    backgroundColor: draftAutoSaveStatus === 'saving' ? palette.accent : `${palette.accent}40`,
+                    opacity: draftAutoSaveStatus === 'saving' ? 0.7 : 1,
+                  }}
+                >
+                  {draftAutoSaveStatus === 'saving' ? (
+                    <>
+                      <ActivityIndicator size="small" color={palette.fg} />
+                      <Text style={{ color: palette.fg, fontSize: 12, fontWeight: '500' }}>Saving draft...</Text>
+                    </>
+                  ) : (
+                    <>
+                      <Ionicons name="checkmark-circle" size={14} color={palette.fg} />
+                      <Text style={{ color: palette.fg, fontSize: 12, fontWeight: '500' }}>Draft saved</Text>
+                    </>
+                  )}
+                </View>
+              )}
+
+              {detectedWorkflow && detectedWorkflow.type !== 'none' && detectedWorkflow.confidence >= 0.65 && (
+                <SmartWorkflowCard
+                  detection={detectedWorkflow}
+                  onDismiss={() => setDetectedWorkflow(null)}
+                  onCreateWorkflow={(type) => {
+                    setWorkflowModalType(type);
+                    setWorkflowModalData(detectedWorkflow.extracted || {});
+                  }}
+                  onKeepAsNote={() => setDetectedWorkflow(null)}
+                />
+              )}
 
               <SearchFilterBar
                 palette={{
@@ -665,7 +872,7 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
               />
 
               {filteredNotes.length === 0 ? (
-                <View style={{ width: '100%', borderWidth: 1, borderColor: palette.border, borderRadius: 12, backgroundColor: uiPalette.surface, alignItems: 'center', gap: 10, padding: 16, alignSelf: 'stretch' }}>
+                <View style={{ width: '100%', borderWidth: 1, borderColor: palette.border, borderRadius: 12, backgroundColor: uiPalette.surface, alignItems: 'center', gap: 8, padding: 12, alignSelf: 'stretch' }}>
                   <Ionicons name={notes.length === 0 ? 'document-text-outline' : 'search-outline'} size={28} color={palette.accent} />
                   <Text style={{ color: palette.fg, fontSize: 15, fontWeight: '800', textAlign: 'center' }}>{notesEmptyTitle}</Text>
                   <Text style={{ color: palette.muted, fontSize: 12, lineHeight: 18, textAlign: 'center' }}>{notesEmptyText}</Text>
@@ -724,8 +931,18 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
                               setEditingNoteId(note.id);
                               setEditingText(note.text);
                             }}
-                            onChangeEditingText={setEditingText}
-                            onSaveEdit={() => updateNoteText(note.id, editingText).then((next) => { setNotes(next); setEditingNoteId(null); setEditingText(''); })}
+                            onChangeEditingText={(value) => {
+                              const nextText = String(value || '');
+                              setEditingText(nextText);
+                              if (!editing) {
+                                updateNoteText(note.id, nextText).then(setNotes).catch(() => undefined);
+                              }
+                            }}
+                            onSaveEdit={() => updateNoteText(note.id, editingText).then((next) => {
+                              clearDraftFlag(note.id).then(setNotes);
+                              setEditingNoteId(null);
+                              setEditingText('');
+                            })}
                             onCancelEdit={() => {
                               setEditingNoteId(null);
                               setEditingText('');
@@ -771,7 +988,7 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
               <TextInput style={[mainAppStyles.input, styles.noteInput, { backgroundColor: palette.bg, color: palette.fg, borderColor: palette.border }]} placeholder="Body" placeholderTextColor={palette.muted} multiline value={templateBody} onChangeText={setTemplateBody} />
               <View style={styles.editorActions}>
                 <Pressable style={[styles.iconOnlyAction, { borderColor: palette.border }]} onPress={() => {
-                  const payload = { name: templateName || 'Template', kind: 'email' as const, to: templateTo.trim(), subject: templateSubject, body: templateBody, location: '', durationMinutes: 30 };
+                  const payload = { name: templateName || 'Template', kind: 'email' as const, to: String(templateTo || '').trim(), subject: templateSubject, body: templateBody, location: '', durationMinutes: 30 };
                   const action = editingTemplateId ? updateTemplate(editingTemplateId, payload) : addTemplate(payload);
                   action.then(setTemplates).then(() => resetTemplateEditor()).catch(() => undefined);
                 }}>
@@ -1017,7 +1234,7 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
         onClose={() => setDetailNote(null)}
         onSave={async (id, title, text) => {
           let next = notes;
-          if (text.trim()) next = await updateNoteText(id, text);
+          if (String(text || '').trim()) next = await updateNoteText(id, String(text || ''));
           next = await updateNoteTitle(id, title);
           setNotes(next);
           showToast('Note updated');
@@ -1028,6 +1245,75 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
         onDelete={(id) => handleRemoveNote(id).then(setNotes)}
         onCopy={(text) => forceCopyToClipboard(text).catch(() => undefined)}
         onShare={(id) => { const n = notes.find((x) => x.id === id); if (n) setShareNote(n); setDetailNote(null); }}
+      />
+
+      {/* ── Medication Workflow Modal ── */}
+      <MedicationWorkflowModal
+        visible={workflowModalType === 'medication'}
+        onClose={() => setWorkflowModalType(null)}
+        originalNoteText={draftTextValue}
+        initialData={{
+          medicationName: String(workflowModalData.medicationName || ''),
+          doseText: String(workflowModalData.doseText || ''),
+          takenAtText: String(workflowModalData.takenAtText || ''),
+          reason: String(workflowModalData.reason || ''),
+        }}
+        onSave={(metadata) => {
+          const medicationNames = Array.isArray(workflowModalData.medicationNames)
+            ? (workflowModalData.medicationNames as string[]).map((entry) => String(entry || '').trim()).filter(Boolean)
+            : [];
+
+          if (medicationNames.length > 1) {
+            Promise.all(
+              medicationNames.map((medicationName) =>
+                createMedicationFollowUpNote(
+                  { ...metadata, medicationName },
+                  'Quick template',
+                ),
+              ),
+            ).then(() => {
+              showToast(`${medicationNames.length} medication follow-ups created`);
+            }).catch(() => undefined);
+          } else {
+            createMedicationFollowUpNote(metadata, 'Workflow').then(() => {
+              showToast('Medication follow-up created');
+            }).catch(() => undefined);
+          }
+          setWorkflowModalType(null);
+          setWorkflowModalData({});
+          setDetectedWorkflow(null);
+        }}
+      />
+
+      {/* ── Shopping Workflow Modal ── */}
+      <ShoppingWorkflowModal
+        visible={workflowModalType === 'shopping'}
+        onClose={() => setWorkflowModalType(null)}
+        initialItems={Array.isArray(workflowModalData.items) ? (workflowModalData.items as string[]) : []}
+        onSave={(items) => {
+          const groupId = activeGroupId === 'personal' ? undefined : activeGroupId;
+          const checklist = (items.checklistItems || []).map((entry) => String(entry.text || '').trim()).filter(Boolean);
+          const shoppingNote = checklist.length > 0
+            ? `Shopping List\n${checklist.map((item) => `- ${item}`).join('\n')}`
+            : '';
+          if (!shoppingNote) {
+            setWorkflowModalType(null);
+            setDetectedWorkflow(null);
+            return;
+          }
+          addRichNoteUnique(shoppingNote, 'shopping', [], groupId).then((result) => {
+            setNotes(result.notes);
+            if (result.inserted) {
+              showToast('Shopping list created');
+              setFilter('all');
+            } else {
+              showToast('Shopping list already exists');
+            }
+            setWorkflowModalType(null);
+            setWorkflowModalData({});
+            setDetectedWorkflow(null);
+          }).catch(() => undefined);
+        }}
       />
 
       {/* ── Toast ── */}
@@ -1232,9 +1518,9 @@ const styles = StyleSheet.create({
   filterChipRow: { flexDirection: 'row', gap: 6, alignItems: 'center' },
   searchRow: { flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 8 },
   searchInput: { flex: 1, fontSize: 13, paddingVertical: 0 },
-  gridWrap: { gap: 10, width: '100%', minWidth: 0 },
-  gridRow: { flexDirection: 'row', gap: 10, width: '100%', minWidth: 0 },
-  compactCard: { borderWidth: 1, borderRadius: 12, padding: 12, gap: 8, minWidth: 0 },
+  gridWrap: { gap: 8, width: '100%', minWidth: 0 },
+  gridRow: { flexDirection: 'row', gap: 8, width: '100%', minWidth: 0 },
+  compactCard: { borderWidth: 1, borderRadius: 12, padding: 10, gap: 8, minWidth: 0 },
   noteThumb: { width: '100%', height: 120, borderRadius: 8, backgroundColor: '#111' },
   clipThumb: { width: '100%', height: 96, borderRadius: 8, backgroundColor: '#111' },
   cardHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },

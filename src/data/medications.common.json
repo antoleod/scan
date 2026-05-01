@@ -1,0 +1,255 @@
+{
+  "version": "1.0.0",
+  "countryContext": "BE/EU",
+  "medicalDisclaimer": "This data is for medication tracking only. Always verify your prescription, leaflet, doctor, or pharmacist before taking anything else.",
+  "medications": [
+    {
+      "id": "paracetamol",
+      "genericName": "paracetamol",
+      "displayName": "Paracetamol / Dafalgan",
+      "aliases": [
+        "paracetamol",
+        "paracétamol",
+        "dafalgan",
+        "doliprane",
+        "perdolan",
+        "acetaminophen",
+        "tylenol"
+      ],
+      "category": "pain_fever",
+      "commonForms": ["tablet", "capsule", "effervescent", "syrup"],
+      "defaultDoseLabel": "500 mg / 1 tablet",
+      "minIntervalHours": 4,
+      "preferredFollowUpHours": 6,
+      "usualFollowUpOptionsHours": [4, 6, 8],
+      "maxDailyDoseLabel": "Depends on age, weight, product, and prescription. Verify leaflet.",
+      "allowAutoPrefill": true,
+      "requiresDoctor": false,
+      "safetyNotes": [
+        "Do not combine multiple medicines containing paracetamol.",
+        "Avoid exceeding the daily maximum shown on the leaflet or prescription.",
+        "Risk of liver toxicity in overdose."
+      ],
+      "redFlags": [
+        "severe pain",
+        "difficulty breathing",
+        "swollen throat",
+        "cannot swallow saliva",
+        "fever lasting more than 2 days",
+        "symptoms worsening",
+        "suspected overdose"
+      ],
+      "confidenceBoostKeywords": [
+        "fever",
+        "pain",
+        "sore throat",
+        "mal de gorge",
+        "dolor",
+        "fiebre",
+        "headache",
+        "migraña"
+      ]
+    },
+    {
+      "id": "ibuprofen",
+      "genericName": "ibuprofen",
+      "displayName": "Ibuprofen",
+      "aliases": [
+        "ibuprofen",
+        "ibuprofène",
+        "ibuprofeno",
+        "brufen",
+        "nurofen",
+        "spidifen",
+        "dolo"
+      ],
+      "category": "anti_inflammatory_pain_fever",
+      "commonForms": ["tablet", "capsule", "sachet"],
+      "defaultDoseLabel": "400 mg / 1 tablet",
+      "minIntervalHours": 6,
+      "preferredFollowUpHours": 8,
+      "usualFollowUpOptionsHours": [6, 8],
+      "maxDailyDoseLabel": "Depends on age, weight, product, medical condition, and prescription. Verify leaflet.",
+      "allowAutoPrefill": true,
+      "requiresDoctor": false,
+      "safetyNotes": [
+        "Take extra care with stomach problems, kidney problems, anticoagulants, asthma, pregnancy, or ulcers.",
+        "Do not combine with other NSAIDs unless instructed by a doctor.",
+        "Use the lowest effective dose for the shortest time."
+      ],
+      "redFlags": [
+        "stomach bleeding",
+        "black stools",
+        "severe abdominal pain",
+        "breathing difficulty",
+        "allergic reaction",
+        "symptoms worsening",
+        "fever lasting more than 2 days"
+      ],
+      "confidenceBoostKeywords": [
+        "inflammation",
+        "inflamación",
+        "pain",
+        "dolor",
+        "fever",
+        "fiebre",
+        "sore throat",
+        "mal de gorge"
+      ]
+    },
+    {
+      "id": "aspirin",
+      "genericName": "acetylsalicylic acid",
+      "displayName": "Aspirin",
+      "aliases": [
+        "aspirin",
+        "aspirine",
+        "asa",
+        "acetylsalicylic acid",
+        "acide acétylsalicylique"
+      ],
+      "category": "pain_fever_anticoagulant",
+      "commonForms": ["tablet"],
+      "defaultDoseLabel": "500 mg / 1 tablet",
+      "minIntervalHours": 4,
+      "preferredFollowUpHours": 6,
+      "usualFollowUpOptionsHours": [4, 6, 8],
+      "maxDailyDoseLabel": "Depends on age, use, and prescription. Verify leaflet.",
+      "allowAutoPrefill": true,
+      "requiresDoctor": false,
+      "safetyNotes": [
+        "Do not use if allergic to NSAIDs.",
+        "Risk of stomach irritation and bleeding.",
+        "Do not combine with other anticoagulants without medical advice."
+      ],
+      "redFlags": [
+        "stomach bleeding",
+        "black stools",
+        "severe abdominal pain",
+        "allergic reaction"
+      ],
+      "confidenceBoostKeywords": [
+        "pain",
+        "fever",
+        "headache"
+      ]
+    },
+    {
+      "id": "cetirizine",
+      "genericName": "cetirizine",
+      "displayName": "Cetirizine",
+      "aliases": [
+        "cetirizine",
+        "cétirizine",
+        "piriteze",
+        "aerius allergy",
+        "histaminum"
+      ],
+      "category": "antihistamine",
+      "commonForms": ["tablet", "syrup"],
+      "defaultDoseLabel": "10 mg / 1 tablet",
+      "minIntervalHours": 24,
+      "preferredFollowUpHours": 24,
+      "usualFollowUpOptionsHours": [24],
+      "maxDailyDoseLabel": "Typically 10 mg once daily. Verify leaflet.",
+      "allowAutoPrefill": true,
+      "requiresDoctor": false,
+      "safetyNotes": [
+        "Do not exceed recommended dose.",
+        "May cause drowsiness; avoid driving if affected."
+      ],
+      "redFlags": [
+        "severe allergic reaction",
+        "difficulty breathing",
+        "swelling of face/lips"
+      ],
+      "confidenceBoostKeywords": [
+        "allergy",
+        "allergic",
+        "alergia",
+        "antihistamine"
+      ]
+    },
+    {
+      "id": "amoxicillin",
+      "genericName": "amoxicillin",
+      "displayName": "Amoxicillin",
+      "aliases": [
+        "amoxicillin",
+        "amoxicilline",
+        "amoxicilina",
+        "clamoxyl",
+        "augmentin",
+        "amoxypen"
+      ],
+      "category": "antibiotic",
+      "commonForms": ["tablet", "capsule", "suspension"],
+      "defaultDoseLabel": "",
+      "minIntervalHours": null,
+      "preferredFollowUpHours": null,
+      "usualFollowUpOptionsHours": [],
+      "maxDailyDoseLabel": "Prescription-only. Follow doctor/pharmacist instructions.",
+      "allowAutoPrefill": false,
+      "requiresDoctor": true,
+      "safetyNotes": [
+        "Antibiotics must follow the exact prescription.",
+        "Do not auto-suggest dose or interval.",
+        "Ask the user to enter the prescribed dose and time.",
+        "Complete the full course even if symptoms improve."
+      ],
+      "redFlags": [
+        "allergic reaction",
+        "rash",
+        "difficulty breathing",
+        "swelling",
+        "severe diarrhea"
+      ],
+      "confidenceBoostKeywords": [
+        "antibiotic",
+        "antibiótico",
+        "infection",
+        "infección",
+        "angina",
+        "throat infection"
+      ]
+    },
+    {
+      "id": "omeprazole",
+      "genericName": "omeprazole",
+      "displayName": "Omeprazole",
+      "aliases": [
+        "omeprazole",
+        "oméprazole",
+        "losec",
+        "prilosec",
+        "gastroloc"
+      ],
+      "category": "stomach",
+      "commonForms": ["tablet", "capsule"],
+      "defaultDoseLabel": "20 mg / 1 tablet",
+      "minIntervalHours": 24,
+      "preferredFollowUpHours": 24,
+      "usualFollowUpOptionsHours": [24],
+      "maxDailyDoseLabel": "Typically 20–40 mg daily. Verify leaflet/prescription.",
+      "allowAutoPrefill": true,
+      "requiresDoctor": false,
+      "safetyNotes": [
+        "Best taken 30 minutes before meals.",
+        "Long-term use should be monitored by a doctor.",
+        "May interfere with absorption of other medicines."
+      ],
+      "redFlags": [
+        "severe abdominal pain",
+        "vomiting blood",
+        "black stools"
+      ],
+      "confidenceBoostKeywords": [
+        "stomach",
+        "heartburn",
+        "acid reflux",
+        "reflux",
+        "gastric"
+      ]
+    }
+  ]
+}

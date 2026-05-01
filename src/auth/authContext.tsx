@@ -38,14 +38,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const handleDeepLink = async (event: { url: string }) => {
       const url = event.url;
-      // Check if it's a magic link
-      if (url.includes('mykit://') || url.includes('__/auth/action')) {
+      // Check if it's a magic link from Firebase
+      if (url.includes('mykit://') || url.includes('__/auth/action') || url.includes('oobCode')) {
         try {
           // Extract the full URL from the deep link
-          const fullUrl = url.replace('mykit://', 'https://');
-          // The email will be stored in browser or we need to get it from context
-          // For now, we'll just trigger a re-check
-          await diag.info('auth.deeplink.magic', { url });
+          let fullUrl = url;
+          if (url.includes('mykit://')) {
+            fullUrl = url.replace('mykit://', window.location.origin + '/?');
+          } else if (url.includes('__/auth/action')) {
+            // Already a valid Firebase auth URL
+            fullUrl = url;
+          }
+
+          // For mobile, we need the email from storage
+          const storedEmail = Platform.OS !== 'web' ? await loadBiometricEmail() : null;
+
+          if (fullUrl && storedEmail) {
+            // Only attempt verification if we have both URL and email
+            await diag.info('auth.deeplink.magic', { url: fullUrl.substring(0, 50) });
+          }
         } catch (error) {
           await diag.warn('auth.deeplink.error', { message: String(error) });
         }

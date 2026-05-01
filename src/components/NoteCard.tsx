@@ -43,6 +43,7 @@ type NoteItem = {
   attachments?: string[];
   versions?: { id: string; title?: string; text: string; createdAt: number }[];
   updatedAt: number;
+  syncStatus?: 'pending' | 'synced';
 };
 
 const colorSwatches: { key: NoteColor; hex: string; label: string }[] = [
@@ -86,9 +87,11 @@ function ActionPill({
       style={({ pressed }) => ({
         flexDirection: 'row',
         alignItems: 'center',
+        justifyContent: 'center',
         gap: 4,
         paddingHorizontal: 10,
         paddingVertical: 6,
+        minHeight: 44,
         borderRadius: 999,
         backgroundColor: pressed ? `${color}30` : `${color}18`,
       })}
@@ -193,6 +196,7 @@ export function NoteCard({
   settings: AppSettings;
 }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   const heartPulse = useRef(new Animated.Value(1)).current;
 
   // Double-tap detection
@@ -283,9 +287,10 @@ export function NoteCard({
   );
 
   // ── Derived display values ───────────────────────────────────────────────
+  const noteText = String(note.text || '');
   const preview = useMemo(
-    () => note.text.trim() || `Image attachment (${note.attachments?.length ?? 0})`,
-    [note.attachments?.length, note.text],
+    () => noteText.trim() || `Image attachment (${note.attachments?.length ?? 0})`,
+    [note.attachments?.length, noteText],
   );
   const firstAttachment = note.attachments?.[0];
   const updatedAt = useMemo(() => {
@@ -294,19 +299,19 @@ export function NoteCard({
   }, [note.updatedAt]);
 
   const borderLeftColor = noteColorHex(note.color, palette.border);
-  const smart = useMemo(() => detectNoteEntities(note.text, settings), [note.text, settings]);
+  const smart = useMemo(() => detectNoteEntities(noteText, settings), [noteText, settings]);
   const isSmart = smart.type !== 'general';
-  const model = useMemo(() => buildSmartNoteModel(note.text, smart), [note.text, smart]);
-  const sfModel = useMemo(() => parseServiceNowFields(note.text), [note.text]);
-  const isShopping = useMemo(() => isShoppingList(note.text), [note.text]);
-  const shoppingModel = useMemo(() => isShopping ? parseShoppingList(note.text) : null, [isShopping, note.text]);
+  const model = useMemo(() => buildSmartNoteModel(noteText, smart), [noteText, smart]);
+  const sfModel = useMemo(() => parseServiceNowFields(noteText), [noteText]);
+  const isShopping = useMemo(() => isShoppingList(noteText), [noteText]);
+  const shoppingModel = useMemo(() => isShopping ? parseShoppingList(noteText) : null, [isShopping, noteText]);
   const { hiddenKeys, toggleField } = useFieldVisibility();
   // Word / char count for the footer stat chip
   const wordCount = useMemo(() => {
-    const t = note.text.trim();
+    const t = noteText.trim();
     if (!t) return { words: 0, chars: 0 };
     return { words: t.split(/\s+/).length, chars: t.length };
-  }, [note.text]);
+  }, [noteText]);
   const typeMeta = useMemo(() => {
     switch (smart.type) {
       case 'network':
@@ -378,8 +383,8 @@ export function NoteCard({
               borderLeftColor: selected ? palette.accent : borderLeftColor,
               borderRadius: 14,
               backgroundColor: selected ? `${palette.accent}12` : palette.surface,
-              padding: 14,
-              gap: 10,
+              padding: 12,
+              gap: 8,
               opacity: pressed ? 0.92 : 1,
             })}
           >
@@ -396,17 +401,26 @@ export function NoteCard({
                 </Text>
               </View>
 
-              {/* Added category chips here */}
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                <View style={{ borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2, backgroundColor: palette.surfaceAlt }}>
-                  <Text style={{ color: palette.textMuted, fontSize: 9, fontWeight: '800', letterSpacing: 0.5, textTransform: 'uppercase' }}>
-                    {note.category}
-                  </Text>
-                </View>
+              {/* Category and status badges (subtle) */}
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                {note.category === 'work' && (
+                  <View style={{ borderRadius: 3, paddingHorizontal: 5, paddingVertical: 1, backgroundColor: 'transparent' }}>
+                    <Text style={{ color: palette.textMuted, fontSize: 8, fontWeight: '700', letterSpacing: 0.3, textTransform: 'uppercase' }}>
+                      {note.category}
+                    </Text>
+                  </View>
+                )}
                 {note.archived ? (
-                  <View style={{ borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2, backgroundColor: palette.surfaceAlt }}>
-                    <Text style={{ color: palette.textMuted, fontSize: 9, fontWeight: '800', letterSpacing: 0.5, textTransform: 'uppercase' }}>
+                  <View style={{ borderRadius: 3, paddingHorizontal: 5, paddingVertical: 1, backgroundColor: 'transparent' }}>
+                    <Text style={{ color: palette.textMuted, fontSize: 8, fontWeight: '700', letterSpacing: 0.3, textTransform: 'uppercase' }}>
                       archived
+                    </Text>
+                  </View>
+                ) : null}
+                {note.syncStatus ? (
+                  <View style={{ borderRadius: 3, paddingHorizontal: 5, paddingVertical: 1, backgroundColor: note.syncStatus === 'pending' ? '#f59e0b18' : '#22c55e18' }}>
+                    <Text style={{ color: note.syncStatus === 'pending' ? '#f59e0b' : '#22c55e', fontSize: 8, fontWeight: '700', letterSpacing: 0.3, textTransform: 'uppercase' }}>
+                      {note.syncStatus === 'pending' ? 'Pending sync' : 'Synced'}
                     </Text>
                   </View>
                 ) : null}
@@ -478,7 +492,7 @@ export function NoteCard({
                 multiline
                 autoFocus
                 style={{
-                  minHeight: 80,
+                  minHeight: 70,
                   borderWidth: 1,
                   borderColor: palette.accent,
                   borderRadius: 10,
@@ -534,7 +548,7 @@ export function NoteCard({
 
             {/* ── Color picker (editing mode only) ── */}
             {editing ? (
-              <View style={{ paddingTop: 10, borderTopWidth: 1, borderTopColor: palette.border, gap: 8 }}>
+              <View style={{ paddingTop: 8, borderTopWidth: 1, borderTopColor: palette.border, gap: 8 }}>
                 <Text style={{ color: palette.textDim, fontSize: 11, fontWeight: '600' }}>Note color</Text>
                 <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
                   {colorSwatches.map((swatch) => {
@@ -610,43 +624,70 @@ export function NoteCard({
                   </Pressable>
                 </View>
               ) : (
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                  <ActionPill icon="copy-outline"         label="Copy"  color="#0891b2" onPress={() => {
-                    const text = sfModel.isStructured
-                      ? buildRedactedText(sfModel, note.text, hiddenKeys)
-                      : note.text;
-                    onCopy(text);
-                  }} />
-                  <ActionPill icon="share-social-outline" label="Share" color="#7c3aed" onPress={onShare} />
-                  {onDuplicate ? (
-                    <ActionPill icon="copy-outline" label="Dupe" color="#F59E0B" onPress={onDuplicate} />
-                  ) : null}
-                  <ActionPill icon="create-outline"       label="Edit"  color="#059669" onPress={onStartEdit} />
+                <>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, flexWrap: 'wrap', rowGap: 5 }}>
+                    <ActionPill icon="copy-outline"         label="Copy"  color="#0891b2" onPress={() => {
+                      const text = sfModel.isStructured
+                        ? buildRedactedText(sfModel, note.text, hiddenKeys)
+                        : note.text;
+                      onCopy(text);
+                    }} />
+                    <ActionPill icon="create-outline"       label="Edit"  color="#059669" onPress={onStartEdit} />
 
-                  {/* Chevron toggle — reliable on PC; also works on mobile alongside swipe */}
-                  <Pressable
-                    onPress={toggleSwipe}
-                    hitSlop={6}
-                    style={({ pressed }) => ({
-                      width: 28,
-                      height: 28,
-                      borderRadius: 999,
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      backgroundColor: pressed
-                        ? `${palette.textDim}22`
-                        : swipeOpen
-                          ? `${palette.textDim}14`
-                          : 'transparent',
-                    })}
-                  >
-                    <Ionicons
-                      name={swipeOpen ? 'chevron-forward-outline' : 'chevron-back-outline'}
-                      size={14}
-                      color={palette.textDim}
-                    />
-                  </Pressable>
-                </View>
+                    {/* More menu button */}
+                    <Pressable
+                      onPress={() => setMoreMenuOpen(!moreMenuOpen)}
+                      hitSlop={8}
+                      style={({ pressed }) => ({
+                        height: 28,
+                        paddingHorizontal: 10,
+                        borderRadius: 999,
+                        borderWidth: 1,
+                        borderColor: moreMenuOpen ? palette.accent : palette.chipBorder,
+                        backgroundColor: moreMenuOpen ? palette.accent : 'transparent',
+                        justifyContent: 'center',
+                        alignItems: 'center',
+                        opacity: pressed ? 0.82 : 1,
+                      })}
+                    >
+                      <Ionicons name="ellipsis-horizontal" size={13} color={moreMenuOpen ? '#000' : palette.textDim} />
+                    </Pressable>
+
+                    {/* Chevron toggle — reliable on PC; also works on mobile alongside swipe */}
+                    <Pressable
+                      onPress={toggleSwipe}
+                      hitSlop={6}
+                      style={({ pressed }) => ({
+                        minHeight: 44,
+                        minWidth: 44,
+                        borderRadius: 999,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        backgroundColor: pressed
+                          ? `${palette.textDim}22`
+                          : swipeOpen
+                            ? `${palette.textDim}14`
+                            : 'transparent',
+                      })}
+                    >
+                      <Ionicons
+                        name={swipeOpen ? 'chevron-forward-outline' : 'chevron-back-outline'}
+                        size={14}
+                        color={palette.textDim}
+                      />
+                    </Pressable>
+                  </View>
+
+                  {/* More menu dropdown */}
+                  {moreMenuOpen && (
+                    <View style={{ flexDirection: 'row', gap: 5, paddingTop: 2, borderTopWidth: 1, borderTopColor: palette.chipBorder }}>
+                      <ActionPill icon="share-social-outline" label="Share" color="#7c3aed" onPress={() => { onShare(); setMoreMenuOpen(false); }} />
+                      {onDuplicate ? (
+                        <ActionPill icon="copy-outline" label="Dupe" color="#F59E0B" onPress={() => { onDuplicate(); setMoreMenuOpen(false); }} />
+                      ) : null}
+                    </View>
+                  )}
+                </>
               )}
             </View>
           </Pressable>
@@ -727,8 +768,9 @@ function SnFieldRow({
   onCopyValue: (value: string, label: 'IP' | 'Hostname') => void;
   onPressOffice: (office: string) => void;
 }) {
-  const segments = useMemo(() => segmentNoteText(field.value, smart), [field.value, smart]);
-  const isTicket = isNumber && /^(INC|RITM|SCTASK|REQ|CHG)\d+$/i.test(field.value.trim());
+  const fieldValue = String(field.value || '');
+  const segments = useMemo(() => segmentNoteText(fieldValue, smart), [fieldValue, smart]);
+  const isTicket = isNumber && /^(INC|RITM|SCTASK|REQ|CHG)\d+$/i.test(fieldValue.trim());
 
   function ticketTable(number: string): string {
     const prefix = number.replace(/\d+$/, '').toUpperCase();
@@ -742,7 +784,7 @@ function SnFieldRow({
   }
 
   const ticketUrl = isTicket && serviceNowBaseUrl
-    ? `${serviceNowBaseUrl.replace(/\/$/, '')}/nav_to.do?uri=${ticketTable(field.value.trim())}.do?number=${field.value.trim()}`
+    ? `${serviceNowBaseUrl.replace(/\/$/, '')}/nav_to.do?uri=${ticketTable(fieldValue.trim())}.do?number=${fieldValue.trim()}`
     : null;
 
   return (
@@ -790,7 +832,7 @@ function SnFieldRow({
                 import('react-native').then(({ Linking }) => Linking.openURL(ticketUrl).catch(() => undefined));
               } : undefined}
             >
-              {field.value.trim()}
+              {fieldValue.trim()}
             </Text>
           </View>
         ) : (

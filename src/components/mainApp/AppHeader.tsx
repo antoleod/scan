@@ -3,6 +3,7 @@ import { ActivityIndicator, Animated, Pressable, Text, View } from 'react-native
 import { Ionicons } from '@expo/vector-icons';
 
 import { mainAppStyles } from './styles';
+import { ProfileMenu } from './ProfileMenu';
 
 type Palette = {
   bg: string;
@@ -98,6 +99,13 @@ function SyncChip({
   );
 }
 
+interface MenuItem {
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  onPress: () => void;
+  destructive?: boolean;
+}
+
 export function AppHeader({
   palette,
   email,
@@ -106,6 +114,9 @@ export function AppHeader({
   lastSyncedAt = null,
   persistenceMode = 'local',
   onSyncNow,
+  profileMenuVisible = false,
+  onToggleProfileMenu,
+  profileMenuItems = [],
 }: {
   palette: Palette;
   email: string;
@@ -114,46 +125,60 @@ export function AppHeader({
   lastSyncedAt?: number | null;
   persistenceMode?: string;
   onSyncNow?: () => void;
+  profileMenuVisible?: boolean;
+  onToggleProfileMenu?: () => void;
+  profileMenuItems?: MenuItem[];
 }) {
   return (
-    <View style={[mainAppStyles.header, { backgroundColor: palette.bg, borderColor: palette.border, height: 56, paddingHorizontal: 16 }]}>
-      {/* Brand */}
-      <View style={[mainAppStyles.brandBlock, { gap: 10 }]}>
-        <LogoMark accent={palette.accent} foreground="#000000" />
-        <Text style={{ color: palette.fg, fontSize: 15, fontWeight: '700', letterSpacing: 0.2 }} numberOfLines={1}>
-          MyKit
-        </Text>
-      </View>
-
-      {/* Right side */}
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flexShrink: 1 }}>
-        <SyncChip
-          syncBusy={syncBusy}
-          lastSyncedAt={lastSyncedAt}
-          persistenceMode={persistenceMode}
-          accent={palette.accent}
-          muted={palette.muted}
-          onPress={onSyncNow ?? (() => undefined)}
-        />
-
-        {/* Divider */}
-        <View style={{ width: 1, height: 20, backgroundColor: palette.border }} />
-
-        <Pressable
-          onPress={onPressEmail}
-          hitSlop={8}
-          style={{ flexDirection: 'row', alignItems: 'center', gap: 6, maxWidth: 160, flexShrink: 1 }}
-        >
-          <View style={{ width: 26, height: 26, borderRadius: 13, backgroundColor: `${palette.accent}22`, borderWidth: 1, borderColor: `${palette.accent}44`, alignItems: 'center', justifyContent: 'center' }}>
-            <Text style={{ color: palette.accent, fontSize: 11, fontWeight: '700' }}>
-              {email.charAt(0).toUpperCase()}
-            </Text>
-          </View>
-          <Text style={{ color: palette.muted, fontSize: 12, fontWeight: '400', flexShrink: 1 }} numberOfLines={1}>
-            {email.split('@')[0]}
+    <>
+      <View style={[mainAppStyles.header, { backgroundColor: palette.bg, borderColor: palette.border, height: 56, paddingHorizontal: 16 }]}>
+        {/* Brand */}
+        <View style={[mainAppStyles.brandBlock, { gap: 10 }]}>
+          <LogoMark accent={palette.accent} foreground="#000000" />
+          <Text style={{ color: palette.fg, fontSize: 15, fontWeight: '700', letterSpacing: 0.2 }} numberOfLines={1}>
+            MyKit
           </Text>
-        </Pressable>
+        </View>
+
+        {/* Right side */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flexShrink: 1 }}>
+          <SyncChip
+            syncBusy={syncBusy}
+            lastSyncedAt={lastSyncedAt}
+            persistenceMode={persistenceMode}
+            accent={palette.accent}
+            muted={palette.muted}
+            onPress={onSyncNow ?? (() => undefined)}
+          />
+
+          {/* Divider */}
+          <View style={{ width: 1, height: 20, backgroundColor: palette.border }} />
+
+          <Pressable
+            onPress={onToggleProfileMenu}
+            hitSlop={8}
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 6, maxWidth: 160, flexShrink: 1 }}
+          >
+            <View style={{ width: 26, height: 26, borderRadius: 13, backgroundColor: `${palette.accent}22`, borderWidth: 1, borderColor: `${palette.accent}44`, alignItems: 'center', justifyContent: 'center' }}>
+              <Text style={{ color: palette.accent, fontSize: 11, fontWeight: '700' }}>
+                {email.charAt(0).toUpperCase()}
+              </Text>
+            </View>
+            <Text style={{ color: palette.muted, fontSize: 12, fontWeight: '400', flexShrink: 1 }} numberOfLines={1}>
+              {email.split('@')[0]}
+            </Text>
+          </Pressable>
+        </View>
       </View>
-    </View>
+
+      {/* Profile menu dropdown */}
+      <ProfileMenu
+        visible={profileMenuVisible ?? false}
+        email={email}
+        palette={palette}
+        onClose={onToggleProfileMenu ?? (() => undefined)}
+        menuItems={profileMenuItems ?? []}
+      />
+    </>
   );
 }

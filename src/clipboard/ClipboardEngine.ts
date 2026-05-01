@@ -2,14 +2,27 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 
 import type { ClipCategory, ClipEntry, ClipKind, ClipSource, PermState } from '../core/clipboard.types';
+import {
+  saveClipboardImage,
+  loadClipboardImage,
+  deleteClipboardImage,
+  clearClipboardImagesOlderThan,
+  getClipboardStorageSize,
+} from '../core/clipboardStorage';
 
 const CLIPBOARD_KEY = '@MyKit_clipboard_v2';
 const LEGACY_CLIPBOARD_KEY = '@MyKit_clipboard_v1';
 const POLL_BASE = 1200;
 const POLL_SLOW = 3500;
+const POLL_BACKGROUND = 5000; // Slower polling when in background
 const MAX_ENTRIES = 3000;
 const DEDUP_WINDOW_MS = 8000;
 const RECENT_TTL_MS = 30000;
+const FIREBASE_RETRY_MAX_ATTEMPTS = 5;
+const FIREBASE_RETRY_BASE_DELAY_MS = 1000;
+const FIREBASE_HEALTH_CHECK_INTERVAL_MS = 30000; // Check connection every 30s
+const IMAGE_STORAGE_MAX_BYTES = 50 * 1024 * 1024; // 50 MB limit for images
+const IMAGE_RETENTION_DAYS = 30; // Auto-delete images older than 30 days
 
 type Listener = (entries: ClipEntry[]) => void;
 
@@ -226,6 +239,11 @@ class ClipboardEngine {
   private loadPromise: Promise<void> | null = null;
   private firesyncTimer: ReturnType<typeof setTimeout> | null = null;
   private firebaseUnsub: (() => void) | null = null;
+  private firebaseRetryCount = 0;
+  private firebaseRetryTimer: ReturnType<typeof setTimeout> | null = null;
+  private firebaseHealthCheckTimer: ReturnType<typeof setInterval> | null = null;
+  private lastFirebaseSyncMs = 0;
+  private isFirebaseHealthy = true;
 
   async ensureReady() {
     if (!this.loadPromise) {
@@ -334,6 +352,11 @@ class ClipboardEngine {
     });
     if (!entry) return false;
 
+    // Persist image to IndexedDB on web
+    if (typeof indexedDB !== 'undefined') {
+      void saveClipboardImage(entry.id, value, entry.capturedAt);
+    }
+
     recentSigs.set(sig, entry.capturedAt);
     this.entries = normalizeEntries([entry, ...this.entries]);
     await this.persist();
@@ -347,6 +370,15 @@ class ClipboardEngine {
 
   async removeEntriesByIds(ids: string[]) {
     const remove = new Set(ids);
+    const toDelete = this.entries.filter((entry) => remove.has(entry.id));
+
+    // Delete images from IndexedDB
+    for (const entry of toDelete) {
+      if (entry.kind === 'image' && typeof indexedDB !== 'undefined') {
+        void deleteClipboardImage(entry.id).catch(() => {});
+      }
+    }
+
     this.entries = this.entries.filter((entry) => !remove.has(entry.id));
     await this.persist();
     this.emit();
@@ -373,6 +405,10 @@ class ClipboardEngine {
     this.entries = [];
     await AsyncStorage.removeItem(CLIPBOARD_KEY);
     await AsyncStorage.removeItem(LEGACY_CLIPBOARD_KEY);
+    if (typeof indexedDB !== 'undefined') {
+      const { clearAllClipboardImages } = await import('../core/clipboardStorage');
+      void clearAllClipboardImages().catch(() => {});
+    }
     this.emit();
   }
 
@@ -386,6 +422,8 @@ class ClipboardEngine {
     }
     this.revokePolling();
     if (this.firesyncTimer) { clearTimeout(this.firesyncTimer); this.firesyncTimer = null; }
+    if (this.firebaseRetryTimer) { clearTimeout(this.firebaseRetryTimer); this.firebaseRetryTimer = null; }
+    if (this.firebaseHealthCheckTimer) { clearInterval(this.firebaseHealthCheckTimer); this.firebaseHealthCheckTimer = null; }
     if (this.firebaseUnsub) { this.firebaseUnsub(); this.firebaseUnsub = null; }
   }
 
@@ -414,27 +452,41 @@ class ClipboardEngine {
         this.entries = [];
         return;
       }
-      this.entries = normalizeEntries(
-        parsed
-          .map((item: any) => {
-            const content = String(item?.content || item?.imageDataUri || '');
-            const kind: ClipKind = item?.kind === 'image' || String(item?.sourceKey || '').startsWith('image:') ? 'image' : 'text';
-            const normalized = kind === 'image' ? content.trim() : normalizeText(content);
-            if (!normalized) return null;
-            const sig = String(item?.sig || signature(normalized));
-            return toEntry({
-              id: String(item?.id || makeId()),
-              kind,
-              content: normalized,
-              category: item?.category,
-              source: normalizeSource(item?.source),
-              capturedAt: Number(item?.capturedAt || now()),
-              sig,
-              imageDataUri: typeof item?.imageDataUri === 'string' ? item.imageDataUri : kind === 'image' ? normalized : undefined,
-            });
-          })
-          .filter(Boolean) as ClipEntry[],
-      );
+
+      // Load entries and try to restore images from IndexedDB
+      const entries = parsed
+        .map(async (item: any) => {
+          const content = String(item?.content || item?.imageDataUri || '');
+          const kind: ClipKind = item?.kind === 'image' || String(item?.sourceKey || '').startsWith('image:') ? 'image' : 'text';
+          const normalized = kind === 'image' ? content.trim() : normalizeText(content);
+          if (!normalized) return null;
+          const sig = String(item?.sig || signature(normalized));
+
+          let imageDataUri: string | undefined;
+          if (kind === 'image' && typeof indexedDB !== 'undefined') {
+            // Try to load image from IndexedDB
+            const storedImage = await loadClipboardImage(item.id);
+            imageDataUri = storedImage || item.imageDataUri;
+          } else {
+            imageDataUri = typeof item?.imageDataUri === 'string' ? item.imageDataUri : kind === 'image' ? normalized : undefined;
+          }
+
+          return toEntry({
+            id: String(item?.id || makeId()),
+            kind,
+            content: normalized,
+            category: item?.category,
+            source: normalizeSource(item?.source),
+            capturedAt: Number(item?.capturedAt || now()),
+            sig,
+            imageDataUri,
+          });
+        });
+
+      // Resolve all async loads
+      const resolved = await Promise.all(entries);
+      this.entries = normalizeEntries(resolved.filter(Boolean) as ClipEntry[]);
+
       for (const entry of this.entries) {
         recentSigs.set(entry.sig, entry.capturedAt);
       }
@@ -445,8 +497,7 @@ class ClipboardEngine {
   }
 
   private async persist() {
-    // Only persist text entries to AsyncStorage — images are stored in-memory during
-    // the session but are too large for localStorage (5 MB limit on web).
+    // Persist text entries to AsyncStorage
     const forStorage = normalizeEntries(this.entries).map((e) =>
       e.kind === 'image' ? { ...e, imageDataUri: e.imageDataUri } : e,
     );
@@ -459,6 +510,27 @@ class ClipboardEngine {
         await AsyncStorage.setItem(CLIPBOARD_KEY, JSON.stringify(textOnly));
       } catch { /* ignore */ }
     }
+
+    // Clean up old images from IndexedDB to manage storage
+    if (typeof indexedDB !== 'undefined') {
+      const retentionMs = IMAGE_RETENTION_DAYS * 24 * 60 * 60 * 1000;
+      const cutoffTime = Date.now() - retentionMs;
+      void clearClipboardImagesOlderThan(cutoffTime).catch(() => {});
+
+      // Check storage size and delete oldest images if over limit
+      const size = await getClipboardStorageSize();
+      if (size > IMAGE_STORAGE_MAX_BYTES) {
+        const imagesToDelete = this.entries
+          .filter((e) => e.kind === 'image')
+          .sort((a, b) => a.capturedAt - b.capturedAt)
+          .slice(0, Math.ceil(this.entries.filter((e) => e.kind === 'image').length * 0.2)); // Delete oldest 20%
+
+        for (const entry of imagesToDelete) {
+          void deleteClipboardImage(entry.id).catch(() => {});
+        }
+      }
+    }
+
     // Push text entries to Firebase with a 3-second debounce
     this.scheduleFirebaseSync();
   }
@@ -468,11 +540,74 @@ class ClipboardEngine {
     this.firesyncTimer = setTimeout(() => { void this.runFirebaseSync(); }, 3000);
   }
 
+  private scheduleFirebaseRetry(delayMs?: number) {
+    if (this.firebaseRetryTimer) clearTimeout(this.firebaseRetryTimer);
+
+    const delay = delayMs || this.calculateBackoffDelay();
+    this.firebaseRetryTimer = setTimeout(
+      () => { void this.runFirebaseSync(); },
+      delay,
+    );
+  }
+
+  private calculateBackoffDelay(): number {
+    const exponential = FIREBASE_RETRY_BASE_DELAY_MS * Math.pow(2, Math.min(this.firebaseRetryCount, 4));
+    const jitter = Math.random() * 1000;
+    return exponential + jitter;
+  }
+
+  private resetFirebaseRetry() {
+    this.firebaseRetryCount = 0;
+    if (this.firebaseRetryTimer) clearTimeout(this.firebaseRetryTimer);
+    this.firebaseRetryTimer = null;
+  }
+
+  private startFirebaseHealthCheck() {
+    if (this.firebaseHealthCheckTimer) clearInterval(this.firebaseHealthCheckTimer);
+
+    this.firebaseHealthCheckTimer = setInterval(() => {
+      void this.checkFirebaseHealth();
+    }, FIREBASE_HEALTH_CHECK_INTERVAL_MS);
+  }
+
+  private async checkFirebaseHealth() {
+    try {
+      // Try a lightweight Firebase operation to verify connectivity
+      const { getFirebaseRuntimeSnapshot } = await import('../core/firebase');
+      const rt = await getFirebaseRuntimeSnapshot();
+
+      if (!rt.enabled || !rt.auth) {
+        this.isFirebaseHealthy = false;
+        return;
+      }
+
+      // If we have a current user and haven't synced in a while, trigger a sync
+      if (rt.auth.currentUser && Date.now() - this.lastFirebaseSyncMs > 60000) {
+        void this.runFirebaseSync();
+      }
+
+      this.isFirebaseHealthy = true;
+    } catch {
+      this.isFirebaseHealthy = false;
+      // Schedule retry if Firebase is unhealthy
+      if (this.firebaseRetryCount < FIREBASE_RETRY_MAX_ATTEMPTS) {
+        this.firebaseRetryCount += 1;
+        void this.scheduleFirebaseRetry();
+      }
+    }
+  }
+
   private async runFirebaseSync() {
     try {
       const { syncClipboardWithFirebase } = await import('../core/firebase');
       const textEntries = this.entries.filter((e) => e.kind === 'text');
       const remoteOnly = await syncClipboardWithFirebase(textEntries);
+
+      // Successful sync — reset retry counter and health status
+      this.resetFirebaseRetry();
+      this.isFirebaseHealthy = true;
+      this.lastFirebaseSyncMs = Date.now();
+
       if (remoteOnly.length > 0) {
         let changed = false;
         for (const remote of remoteOnly) {
@@ -490,13 +625,22 @@ class ClipboardEngine {
           this.emit();
         }
       }
-    } catch { /* Firebase not configured */ }
+    } catch (error) {
+      // Firebase sync failed — schedule retry with exponential backoff
+      if (this.firebaseRetryCount < FIREBASE_RETRY_MAX_ATTEMPTS) {
+        this.firebaseRetryCount += 1;
+        this.scheduleFirebaseRetry();
+      }
+      // Do not mark as unhealthy immediately — only if health check fails
+    }
   }
 
   private async startFirebaseSync() {
     try {
       const { subscribeToClipboard } = await import('../core/firebase');
       if (this.firebaseUnsub) { this.firebaseUnsub(); this.firebaseUnsub = null; }
+
+      // Start real-time listener
       this.firebaseUnsub = await subscribeToClipboard((remoteEntries) => {
         let changed = false;
         for (const remote of remoteEntries) {
@@ -510,7 +654,13 @@ class ClipboardEngine {
           void AsyncStorage.setItem(CLIPBOARD_KEY, JSON.stringify(normalizeEntries(this.entries))).catch(() => undefined);
           this.emit();
         }
+        // Reset retry count on successful subscription updates
+        this.resetFirebaseRetry();
+        this.isFirebaseHealthy = true;
       });
+
+      // Start periodic health check
+      this.startFirebaseHealthCheck();
     } catch { /* Firebase not configured */ }
   }
 
@@ -556,10 +706,9 @@ class ClipboardEngine {
     if (typeof document === 'undefined') return;
     if (document.visibilityState === 'visible') {
       void this.captureFromFocus();
-      this.syncPolling();
-    } else {
-      this.revokePolling();
     }
+    // Continue polling even in background (with adjusted interval)
+    this.syncPolling();
   };
 
   private async captureFromFocus() {
@@ -592,10 +741,7 @@ class ClipboardEngine {
       this.revokePolling();
       return;
     }
-    if (document.visibilityState !== 'visible') {
-      this.revokePolling();
-      return;
-    }
+
     // Don't start polling until the user has explicitly granted clipboard-read permission.
     // If we poll while in 'prompt' state the browser will show a permission dialog on every
     // page load — we only want that dialog to appear when the user clicks "Capture".
@@ -604,10 +750,14 @@ class ClipboardEngine {
       return;
     }
 
+    // Adjust polling interval based on visibility (background = slower, foreground = faster)
+    const isVisible = document.visibilityState === 'visible';
+    const interval = isVisible ? this.pollInterval : POLL_BACKGROUND;
+
     this.revokePolling();
     this.pollTimer = setInterval(() => {
       void this.pollClipboard();
-    }, this.pollInterval);
+    }, interval);
   }
 
   private async pollClipboard() {

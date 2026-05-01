@@ -33,7 +33,10 @@ import {
   clearSavedCredentials,
   loadLastIdentifier,
   saveLastIdentifier,
+  loadBiometricEmail,
+  loadBiometricEnabled,
 } from '../core/auth-storage';
+import { AnimatedLogo } from '../components/AnimatedLogo';
 import { isDeviceOnline } from '../core/network';
 import { loadSettings, saveSettings } from '../core/settings';
 import { isValidIdentifier } from '../core/validation';
@@ -192,7 +195,7 @@ interface LoginFormProps {
 export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: LoginFormProps) {
   usePremiumCssEffects();
 
-  const { login, loginWithGoogle, sendMagicLink, enterAsGuest, firebase } = useAuth();
+  const { login, loginWithGoogle, sendMagicLink, enterAsGuest, firebase, biometricStatus } = useAuth();
   const [username, setUsername] = useState('');
   const [pin, setPin] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -203,6 +206,7 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
   const [authError, setAuthError] = useState<string | null>(null);
   const [rememberPassword, setRememberPassword] = useState(false);
   const [showMagicLink, setShowMagicLink] = useState(false);
+  const [showBiometricOption, setShowBiometricOption] = useState(false);
 
   const pinInputRef = useRef<TextInput>(null);
   const glitchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -478,11 +482,23 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
 
     void clearSavedCredentials().catch(() => undefined);
 
-    loadLastIdentifier()
-      .then((stored) => {
+    (async () => {
+      try {
+        const stored = await loadLastIdentifier();
         if (!cancelled && stored) setUsername(stored);
-      })
-      .catch(() => { });
+
+        // Check if biometrics are available and enabled
+        if (biometricStatus.available) {
+          const biometricEmail = await loadBiometricEmail();
+          const biometricEnabled = await loadBiometricEnabled();
+          if (!cancelled && biometricEmail && biometricEnabled) {
+            setShowBiometricOption(true);
+          }
+        }
+      } catch {
+        // Ignore errors
+      }
+    })();
 
     loadSettings()
       .then((settings) => {
@@ -508,7 +524,7 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [biometricStatus]);
 
   const validate = () => {
     const newErrors: { username?: string; pin?: string } = {};
@@ -584,6 +600,28 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
       setAuthError(message);
       triggerShake();
     } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleBiometricQuickLogin = async () => {
+    setIsLoading(true);
+    setAuthError(null);
+    try {
+      const biometricEmail = await loadBiometricEmail();
+      if (!biometricEmail) {
+        setAuthError('Biometric not configured. Please use password instead.');
+        setIsLoading(false);
+        return;
+      }
+      // Biometric unlock is handled by BiometricLockScreen
+      // This is a fallback if biometric fails and user wants to try password
+      setUsername(biometricEmail.split('@')[0]);
+      setIsLoading(false);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Biometric login failed. Please try again.";
+      setAuthError(message);
+      triggerShake();
       setIsLoading(false);
     }
   };
@@ -720,27 +758,26 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
 
           </Animated.View>
 
-          <Animated.View entering={FadeInDown.delay(80).duration(450)} style={styles.logoRow}>
-            <View style={styles.logoWrap}>
-              <View style={styles.logoTextWrap}>
-                <Text
-                  style={[
-                    styles.logo,
-                    {
-                      color: theme.text,
-                      fontFamily: palette.logoFamily,
-                      fontWeight: palette.logoWeight,
-                      fontStyle: palette.logoStyle,
-                      letterSpacing: palette.logoLetterSpacing,
-                    },
-                  ]}
-                >
-                  MyKit
-                </Text>
-                {/* Shimmer sweep across logo */}
-                <Animated.View style={[styles.logoShimmerStrip, logoShimmerStyle, { backgroundColor: `${theme.text}` }]} pointerEvents="none" />
-              </View>
-              <View style={[styles.logoBar, { backgroundColor: theme.secondary, width: palette.logoMarkWidth, height: palette.logoMarkHeight }]} />
+          <Animated.View entering={FadeInDown.delay(80).duration(600)} style={styles.logoRow}>
+            <AnimatedLogo size={60} color={theme.text} accentColor={theme.secondary} />
+            <View style={styles.logoTextContainer}>
+              <Text
+                style={[
+                  styles.logo,
+                  {
+                    color: theme.text,
+                    fontFamily: palette.logoFamily,
+                    fontWeight: palette.logoWeight,
+                    fontStyle: palette.logoStyle,
+                    letterSpacing: palette.logoLetterSpacing,
+                  },
+                ]}
+              >
+                MyKit
+              </Text>
+              <Text style={[styles.logoSubtitle, { color: theme.textSecondary }]}>
+                SECURE ACCESS
+              </Text>
             </View>
             <View style={[styles.logoDivider, { backgroundColor: theme.secondary, opacity: 0.1 }]} />
           </Animated.View>
@@ -785,7 +822,46 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
             {Platform.OS === 'web' && (
               <View {...({ className: 'MyKit-card-shimmer' } as any)} style={StyleSheet.absoluteFill} pointerEvents="none" />
             )}
-            <View style={styles.field}>
+
+            {/* Biometric Quick Login */}
+            {showBiometricOption && (
+              <Animated.View entering={FadeIn.duration(300)} style={styles.biometricSection}>
+                <Pressable
+                  style={[styles.biometricButton, { backgroundColor: theme.secondary + '15', borderColor: theme.secondary }]}
+                  onPress={handleBiometricQuickLogin}
+                  disabled={isLoading}
+                >
+                  {({ pressed }) => (
+                    <View style={[{ opacity: pressed ? 0.7 : 1 }, styles.biometricButtonContent]}>
+                      <Ionicons
+                        name={
+                          biometricStatus.type === 'face'
+                            ? 'id-card'
+                            : biometricStatus.type === 'fingerprint'
+                            ? 'scan'
+                            : 'eye'
+                        }
+                        size={24}
+                        color={theme.secondary}
+                        style={{ marginRight: 10 }}
+                      />
+                      <View style={{ flex: 1 }}>
+                        <Text style={[styles.biometricButtonLabel, { color: theme.secondary }]}>
+                          {biometricStatus.label}
+                        </Text>
+                        <Text style={[styles.biometricButtonSubtitle, { color: theme.textSecondary }]}>
+                          Quick unlock
+                        </Text>
+                      </View>
+                      <Ionicons name="chevron-forward" size={20} color={theme.secondary} />
+                    </View>
+                  )}
+                </Pressable>
+                <View style={[styles.divider, { backgroundColor: theme.border }]} />
+              </Animated.View>
+            )}
+
+            <Animated.View entering={FadeInDown.delay(400).duration(500)} style={styles.field}>
               <Text style={[styles.label, { color: theme.secondary }]}>USERNAME OR EMAIL</Text>
               <TextInput
                 style={[
@@ -832,9 +908,9 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
                   </Pressable>
                 </Animated.View>
               ) : null}
-            </View>
+            </Animated.View>
 
-            <View style={styles.field}>
+            <Animated.View entering={FadeInDown.delay(500).duration(500)} style={styles.field}>
               <Text style={[styles.label, { color: theme.secondary }]}>PASSWORD</Text>
               <View style={styles.passwordWrapper}>
                 <TextInput
@@ -888,9 +964,9 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
                 </Animated.View>
               ) : null}
               <Text style={[styles.note, { color: theme.textSecondary }]}>Use your workspace password.</Text>
-            </View>
+            </Animated.View>
 
-            <View style={styles.rememberRow}>
+            <Animated.View entering={FadeInDown.delay(600).duration(500)} style={styles.rememberRow}>
               <Pressable style={styles.rememberLeft} onPress={() => setRememberPassword(!rememberPassword)}>
                 <Switch
                   value={rememberPassword}
@@ -901,9 +977,9 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
                 />
                 <Text style={[styles.rememberText, { color: theme.textSecondary }]}>Remember session</Text>
               </Pressable>
-            </View>
+            </Animated.View>
 
-            <View style={styles.actionRow}>
+            <Animated.View entering={FadeInDown.delay(700).duration(500)} style={styles.actionRow}>
               <Animated.View style={[{ flex: 1 }, shakeStyle]}>
                 <Pressable
                   style={[styles.primaryButton, { backgroundColor: theme.secondary }, isLoading && styles.primaryDisabled]}
@@ -923,21 +999,24 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
                 </Pressable>
               </Animated.View>
 
-            </View>
+            </Animated.View>
 
-            <View style={styles.socialButtonRow}>
+            <Animated.View entering={FadeInDown.delay(800).duration(500)} style={styles.socialButtonRow}>
               <Pressable
-                style={[styles.socialButton, { borderColor: theme.secondary }]}
+                style={[styles.googleButton, { borderColor: theme.secondary, backgroundColor: isWeb ? theme.surface : 'transparent' }]}
                 onPress={handleGoogleLogin}
-                disabled={isLoading}
+                disabled={isLoading || !firebase.enabled}
               >
                 {({ pressed }) => (
-                  <View style={[{ opacity: pressed ? 0.7 : 1 }]}>
-                    <Ionicons name="logo-google" size={20} color={theme.secondary} />
+                  <View style={[styles.googleButtonInner, { opacity: pressed ? 0.7 : 1 }]}>
+                    <Ionicons name="logo-google" size={isWeb ? 18 : 20} color={theme.secondary} />
+                    {isWeb && (
+                      <Text style={[styles.googleButtonText, { color: theme.secondary }]}>Continue with Google</Text>
+                    )}
                   </View>
                 )}
               </Pressable>
-            </View>
+            </Animated.View>
 
             {/* Tooltip Copied */}
             <Animated.View style={[styles.tooltip, { backgroundColor: theme.secondary }, tooltipStyle]} pointerEvents="none">
@@ -1035,13 +1114,12 @@ const styles = StyleSheet.create({
   },
   shell: { width: '100%', maxWidth: 420, minWidth: 0, gap: 14, alignSelf: 'center' },
   badgeRow: { flexDirection: 'row', gap: 8 },
-  logoRow: { gap: 10 },
-  logoWrap: { gap: 4, width: '100%', minWidth: 0 },
-  logoTextWrap: { overflow: 'hidden', position: 'relative' },
-  logo: { fontSize: 28, lineHeight: 32 },
-  logoShimmerStrip: { position: 'absolute', top: 0, bottom: 0, width: 60, opacity: 0.12, borderRadius: 4 },
+  logoRow: { gap: 16, alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
+  logoTextContainer: { alignItems: 'center', gap: 4 },
+  logo: { fontSize: 32, lineHeight: 36, fontWeight: '900', letterSpacing: 1 },
+  logoSubtitle: { fontSize: 10, fontWeight: '700', letterSpacing: 2, textTransform: 'uppercase' },
   logoBar: {},
-  logoDivider: { height: 1, opacity: 0.2 },
+  logoDivider: { height: 1, opacity: 0.2, width: '100%', marginTop: 8 },
   iconRow: { alignItems: 'center', paddingVertical: 12 },
   iconShell: { width: 130, height: 130, alignItems: 'center', justifyContent: 'center' },
   starsContainer: { position: 'absolute', width: 130, height: 130 },
@@ -1060,6 +1138,12 @@ const styles = StyleSheet.create({
   pastePrefix: { fontSize: 13, fontWeight: '700', fontFamily: Platform.select({ web: 'monospace', default: 'monospace' }) },
   pasteText: { fontSize: 13, fontWeight: '600' },
   formCard: { width: '100%', borderRadius: 14, borderWidth: 1, padding: 16, gap: 16, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 16 }, shadowOpacity: 0.4, shadowRadius: 32, elevation: 12 },
+  biometricSection: { marginBottom: 8 },
+  biometricButton: { borderRadius: 12, borderWidth: 1, paddingVertical: 14, paddingHorizontal: 16 },
+  biometricButtonContent: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  biometricButtonLabel: { fontSize: 14, fontWeight: '700', letterSpacing: 0.3 },
+  biometricButtonSubtitle: { fontSize: 11, fontWeight: '500', marginTop: 2 },
+  divider: { height: 1, marginVertical: 12 },
   field: { gap: 6 },
   label: { fontSize: 10, fontWeight: '800', letterSpacing: 1.2, textTransform: 'uppercase' },
   input: { height: 48, borderRadius: 10, borderWidth: 1, paddingHorizontal: 14, fontSize: 15, shadowOffset: { width: 0, height: 0 }, shadowRadius: 8 },
@@ -1079,6 +1163,9 @@ const styles = StyleSheet.create({
   rememberText: { fontSize: 12, fontWeight: '600' },
   actionRow: { flexDirection: 'row', gap: 10, alignItems: 'center' },
   socialButtonRow: { flexDirection: 'row', justifyContent: 'center', gap: 12, marginVertical: 8 },
+  googleButton: { borderRadius: 10, borderWidth: 1, overflow: 'hidden', minHeight: 48 },
+  googleButtonInner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16, paddingVertical: 12, gap: 8 },
+  googleButtonText: { fontSize: 14, fontWeight: '700', letterSpacing: 0.3 },
   socialButton: { width: 44, height: 44, borderRadius: 22, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   primaryButton: { borderRadius: 10, overflow: 'hidden' },
   primaryDisabled: { opacity: 0.6 },

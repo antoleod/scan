@@ -164,10 +164,11 @@ export async function loginWithGoogle(isMobile: boolean = false, idToken?: strin
   }
 }
 
-export async function sendMagicLink(email: string, redirectUrl: string = window.location.origin): Promise<void> {
+export async function sendMagicLink(email: string, redirectUrl?: string): Promise<void> {
   await diag.info('auth.magiclink.send', { email: email.split('@')[0] });
   try {
-    await sendMagicLinkEmail(email, redirectUrl);
+    const url = redirectUrl || (typeof window !== 'undefined' ? window.location.origin : 'mykit://auth');
+    await sendMagicLinkEmail(email, url);
   } catch (error) {
     const friendly = toFriendlyAuthError(error);
     await diag.warn('auth.magiclink.error', { reason: friendly });

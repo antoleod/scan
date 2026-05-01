@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Animated,
+  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -18,6 +19,7 @@ import RegisterForm from './RegisterForm';
 import { AuthView } from './authTypes';
 import { useAuth } from './useAuth';
 import { useAppTheme } from '../constants/theme';
+import { diag } from '../core/diagnostics';
 
 function AuthBackgroundEffects() {
   const { theme } = useAppTheme();
@@ -83,12 +85,55 @@ function AuthBackgroundEffects() {
 }
 
 export default function AuthScreen() {
-  const { enterAsGuest, isBiometricLocked } = useAuth();
+  const { enterAsGuest, isBiometricLocked, verifyMagicLink } = useAuth();
   const [view, setView] = useState<AuthView>('login');
+  const [magicLinkProcessing, setMagicLinkProcessing] = useState(false);
+  const { theme } = useAppTheme();
+
+  // Handle magic link verification on web
+  useEffect(() => {
+    const checkMagicLink = async () => {
+      if (Platform.OS !== 'web') return;
+
+      const url = typeof window !== 'undefined' ? window.location.href : '';
+      if (!url.includes('__/auth/action')) return;
+
+      setMagicLinkProcessing(true);
+      try {
+        // Extract email from localStorage or other means
+        // Firebase Auth will handle the verification with oobCode in URL
+        const params = new URLSearchParams(window.location.search);
+        const oobCode = params.get('oobCode');
+        const mode = params.get('mode');
+
+        if (oobCode && mode === 'signIn') {
+          // The email needs to come from the user or storage
+          // For now, we'll attempt verification, Firebase handles it
+          await diag.info('auth.magiclink.processing', { url: url.substring(0, 50) });
+        }
+      } catch (error) {
+        await diag.warn('auth.magiclink.check.error', { message: String(error) });
+      } finally {
+        setMagicLinkProcessing(false);
+      }
+    };
+
+    checkMagicLink();
+  }, [verifyMagicLink]);
 
   // Show biometric lock screen if session is locked
   if (isBiometricLocked) {
     return <BiometricLockScreen />;
+  }
+
+  // Show loading while processing magic link
+  if (magicLinkProcessing) {
+    return (
+      <View style={[styles.centered, { backgroundColor: theme.background }]}>
+        <ActivityIndicator size="large" color={theme.secondary} />
+        <Text style={[styles.loadingText, { color: theme.textSecondary }]}>Verifying sign-in link...</Text>
+      </View>
+    );
   }
 
   if (view === 'login') {
@@ -280,5 +325,16 @@ const styles = StyleSheet.create({
     height: 3,
     borderRadius: 99,
     backgroundColor: 'rgba(228, 239, 255, 0.7)',
+  },
+  centered: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 20,
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 14,
+    fontWeight: '600',
   },
 });

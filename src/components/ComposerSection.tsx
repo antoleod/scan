@@ -3,6 +3,8 @@ import { Modal, Platform, Pressable, Text, TextInput, useWindowDimensions, View 
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useCtrlEnterSave } from '../hooks/useCtrlEnterSave';
 import { NoteComposerOcrPreview } from './NoteComposerOcrPreview';
+import { QuickTemplatesModal } from './QuickTemplatesModal';
+import { formatShoppingList, isLikelyShoppingList, safeText } from '../utils/groceryDetection';
 
 type Palette = {
   bg: string;
@@ -40,6 +42,8 @@ export const ComposerSection = forwardRef<TextInput, {
   onPasteImage: () => void;
   onSave: () => void;
   onSetCategory: (category: NoteCategory) => void;
+  onQuickTemplateMedication?: (medication: string) => void;
+  onQuickTemplateShopping?: (items: string) => void;
   onRemoveImage?: (index: number) => void;
   onOcrAppendText?: (text: string) => void;
   onOcrReplaceText?: (text: string) => void;
@@ -62,6 +66,8 @@ export const ComposerSection = forwardRef<TextInput, {
       onPasteImage,
       onSave,
       onSetCategory,
+      onQuickTemplateMedication,
+      onQuickTemplateShopping,
       onRemoveImage,
       onOcrAppendText,
       onOcrReplaceText,
@@ -69,31 +75,83 @@ export const ComposerSection = forwardRef<TextInput, {
     },
     ref
   ) {
-    const [inputHeight, setInputHeight] = useState(96);
+    const draftTextValue = typeof draftText === 'string' ? draftText : '';
+    const [inputHeight, setInputHeight] = useState(68);
     const [pickerVisible, setPickerVisible] = useState(false);
     const [hoveredAction, setHoveredAction] = useState<string | null>(null);
+    const [templatesModalVisible, setTemplatesModalVisible] = useState(false);
+    const [dictationMessage, setDictationMessage] = useState<string | null>(null);
     const { width } = useWindowDimensions();
     const isCompact = width < 520;
+    const looksLikeShopping = useMemo(() => isLikelyShoppingList(draftTextValue), [draftTextValue]);
 
     // Ctrl+Enter / Cmd+Enter → save (only when there's something to save)
-    useCtrlEnterSave(onSave, Boolean(draftText.trim() || draftImages.length > 0));
+    useCtrlEnterSave(onSave, Boolean(draftTextValue.trim() || draftImages.length > 0));
 
     useEffect(() => {
-      if (!draftText.trim()) {
-        setInputHeight(96);
+      if (!draftTextValue.trim()) {
+        setInputHeight(68);
       }
-    }, [draftText]);
+    }, [draftTextValue]);
 
     const activeGroupLabel = useMemo(() => {
       if (activeGroupId === 'personal') return 'Personal';
       return groups.find((group) => group.id === activeGroupId)?.name || 'Personal';
     }, [activeGroupId, groups]);
 
+    const startDictation = () => {
+      if (Platform.OS !== 'web' || typeof window === 'undefined') {
+        setDictationMessage('Voice dictation is not available in this browser. You can use your device keyboard microphone.');
+        return;
+      }
+      const SpeechRecognition = (window as unknown as {
+        SpeechRecognition?: new () => {
+          lang: string;
+          interimResults: boolean;
+          maxAlternatives: number;
+          onresult: ((event: { results: ArrayLike<{ 0: { transcript: string } }> }) => void) | null;
+          onerror: (() => void) | null;
+          start: () => void;
+        };
+        webkitSpeechRecognition?: new () => {
+          lang: string;
+          interimResults: boolean;
+          maxAlternatives: number;
+          onresult: ((event: { results: ArrayLike<{ 0: { transcript: string } }> }) => void) | null;
+          onerror: (() => void) | null;
+          start: () => void;
+        };
+      }).SpeechRecognition || (window as unknown as { webkitSpeechRecognition?: new () => any }).webkitSpeechRecognition;
+
+      if (!SpeechRecognition) {
+        setDictationMessage('Voice dictation is not available in this browser. You can use your device keyboard microphone.');
+        return;
+      }
+
+      try {
+        const recognition = new SpeechRecognition();
+        recognition.lang = typeof navigator !== 'undefined' && navigator.language ? navigator.language : 'en-US';
+        recognition.interimResults = false;
+        recognition.maxAlternatives = 1;
+        recognition.onresult = (event: any) => {
+          const transcript = safeText(event.results?.[0]?.[0]?.transcript).trim();
+          if (!transcript) return;
+          onChangeText(draftTextValue.trim() ? `${draftTextValue}\n${transcript}` : transcript);
+        };
+        recognition.onerror = () => setDictationMessage('Voice dictation is not available in this browser. You can use your device keyboard microphone.');
+        recognition.start();
+      } catch {
+        setDictationMessage('Voice dictation is not available in this browser. You can use your device keyboard microphone.');
+      }
+    };
+
     const actionItems = [
       { key: 'camera', label: 'Camera', icon: 'camera-outline' as const, action: onTakePhoto, active: false },
       { key: 'photo', label: 'Gallery', icon: 'image-outline' as const, action: onAddImage, active: draftImages.length > 0 },
       { key: 'paste', label: 'Paste', icon: 'clipboard-text-outline' as const, action: onPasteImage, active: false },
+      { key: 'dictation', label: 'Dictate', icon: 'microphone-outline' as const, action: startDictation, active: false },
       { key: 'ocr', label: 'OCR', icon: 'text-recognition' as const, action: onOcr ?? (() => {}), active: false },
+      { key: 'templates', label: 'Templates', icon: 'layers-outline' as const, action: () => setTemplatesModalVisible(true), active: false },
       { key: 'save', label: 'Save', icon: 'content-save-outline' as const, action: onSave, active: false },
       { key: 'generate', label: 'Generate', icon: 'auto-fix' as const, action: onGenerate, active: Boolean(generating) },
     ];
@@ -105,7 +163,7 @@ export const ComposerSection = forwardRef<TextInput, {
             flexDirection: 'row',
             alignItems: 'center',
             flexWrap: 'wrap',
-            gap: isCompact ? 10 : 16,
+            gap: isCompact ? 8 : 12,
             minWidth: 0,
           }}
         >
@@ -234,7 +292,7 @@ export const ComposerSection = forwardRef<TextInput, {
                 borderWidth: 1,
                 borderColor: palette.border,
                 borderRadius: 20,
-                padding: 14,
+                padding: 12,
                 gap: 8,
               }}
             >
@@ -266,7 +324,7 @@ export const ComposerSection = forwardRef<TextInput, {
 
         <TextInput
           ref={ref}
-          value={draftText}
+          value={draftTextValue}
           onChangeText={onChangeText}
           onKeyPress={(event) => {
             if (Platform.OS !== 'web') return;
@@ -280,20 +338,20 @@ export const ComposerSection = forwardRef<TextInput, {
           placeholder="Type here. Auto-save is always on."
           placeholderTextColor={palette.textMuted}
           onContentSizeChange={(event) => {
-            const nextHeight = Math.max(96, Math.min(200, event.nativeEvent.contentSize.height + 24));
+            const nextHeight = Math.max(68, Math.min(160, event.nativeEvent.contentSize.height + 20));
             setInputHeight(nextHeight);
           }}
           style={{
-            marginTop: 12,
-            minHeight: 96,
+            marginTop: 8,
+            minHeight: 68,
             height: inputHeight,
-            maxHeight: 200,
+            maxHeight: 160,
             borderRadius: 10,
             borderWidth: 1,
             borderColor: palette.border,
             backgroundColor: palette.surface,
             paddingHorizontal: 12,
-            paddingVertical: 12,
+            paddingVertical: 10,
             color: palette.textBody,
             fontSize: 14,
             lineHeight: 21,
@@ -301,10 +359,26 @@ export const ComposerSection = forwardRef<TextInput, {
           }}
         />
 
+        {looksLikeShopping ? (
+          <View style={{ marginTop: 8, padding: 10, borderRadius: 10, borderWidth: 1, borderColor: `${palette.accent}66`, backgroundColor: `${palette.accent}12`, flexDirection: 'row', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <Ionicons name="cart-outline" size={15} color={palette.accent} />
+            <Text style={{ color: palette.textBody, fontSize: 12, fontWeight: '600', flex: 1, minWidth: 160 }}>Looks like a shopping list</Text>
+            <Pressable onPress={() => onChangeText(formatShoppingList(draftTextValue))} style={({ pressed }) => ({ minHeight: 34, paddingHorizontal: 12, borderRadius: 999, backgroundColor: palette.accent, justifyContent: 'center', opacity: pressed ? 0.82 : 1 })}>
+              <Text style={{ color: '#000', fontSize: 12, fontWeight: '800' }}>Format list</Text>
+            </Pressable>
+          </View>
+        ) : null}
+
+        {dictationMessage ? (
+          <Pressable onPress={() => setDictationMessage(null)} style={{ marginTop: 8, padding: 10, borderRadius: 10, borderWidth: 1, borderColor: palette.border, backgroundColor: palette.surfaceAlt }}>
+            <Text style={{ color: palette.textMuted, fontSize: 12 }}>{dictationMessage}</Text>
+          </Pressable>
+        ) : null}
+
         {draftImages.length > 0 && draftImages[0] && (
           <NoteComposerOcrPreview
             imageUri={draftImages[0]}
-            noteText={draftText}
+            noteText={draftTextValue}
             onAppendText={(text) => {
               onOcrAppendText?.(text);
               onRemoveImage?.(0);
@@ -316,6 +390,31 @@ export const ComposerSection = forwardRef<TextInput, {
             onDismiss={() => onRemoveImage?.(0)}
           />
         )}
+
+        {/* Quick Templates Modal */}
+        <QuickTemplatesModal
+          visible={templatesModalVisible}
+          currentNoteText={draftTextValue}
+          palette={palette}
+          onClose={() => setTemplatesModalVisible(false)}
+          onSelectMedication={(med) => {
+            if (!med || typeof med !== 'string') return;
+            if (onQuickTemplateMedication) {
+              onQuickTemplateMedication(med);
+              return;
+            }
+            const newText = draftTextValue ? `${draftTextValue}\n${med}` : med;
+            onChangeText(newText);
+          }}
+          onSelectShoppingItem={(item) => {
+            if (!item || typeof item !== 'string') return;
+            if (onQuickTemplateShopping) {
+              onQuickTemplateShopping(item);
+              return;
+            }
+            onChangeText(item);
+          }}
+        />
 
       </View>
     );

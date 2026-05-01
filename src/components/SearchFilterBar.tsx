@@ -14,7 +14,7 @@ type Palette = {
   chipBorder: string;
 };
 
-type FilterKey = 'all' | 'work' | 'pinned' | 'archived';
+type FilterKey = 'all' | 'work' | 'pinned' | 'draft' | 'archived';
 
 // ─── Mini Calendar (exported so Clipboard & History can reuse it) ────────────
 
@@ -195,6 +195,7 @@ export function SearchFilterBar({
     { key: 'all',      label: 'All' },
     { key: 'work',     label: 'Work' },
     { key: 'pinned',   label: 'Pinned' },
+    { key: 'draft',    label: 'Draft' },
     { key: 'archived', label: 'Archived' },
   ];
 
@@ -207,7 +208,7 @@ export function SearchFilterBar({
       {/* Search input */}
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
         <View style={{ flex: 1, position: 'relative' }}>
-          <Ionicons name="search" size={16} color={palette.textDim} style={{ position: 'absolute', left: 12, top: 12, zIndex: 2 }} />
+          <Ionicons name="search" size={16} color={palette.textDim} style={{ position: 'absolute', left: 12, top: 10, zIndex: 2 }} />
           <TextInput
             value={value}
             onChangeText={onChange}
@@ -226,6 +227,15 @@ export function SearchFilterBar({
               fontSize: 14,
             }}
           />
+          {value ? (
+            <Pressable
+              onPress={() => onChange('')}
+              hitSlop={6}
+              style={{ position: 'absolute', right: 10, top: 10, zIndex: 2 }}
+            >
+              <Ionicons name="close-circle" size={16} color={palette.textDim} />
+            </Pressable>
+          ) : null}
         </View>
 
         {/* Calendar button */}

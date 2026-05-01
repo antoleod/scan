@@ -7,10 +7,12 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
+import { Ionicons } from '@expo/vector-icons';
 
 import { useAuth } from './useAuth';
 import { useAppTheme } from '../constants/theme';
-import { isValidEmail } from './validation';
+import { isValidEmail } from '../core/validation';
 import { resolveUsernameToAuthEmail } from '../core/firebase';
 
 interface ForgotPasswordFormProps {
@@ -18,12 +20,14 @@ interface ForgotPasswordFormProps {
 }
 
 export default function ForgotPasswordForm({ onSwitchToLogin }: ForgotPasswordFormProps) {
-  const { sendPasswordReset } = useAuth();
+  const { sendPasswordReset, sendMagicLink } = useAuth();
   const { theme } = useAppTheme();
   const [input, setInput] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [successType, setSuccessType] = useState<'email' | 'magic' | null>(null);
   const [loading, setLoading] = useState(false);
+  const [recoveryMethod, setRecoveryMethod] = useState<'password' | 'magic'>('password');
 
   const submitDisabled = loading || !input.trim();
 
@@ -38,41 +42,63 @@ export default function ForgotPasswordForm({ onSwitchToLogin }: ForgotPasswordFo
       return;
     }
 
+    // For magic link method, email is required
+    if (recoveryMethod === 'magic' && !value.includes('@')) {
+      setError('Magic link requires an email address.');
+      return;
+    }
+
     setLoading(true);
     try {
-      if (value.includes('@')) {
-        // Direct email path
-        await sendPasswordReset(value);
-        setSuccess('Password reset email sent.');
+      if (recoveryMethod === 'magic') {
+        // Magic link requires email directly
+        if (!isValidEmail(value)) {
+          setError('Please enter a valid email address.');
+          setLoading(false);
+          return;
+        }
+        await sendMagicLink(value);
+        setSuccess('Sign-in link sent to your email!');
+        setSuccessType('magic');
       } else {
-        // Username path — resolve via index
-        let resolved: { authEmail: string; authEmailSource: string } | null = null;
-        try {
-          resolved = await resolveUsernameToAuthEmail(value);
-        } catch {
-          // Firebase unavailable — tell user to use email directly
-          setError('Could not connect. If you registered with a recovery email, enter it directly.');
-          return;
-        }
-
-        if (!resolved) {
-          setError('No account found for that username. Try entering your recovery email instead.');
-          return;
-        }
-
-        if (resolved.authEmailSource === 'recoveryEmail') {
-          await sendPasswordReset(resolved.authEmail);
+        // Password reset
+        if (value.includes('@')) {
+          // Direct email path
+          await sendPasswordReset(value);
           setSuccess('Password reset email sent.');
+          setSuccessType('email');
         } else {
-          // account exists but has no real recovery email
-          setError(
-            'This account does not have a recovery email. ' +
-            'Please sign in and add one in Profile settings to enable password reset.'
-          );
+          // Username path — resolve via index
+          let resolved: { authEmail: string; authEmailSource: string } | null = null;
+          try {
+            resolved = await resolveUsernameToAuthEmail(value);
+          } catch {
+            setError('Could not connect. If you registered with a recovery email, enter it directly.');
+            setLoading(false);
+            return;
+          }
+
+          if (!resolved) {
+            setError('No account found for that username. Try entering your recovery email instead.');
+            setLoading(false);
+            return;
+          }
+
+          if (resolved.authEmailSource === 'recoveryEmail') {
+            await sendPasswordReset(resolved.authEmail);
+            setSuccess('Password reset email sent.');
+            setSuccessType('email');
+          } else {
+            setError(
+              'This account has no recovery email. Try "Passwordless login" or sign in and add one in Profile settings.'
+            );
+            setLoading(false);
+            return;
+          }
         }
       }
     } catch (submitError) {
-      const message = submitError instanceof Error ? submitError.message : 'Failed to send reset email.';
+      const message = submitError instanceof Error ? submitError.message : 'Failed to send recovery link.';
       setError(message);
     } finally {
       setLoading(false);
@@ -81,31 +107,90 @@ export default function ForgotPasswordForm({ onSwitchToLogin }: ForgotPasswordFo
 
   return (
     <View>
-      {success ? <Text style={[styles.successText, { color: theme.success }]}>{success}</Text> : null}
-      {error ? <Text style={[styles.errorText, { color: theme.error }]}>{error}</Text> : null}
+      {/* Success Message */}
+      {success && (
+        <Animated.View entering={FadeIn.duration(300)} style={[styles.successCard, { backgroundColor: theme.surface, borderColor: theme.secondary }]}>
+          <Ionicons name={successType === 'magic' ? 'mail-outline' : 'checkmark-circle'} size={20} color={theme.secondary} />
+          <Text style={[styles.successText, { color: theme.text }]}>{success}</Text>
+        </Animated.View>
+      )}
 
-      <View style={styles.inputGroup}>
-        <Text style={[styles.label, { color: theme.secondary }]}>Username or recovery email</Text>
+      {/* Error Message */}
+      {error && (
+        <Animated.View entering={FadeIn.duration(300)} style={[styles.errorCard, { backgroundColor: theme.surface, borderColor: theme.error }]}>
+          <Ionicons name="alert-circle" size={20} color={theme.error} />
+          <Text style={[styles.errorText, { color: theme.error }]}>{error}</Text>
+        </Animated.View>
+      )}
+
+      {/* Recovery Method Selector */}
+      <Animated.View entering={FadeInDown.delay(100).duration(400)} style={styles.methodSelector}>
+        <Pressable
+          onPress={() => setRecoveryMethod('password')}
+          style={[
+            styles.methodOption,
+            {
+              backgroundColor: recoveryMethod === 'password' ? theme.secondary + '20' : theme.surface,
+              borderColor: recoveryMethod === 'password' ? theme.secondary : theme.border,
+            },
+          ]}
+        >
+          <Ionicons name="lock-closed-outline" size={18} color={theme.secondary} style={{ marginRight: 8 }} />
+          <Text style={[styles.methodLabel, { color: recoveryMethod === 'password' ? theme.secondary : theme.textSecondary }]}>
+            Password reset
+          </Text>
+        </Pressable>
+
+        <Pressable
+          onPress={() => setRecoveryMethod('magic')}
+          style={[
+            styles.methodOption,
+            {
+              backgroundColor: recoveryMethod === 'magic' ? theme.secondary + '20' : theme.surface,
+              borderColor: recoveryMethod === 'magic' ? theme.secondary : theme.border,
+            },
+          ]}
+        >
+          <Ionicons name="mail-outline" size={18} color={theme.secondary} style={{ marginRight: 8 }} />
+          <Text style={[styles.methodLabel, { color: recoveryMethod === 'magic' ? theme.secondary : theme.textSecondary }]}>
+            Magic link
+          </Text>
+        </Pressable>
+      </Animated.View>
+
+      <Animated.View entering={FadeInDown.delay(200).duration(400)} style={styles.inputGroup}>
+        <Text style={[styles.label, { color: theme.secondary }]}>
+          {recoveryMethod === 'magic' ? 'Email address' : 'Username or recovery email'}
+        </Text>
         <TextInput
           value={input}
           onChangeText={setInput}
           style={[styles.input, { borderColor: theme.border, backgroundColor: theme.inputBg, color: theme.text }]}
-          placeholder="jean or jean@example.com"
+          placeholder={recoveryMethod === 'magic' ? 'you@example.com' : 'jean or jean@example.com'}
           keyboardType="email-address"
           autoCapitalize="none"
           autoCorrect={false}
+          editable={!loading}
         />
-      </View>
+      </Animated.View>
 
-      <Pressable
-        onPress={handleSubmit}
-        disabled={submitDisabled}
-        style={[styles.primaryButton, { backgroundColor: theme.secondary }, submitDisabled ? styles.primaryButtonDisabled : null]}
-      >
-        {({ pressed }) =>
-          loading ? <ActivityIndicator color={theme.primary} /> : <Text style={[styles.primaryButtonText, { color: theme.primary, opacity: pressed ? 0.85 : 1 }]}>Send reset link</Text>
-        }
-      </Pressable>
+      <Animated.View entering={FadeInDown.delay(300).duration(400)}>
+        <Pressable
+          onPress={handleSubmit}
+          disabled={submitDisabled}
+          style={[styles.primaryButton, { backgroundColor: theme.secondary }, submitDisabled ? styles.primaryButtonDisabled : null]}
+        >
+          {({ pressed }) =>
+            loading ? (
+              <ActivityIndicator color={theme.primary} />
+            ) : (
+              <Text style={[styles.primaryButtonText, { color: theme.primary, opacity: pressed ? 0.85 : 1 }]}>
+                {recoveryMethod === 'magic' ? 'Send sign-in link' : 'Send reset link'}
+              </Text>
+            )
+          }
+        </Pressable>
+      </Animated.View>
 
       <View style={styles.linksBlock}>
         <Pressable onPress={onSwitchToLogin}>
@@ -117,17 +202,52 @@ export default function ForgotPasswordForm({ onSwitchToLogin }: ForgotPasswordFo
 }
 
 const styles = StyleSheet.create({
+  successCard: {
+    flexDirection: 'row',
+    borderWidth: 1,
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 16,
+    alignItems: 'center',
+    gap: 10,
+  },
   successText: {
-    color: '#15803d',
     fontSize: 13,
-    marginBottom: 10,
     fontWeight: '600',
+    flex: 1,
+  },
+  errorCard: {
+    flexDirection: 'row',
+    borderWidth: 1,
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 16,
+    alignItems: 'center',
+    gap: 10,
   },
   errorText: {
-    color: '#dc2626',
     fontSize: 13,
-    marginBottom: 10,
     fontWeight: '600',
+    flex: 1,
+  },
+  methodSelector: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 16,
+  },
+  methodOption: {
+    flex: 1,
+    flexDirection: 'row',
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  methodLabel: {
+    fontSize: 12,
+    fontWeight: '700',
   },
   inputGroup: {
     marginBottom: 12,

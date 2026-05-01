@@ -1,5 +1,6 @@
 // Smart workflow detection for notes: medication, shopping, reminder, task
 import { isLikelyShoppingNote, extractShoppingItemsFromText } from './groceryCatalog';
+import { getAllMedicationNames, findMedication } from './euMedicationDatabase';
 
 export type SmartWorkflowType = 'none' | 'medication' | 'shopping' | 'reminder' | 'task';
 
@@ -44,11 +45,8 @@ const MEDICATION_KEYWORDS = {
   ],
 };
 
-const MEDICATION_ALIASES = [
-  'dafalgan', 'doliprane', 'paracetamol', 'acetaminophen',
-  'ibuprofen', 'ibuprofeno', 'ibuprofène', 'nurofen',
-  'amoxicillin', 'amoxicilina', 'amoxicilline', 'augmentin',
-];
+// Medication names loaded from EU medication database
+const MEDICATION_NAMES = getAllMedicationNames();
 
 // Reminder keywords by language
 const REMINDER_KEYWORDS = {
@@ -77,7 +75,7 @@ const TASK_KEYWORDS = {
 };
 
 function detectLanguage(text: string): 'es' | 'fr' | 'en' {
-  const lower = text.toLowerCase();
+  const lower = String(text || '').toLowerCase();
 
   // Spanish indicators
   if (/\b(tomé|tome|tomar|para|por|de la|el|la|los|las|una|unos)\b/.test(lower)) {
@@ -94,35 +92,39 @@ function detectLanguage(text: string): 'es' | 'fr' | 'en' {
 }
 
 function countKeywordMatches(text: string, keywords: string[]): number {
-  const lower = text.toLowerCase();
+  const lower = String(text || '').toLowerCase();
   return keywords.filter(kw => lower.includes(kw)).length;
 }
 
 function extractMedicationName(text: string): string | null {
-  const lower = text.toLowerCase();
-  for (const alias of MEDICATION_ALIASES) {
-    if (lower.includes(alias)) {
-      // Try to extract the word after "tomé" or "tome"
-      const match = text.match(
-        new RegExp(`(?:tomé|tome|tomar|pris|prendre)\\s+([a-záéíóúñ]+)`, 'i')
-      );
-      if (match) return match[1];
-      return alias;
-    }
+  const value = String(text || '');
+  // Use EU medication database for detection
+  const med = findMedication(value);
+  if (med) {
+    // Try to extract the word after "tomé" or "tome" for context
+    const match = value.match(
+      new RegExp(`(?:tomé|tome|tomar|pris|prendre|took|take)\\s+([a-záéíóúña-z]+)`, 'i')
+    );
+    if (match) return match[1];
+
+    // Return the medication name (use first name in the list)
+    return med.names[0];
   }
   return null;
 }
 
 function extractDoseText(text: string): string | null {
+  const value = String(text || '');
   // Match patterns like "400mg", "1g", "2 comprimidos", etc.
-  const match = text.match(/(\d+(?:,\d+)?)\s*([a-z]+)/i);
+  const match = value.match(/(\d+(?:,\d+)?)\s*([a-z]+)/i);
   if (match) return match[0];
   return null;
 }
 
 function extractTakenAtText(text: string): string | null {
+  const value = String(text || '');
   // Match time patterns: "8", "08:00", "20h", "las 8", "à 20h"
-  const match = text.match(/(?:a las|à|at)?\s*(\d{1,2}):?(\d{2})?\s*(?:h|am|pm)?/i);
+  const match = value.match(/(?:a las|à|at)?\s*(\d{1,2}):?(\d{2})?\s*(?:h|am|pm)?/i);
   if (match) {
     return match[0].trim();
   }
@@ -131,37 +133,41 @@ function extractTakenAtText(text: string): string | null {
 
 function extractReason(text: string): string | null {
   // Extract reason after "por", "pour", "for", "because of"
-  const match = text.match(/(?:por|pour|for|because of)\s+([^,.]+)/i);
+  const value = String(text || '');
+  const match = value.match(/(?:por|pour|for|because of)\s+([^,.]+)/i);
   if (match) return match[1].trim();
   return null;
 }
 
 function detectMedicationWorkflow(text: string): SmartWorkflowDetection {
-  const lang = detectLanguage(text);
+  const value = String(text || '');
+  const lang = detectLanguage(value);
   const keywords = MEDICATION_KEYWORDS[lang] || MEDICATION_KEYWORDS.en;
 
   let confidence = 0;
 
   // Check for medication aliases (high confidence)
-  if (extractMedicationName(text)) {
-    confidence += 0.5;
+  const medicationName = extractMedicationName(value);
+  if (medicationName) {
+    confidence = 0.7; // Direct medication name found = high confidence
   }
 
-  // Check for keywords
-  const keywordMatches = countKeywordMatches(text, keywords);
-  confidence += Math.min(keywordMatches * 0.15, 0.4);
+  // Check for keywords (only if no medication name detected)
+  const keywordMatches = countKeywordMatches(value, keywords);
+  if (!medicationName) {
+    confidence += Math.min(keywordMatches * 0.15, 0.4);
+  }
 
   // Check for dose pattern
-  if (extractDoseText(text)) {
-    confidence += 0.1;
+  if (extractDoseText(value)) {
+    confidence += medicationName ? 0.05 : 0.1; // Smaller boost if already confident
   }
 
   // Check for time pattern
-  if (extractTakenAtText(text)) {
-    confidence += 0.1;
+  if (extractTakenAtText(value)) {
+    confidence += medicationName ? 0.05 : 0.1; // Smaller boost if already confident
   }
 
-  const medicationName = extractMedicationName(text);
   const hasMedicationSignal = medicationName || keywordMatches >= 2;
 
   return {
@@ -171,16 +177,17 @@ function detectMedicationWorkflow(text: string): SmartWorkflowDetection {
     reason: 'We can create a follow-up reminder from this note.',
     extracted: {
       medicationName,
-      doseText: extractDoseText(text),
-      takenAtText: extractTakenAtText(text),
-      reason: extractReason(text),
+      doseText: extractDoseText(value),
+      takenAtText: extractTakenAtText(value),
+      reason: extractReason(value),
     },
   };
 }
 
 function detectShoppingWorkflow(text: string): SmartWorkflowDetection {
+  const value = String(text || '');
   // Use grocery catalog for smart detection
-  const isLikelyShoppingNote_detected = isLikelyShoppingNote(text);
+  const isLikelyShoppingNote_detected = isLikelyShoppingNote(value);
 
   if (!isLikelyShoppingNote_detected) {
     return {
@@ -192,7 +199,7 @@ function detectShoppingWorkflow(text: string): SmartWorkflowDetection {
   }
 
   // Extract items from text using grocery catalog
-  const extractedItems = extractShoppingItemsFromText(text);
+  const extractedItems = extractShoppingItemsFromText(value);
 
   // Build confidence based on item count
   let confidence = 0.65; // Base confidence from catalog match
@@ -211,16 +218,17 @@ function detectShoppingWorkflow(text: string): SmartWorkflowDetection {
 }
 
 function detectReminderWorkflow(text: string): SmartWorkflowDetection {
-  const lang = detectLanguage(text);
+  const value = String(text || '');
+  const lang = detectLanguage(value);
   const keywords = REMINDER_KEYWORDS[lang] || REMINDER_KEYWORDS.en;
 
   let confidence = 0;
 
-  const keywordMatches = countKeywordMatches(text, keywords);
+  const keywordMatches = countKeywordMatches(value, keywords);
   confidence += Math.min(keywordMatches * 0.25, 0.6);
 
   // Check for future/time references
-  if (/(?:mañana|tomorrow|demain|next|próximo|la próxima)/i.test(text)) {
+  if (/(?:mañana|tomorrow|demain|next|próximo|la próxima)/i.test(value)) {
     confidence += 0.2;
   }
 
@@ -234,12 +242,13 @@ function detectReminderWorkflow(text: string): SmartWorkflowDetection {
 }
 
 function detectTaskWorkflow(text: string): SmartWorkflowDetection {
-  const lang = detectLanguage(text);
+  const value = String(text || '');
+  const lang = detectLanguage(value);
   const keywords = TASK_KEYWORDS[lang] || TASK_KEYWORDS.en;
 
   let confidence = 0;
 
-  const keywordMatches = countKeywordMatches(text, keywords);
+  const keywordMatches = countKeywordMatches(value, keywords);
   confidence += Math.min(keywordMatches * 0.25, 0.5);
 
   return {
@@ -252,7 +261,8 @@ function detectTaskWorkflow(text: string): SmartWorkflowDetection {
 }
 
 export function detectSmartWorkflow(text: string): SmartWorkflowDetection {
-  if (!text || text.trim().length < 10) {
+  const value = String(text || '');
+  if (value.trim().length < 10) {
     return {
       type: 'none',
       confidence: 0,
@@ -263,10 +273,10 @@ export function detectSmartWorkflow(text: string): SmartWorkflowDetection {
 
   // Check all workflow types and return the highest confidence
   const detections = [
-    detectMedicationWorkflow(text),
-    detectShoppingWorkflow(text),
-    detectReminderWorkflow(text),
-    detectTaskWorkflow(text),
+    detectMedicationWorkflow(value),
+    detectShoppingWorkflow(value),
+    detectReminderWorkflow(value),
+    detectTaskWorkflow(value),
   ];
 
   // Filter out 'none' types and sort by confidence

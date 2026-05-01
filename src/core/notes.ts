@@ -18,7 +18,9 @@ const TEMPLATES_PURGED_KEY = '@barra_templates_purged_v1';
 
 export type NoteKind = 'text' | 'image';
 export type NoteCategory = 'general' | 'work' | 'health' | 'shopping';
-export type NoteVersion = {
+
+// Simple version format for backward compatibility with existing notes
+export type SimpleNoteVersion = {
   id: string;
   title?: string;
   text: string;
@@ -54,10 +56,13 @@ export interface NoteItem {
   groupId?: string;
   color?: 'default' | 'amber' | 'mint' | 'sky' | 'rose';
   archived?: boolean;
+  draft?: boolean;
   imageBase64?: string;
   imageMimeType?: string;
   attachments?: string[];
-  versions?: NoteVersion[];
+  versions?: SimpleNoteVersion[];
+  currentVersionNumber?: number;
+  lastVersionAt?: string;
   pinned: boolean;
   createdAt: number;
   updatedAt: number;
@@ -65,6 +70,7 @@ export interface NoteItem {
   smartType?: SmartWorkflowType;
   workflowStatus?: WorkflowStatus;
   workflowMetadata?: WorkflowMetadata;
+  syncStatus?: 'pending' | 'synced';
 }
 
 export type TemplateKind = 'email' | 'appointment';
@@ -86,8 +92,12 @@ function makeId(prefix: string) {
   return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
-function normalizeText(value: string) {
-  return value.trim().replace(/\s+/g, ' ');
+function safeText(value: unknown): string {
+  return typeof value === 'string' ? value : value == null ? '' : String(value);
+}
+
+function normalizeText(value: unknown) {
+  return safeText(value).trim().replace(/\s+/g, ' ');
 }
 
 function normalizeNotes(items: NoteItem[]): NoteItem[] {
@@ -111,9 +121,9 @@ export async function loadNotes(): Promise<NoteItem[]> {
         .map((item): NoteItem => ({
           id: String(item?.id || makeId('note')),
           kind: item?.kind === 'image' ? 'image' : 'text',
-          category: item?.category === 'work' ? 'work' : 'general',
-          title: typeof item?.title === 'string' && item.title.trim() ? item.title.trim() : undefined,
-          text: String(item?.text || ''),
+          category: (['general', 'work', 'health', 'shopping'].includes(safeText(item?.category)) ? item.category : 'general') as NoteCategory,
+          title: normalizeText(item?.title) ? normalizeText(item?.title) : undefined,
+          text: safeText(item?.text),
           groupId: typeof item?.groupId === 'string' ? item.groupId : undefined,
           color: (['default', 'amber', 'mint', 'sky', 'rose'].includes(String(item?.color || '')) ? item.color : 'default') as NoteItem['color'],
           archived: Boolean(item?.archived),
@@ -126,16 +136,17 @@ export async function loadNotes(): Promise<NoteItem[]> {
               title: typeof (version as { title?: unknown })?.title === 'string' ? String((version as { title?: unknown }).title) : undefined,
               text: String((version as { text?: unknown })?.text || ''),
               createdAt: Number((version as { createdAt?: unknown })?.createdAt || Date.now()),
-            })).filter((version: { text: string }) => version.text.trim().length > 0)
+            })).filter((version: { text: string }) => safeText(version.text).trim().length > 0)
             : undefined,
           pinned: Boolean(item?.pinned),
           createdAt: Number(item?.createdAt || Date.now()),
           updatedAt: Number(item?.updatedAt || Date.now()),
           deletedAt: typeof item?.deletedAt === 'number' ? Number(item.deletedAt) : undefined,
+          syncStatus: item?.syncStatus === 'pending' ? 'pending' : item?.syncStatus === 'synced' ? 'synced' : undefined,
         }))
         .filter((item) => {
           const key = noteStorageKey(item.id, item.groupId ? 'group' : 'personal', item.groupId);
-          return (item.text.trim().length > 0 || (item.kind === 'image' && item.imageBase64)) && !item.deletedAt && !deletedKeys.has(key);
+          return (safeText(item.text).trim().length > 0 || (item.kind === 'image' && item.imageBase64)) && !item.deletedAt && !deletedKeys.has(key);
         }),
     );
   } catch {
@@ -147,11 +158,13 @@ export async function saveNotes(items: NoteItem[]): Promise<void> {
   await AsyncStorage.setItem(NOTES_KEY, JSON.stringify(normalizeNotes(items).slice(0, 3000)));
 }
 
-async function pushNoteIfAuthenticated(note: NoteItem): Promise<void> {
+async function pushNoteIfAuthenticated(note: NoteItem): Promise<boolean> {
   try {
     await upsertNoteInFirebase(note);
+    return true;
   } catch (error) {
     await diag.warn('notes.push.note.error', { message: String(error), noteId: note.id });
+    return false;
   }
 }
 
@@ -216,7 +229,7 @@ export async function addNoteUnique(
   text: string,
   category: NoteCategory = 'general',
 ): Promise<{ notes: NoteItem[]; inserted: boolean }> {
-  const trimmed = text.trim();
+  const trimmed = safeText(text).trim();
   if (!trimmed) return { notes: await loadNotes(), inserted: false };
   const current = await loadNotes();
   if (isDuplicateText(current, trimmed)) {
@@ -232,11 +245,14 @@ export async function addNoteUnique(
       pinned: false,
       createdAt: now,
       updatedAt: now,
+      syncStatus: 'pending',
     },
     ...current,
   ];
   await saveNotes(next);
-  await pushNoteIfAuthenticated(next[0]);
+  const synced = await pushNoteIfAuthenticated(next[0]);
+  next[0] = { ...next[0], syncStatus: synced ? 'synced' : 'pending' };
+  await saveNotes(next);
   return { notes: normalizeNotes(next), inserted: true };
 }
 
@@ -245,8 +261,10 @@ export async function addRichNoteUnique(
   category: NoteCategory = 'general',
   attachments: string[] = [],
   groupId?: string,
+  draft?: boolean,
 ): Promise<{ notes: NoteItem[]; inserted: boolean }> {
-  const trimmed = text.trim();
+  const textStr = text && typeof text === 'string' ? text : '';
+  const trimmed = textStr.trim();
   const normalizedAttachments = attachments.map((item) => String(item || '').trim()).filter(Boolean).slice(0, 8);
   if (!trimmed && normalizedAttachments.length === 0) return { notes: await loadNotes(), inserted: false };
 
@@ -256,7 +274,7 @@ export async function addRichNoteUnique(
     kind: 'text',
     category,
     text: trimmed || 'Attachment note',
-    groupId: groupId?.trim() || undefined,
+    groupId: safeText(groupId).trim() || undefined,
     color: 'default',
     archived: false,
     attachments: normalizedAttachments.length ? normalizedAttachments : undefined,
@@ -270,14 +288,16 @@ export async function addRichNoteUnique(
 
   const now = Date.now();
   const next: NoteItem[] = [
-    { ...candidate, id: makeId('note'), createdAt: now, updatedAt: now },
+    { ...candidate, id: makeId('note'), createdAt: now, updatedAt: now, draft: draft ?? false },
     ...current,
   ];
 
   await saveNotes(next);
-  await pushNoteIfAuthenticated(next[0]);
-  if (groupId?.trim()) {
-    await upsertSharedGroupNote(groupId.trim(), next[0]);
+  const synced = await pushNoteIfAuthenticated(next[0]);
+  next[0] = { ...next[0], syncStatus: synced ? 'synced' : 'pending' };
+  await saveNotes(next);
+  if (safeText(groupId).trim()) {
+    await upsertSharedGroupNote(safeText(groupId).trim(), next[0]).catch((error) => diag.warn('notes.push.shared.error', { message: String(error), noteId: next[0].id }));
   }
   return { notes: normalizeNotes(next), inserted: true };
 }
@@ -316,7 +336,9 @@ export async function addImageNoteUnique(dataUri: string, title = 'Screenshot ca
     ...current,
   ];
   await saveNotes(next);
-  await pushNoteIfAuthenticated(next[0]);
+  const synced = await pushNoteIfAuthenticated(next[0]);
+  next[0] = { ...next[0], syncStatus: synced ? 'synced' : 'pending' };
+  await saveNotes(next);
   return { notes: normalizeNotes(next), inserted: true };
 }
 
@@ -339,11 +361,11 @@ export async function removeNote(id: string): Promise<NoteItem[]> {
 }
 
 export async function updateNoteText(id: string, text: string): Promise<NoteItem[]> {
-  const nextText = text.trim();
+  const nextText = safeText(text).trim();
   if (!nextText) return loadNotes();
   const current = await loadNotes();
   const next = current.map((item) =>
-    item.id === id ? { ...item, text: nextText, updatedAt: Date.now() } : item,
+    item.id === id ? { ...item, text: nextText, updatedAt: Date.now(), syncStatus: 'pending' as const } : item,
   );
   const updatedItem = next.find((item) => item.id === id);
   if (updatedItem && hasDuplicateNote(current, updatedItem, id)) {
@@ -351,9 +373,16 @@ export async function updateNoteText(id: string, text: string): Promise<NoteItem
   }
   await saveNotes(next);
   const updated = next.find((item) => item.id === id);
-  if (updated) await pushNoteIfAuthenticated(updated);
+  if (updated) {
+    const synced = await pushNoteIfAuthenticated(updated);
+    if (synced) {
+      const syncedNext = next.map((item) => item.id === id ? { ...item, syncStatus: 'synced' as const } : item);
+      await saveNotes(syncedNext);
+      return normalizeNotes(syncedNext);
+    }
+  }
   if (updated?.groupId) {
-    await upsertSharedGroupNote(updated.groupId, updated);
+    await upsertSharedGroupNote(updated.groupId, updated).catch((error) => diag.warn('notes.push.shared.error', { message: String(error), noteId: id }));
   }
   return normalizeNotes(next);
 }
@@ -426,7 +455,7 @@ export async function setNoteColor(id: string, color: NoteItem['color'] = 'defau
 export async function updateNoteTitle(id: string, title: string): Promise<NoteItem[]> {
   const current = await loadNotes();
   const next = current.map((item) =>
-    item.id === id ? { ...item, title: title.trim() || undefined, updatedAt: Date.now() } : item,
+    item.id === id ? { ...item, title: normalizeText(title) || undefined, updatedAt: Date.now(), syncStatus: 'pending' as const } : item,
   );
   await saveNotes(next);
   const updated = next.find((item) => item.id === id);
@@ -439,6 +468,20 @@ export async function toggleArchived(id: string): Promise<NoteItem[]> {
   const current = await loadNotes();
   const next = current.map((item) =>
     item.id === id ? { ...item, archived: !item.archived, updatedAt: Date.now() } : item,
+  );
+  await saveNotes(next);
+  const updated = next.find((item) => item.id === id);
+  if (updated) await pushNoteIfAuthenticated(updated);
+  if (updated?.groupId) {
+    await upsertSharedGroupNote(updated.groupId, updated);
+  }
+  return normalizeNotes(next);
+}
+
+export async function clearDraftFlag(id: string): Promise<NoteItem[]> {
+  const current = await loadNotes();
+  const next = current.map((item) =>
+    item.id === id ? { ...item, draft: false, updatedAt: Date.now() } : item,
   );
   await saveNotes(next);
   const updated = next.find((item) => item.id === id);

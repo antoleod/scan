@@ -1,0 +1,30 @@
+{
+  "ibuprofen": {
+    "id": "ibuprofen",
+    "displayName": "Ibuprofen",
+    "aliases": ["ibuprofeno", "ibuprofen", "nurofen", "brufen"],
+    "activeSubstance": "ibuprofen",
+    "category": "NSAID",
+    "defaultDoseLabel": "400 mg",
+    "doseOptions": ["200 mg", "400 mg", "600 mg"],
+    "recommendedFollowUpHours": 8,
+    "minIntervalHours": 6,
+    "maxDailyDoseLabel": "Max 1,200 mg/day without medical advice",
+    "safetyNote": "Take with food/water if possible. Avoid combining with other NSAIDs. Verify with prescription, leaflet, doctor, or pharmacist.",
+    "sourceRegion": "EU/BE reference profile"
+  },
+  "dafalgan": {
+    "id": "dafalgan",
+    "displayName": "Dafalgan",
+    "aliases": ["dafalgan", "paracetamol", "acetaminophen"],
+    "activeSubstance": "paracetamol",
+    "category": "Analgesic / antipyretic",
+    "defaultDoseLabel": "500 mg",
+    "doseOptions": ["500 mg", "1 g"],
+    "recommendedFollowUpHours": 6,
+    "minIntervalHours": 4,
+    "maxDailyDoseLabel": "Max 3-4 g/day depending on situation; verify leaflet/doctor",
+    "safetyNote": "Do not combine with other medicines containing paracetamol. Verify with prescription, leaflet, doctor, or pharmacist.",
+    "sourceRegion": "EU/BE reference profile"
+  }
+}

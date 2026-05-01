@@ -102,18 +102,25 @@ const SCAN_TUNING = {
   cooldownAfterSuccessMs: 500,  // was 700 — ready for next scan sooner
 };
 
-class SimpleErrorBoundary extends React.Component<{ children: React.ReactNode }, { error: Error | null }> {
+class SimpleErrorBoundary extends React.Component<{ children: React.ReactNode }, { error: Error | null; componentStack: string }> {
   constructor(props: { children: React.ReactNode }) {
     super(props);
-    this.state = { error: null };
+    this.state = { error: null, componentStack: '' };
   }
 
   static getDerivedStateFromError(error: Error) {
     return { error };
   }
 
-  componentDidCatch(error: Error) {
-    diag.error('ui.error', { message: String(error) });
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    const componentStack = String(errorInfo?.componentStack || '');
+    this.setState({ componentStack });
+    diag.error('ui.error', {
+      message: String(error),
+      name: String(error?.name || ''),
+      stack: String(error?.stack || ''),
+      componentStack,
+    });
   }
 
   render() {
@@ -122,9 +129,17 @@ class SimpleErrorBoundary extends React.Component<{ children: React.ReactNode },
         <SafeAreaView style={[styles.safe, styles.center]}>
           <Text style={{ fontWeight: '800', marginBottom: 8 }}>Something went wrong</Text>
           <Text style={{ textAlign: 'center', paddingHorizontal: 16 }}>{String(this.state.error.message)}</Text>
+          {this.state.componentStack ? (
+            <Text
+              selectable
+              style={{ textAlign: 'left', paddingHorizontal: 16, marginTop: 10, fontSize: 11, opacity: 0.8 }}
+            >
+              {this.state.componentStack}
+            </Text>
+          ) : null}
           <Pressable
             style={[styles.btn, { marginTop: 12, backgroundColor: '#0f82f8' }]}
-            onPress={() => this.setState({ error: null })}
+            onPress={() => this.setState({ error: null, componentStack: '' })}
           >
             <Text style={styles.btnText}>Retry</Text>
           </Pressable>
@@ -181,6 +196,7 @@ function MainApp() {
   const [backupImportVisible, setBackupImportVisible] = useState(false);
   const [backupImportText, setBackupImportText] = useState('');
   const [backupBusy, setBackupBusy] = useState(false);
+  const [profileMenuVisible, setProfileMenuVisible] = useState(false);
 
   const { toast, show: showToast, hide: hideToast } = useToast();
 
@@ -1625,11 +1641,23 @@ function MainApp() {
         <AppHeader
           palette={palette}
           email={user?.email || 'gean@MyKit.tech'}
-          onPressEmail={() => setActiveTab('settings')}
+          onPressEmail={() => setProfileMenuVisible((v) => !v)}
           syncBusy={syncBusy}
           lastSyncedAt={lastSyncedAt}
           persistenceMode={persistenceMode}
           onSyncNow={() => syncNow(false)}
+          profileMenuVisible={profileMenuVisible}
+          onToggleProfileMenu={() => setProfileMenuVisible((v) => !v)}
+          profileMenuItems={[
+            { icon: 'settings-outline', label: 'Settings', onPress: () => setActiveTab('settings') },
+            { icon: 'help-circle-outline', label: 'Help & Support', onPress: () => {
+              if (Platform.OS === 'web') {
+                window.open('https://github.com/anthropics/claude-code/issues', '_blank');
+              }
+            } },
+            { icon: 'information-circle-outline', label: 'About MyKit', onPress: () => showToast('MyKit v1.0 — Scan & organize codes', 'info') },
+            { icon: 'log-out-outline', label: 'Sign Out', onPress: () => logout().catch(() => undefined), destructive: true },
+          ]}
         />
 
         <KeyboardAvoidingView
