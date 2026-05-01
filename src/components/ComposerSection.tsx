@@ -21,7 +21,7 @@ type SharedGroup = {
   name: string;
 };
 
-type NoteCategory = 'general' | 'work';
+type NoteCategory = 'general' | 'work' | 'health' | 'shopping';
 
 export const ComposerSection = forwardRef<TextInput, {
   palette: Palette;

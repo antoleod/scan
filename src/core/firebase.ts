@@ -6,12 +6,18 @@ import {
   browserSessionPersistence,
   createUserWithEmailAndPassword,
   getAuth,
+  GoogleAuthProvider,
   initializeAuth,
   onAuthStateChanged,
   sendPasswordResetEmail,
+  sendSignInLinkToEmail,
   setPersistence,
+  signInWithCredential,
   signInWithEmailAndPassword,
+  signInWithEmailLink,
+  signInWithPopup,
   signOut,
+  isSignInWithEmailLink,
   User,
 } from 'firebase/auth';
 import {
@@ -58,6 +64,19 @@ const OPTIONAL_FIREBASE_ENV = [
 
 export type FirebaseRequiredEnvKey = (typeof REQUIRED_FIREBASE_ENV)[number];
 export type FirebaseOptionalEnvKey = (typeof OPTIONAL_FIREBASE_ENV)[number];
+
+export type AuthEmailSource = 'recoveryEmail' | 'internalUsername' | 'googleOAuth';
+
+export interface UserPrivateProfile {
+  username: string;
+  authEmail: string;
+  authEmailSource: AuthEmailSource;
+  recoveryEmail?: string;
+  phone?: string;
+  providerIds?: string[];
+  createdAt?: number;
+  updatedAt: number;
+}
 
 export interface FirebaseRuntime {
   enabled: boolean;
@@ -258,6 +277,105 @@ export async function logoutFirebase(): Promise<void> {
   if (!rt.enabled || !rt.auth) return;
 
   await signOut(rt.auth);
+}
+
+export async function upsertUserPrivateProfile(
+  uid: string,
+  profile: Partial<UserPrivateProfile>,
+): Promise<void> {
+  const rt = await initFirebaseRuntime();
+  if (!rt.enabled || !rt.db) return;
+  await setDoc(
+    doc(rt.db, 'users', uid, 'private', 'profile'),
+    { ...profile, updatedAt: serverTimestamp() },
+    { merge: true },
+  );
+}
+
+export async function upsertUsernameIndex(
+  username: string,
+  uid: string,
+  authEmail: string,
+  authEmailSource: AuthEmailSource,
+): Promise<void> {
+  const rt = await initFirebaseRuntime();
+  if (!rt.enabled || !rt.db) return;
+  const lower = username.toLowerCase().trim();
+  await setDoc(
+    doc(rt.db, 'usernames', lower),
+    { username: lower, uid, authEmail, authEmailSource, updatedAt: serverTimestamp() },
+    { merge: true },
+  );
+}
+
+export async function resolveUsernameToAuthEmail(
+  username: string,
+): Promise<{ authEmail: string; authEmailSource: AuthEmailSource } | null> {
+  const rt = await initFirebaseRuntime();
+  if (!rt.enabled || !rt.db) return null;
+  const snap = await getDoc(doc(rt.db, 'usernames', username.toLowerCase().trim()));
+  if (!snap.exists()) return null;
+  const data = snap.data();
+  return {
+    authEmail: String(data?.authEmail || ''),
+    authEmailSource: data?.authEmailSource === 'recoveryEmail' ? 'recoveryEmail' : 'internalUsername',
+  };
+}
+
+// ─── Google OAuth ──────────────────────────────────────────────────
+
+export async function loginWithGoogleWeb(): Promise<User> {
+  const rt = await initFirebaseRuntime();
+  if (!rt.enabled || !rt.auth) {
+    throw new Error(buildFirebaseDisabledErrorMessage(rt));
+  }
+
+  const provider = new GoogleAuthProvider();
+  const result = await signInWithPopup(rt.auth, provider);
+  return result.user;
+}
+
+export async function loginWithGoogleCredential(idToken: string): Promise<User> {
+  const rt = await initFirebaseRuntime();
+  if (!rt.enabled || !rt.auth) {
+    throw new Error(buildFirebaseDisabledErrorMessage(rt));
+  }
+
+  const credential = GoogleAuthProvider.credential(idToken);
+  const result = await signInWithCredential(rt.auth, credential);
+  return result.user;
+}
+
+// ─── Magic Links (Passwordless) ────────────────────────────────────
+
+export async function sendMagicLinkEmail(email: string, redirectUrl: string): Promise<void> {
+  const rt = await initFirebaseRuntime();
+  if (!rt.enabled || !rt.auth) {
+    throw new Error(buildFirebaseDisabledErrorMessage(rt));
+  }
+
+  await sendSignInLinkToEmail(rt.auth, email.trim().toLowerCase(), {
+    url: redirectUrl,
+    handleCodeInApp: true,
+  });
+}
+
+export async function verifyMagicLink(email: string, url: string): Promise<User> {
+  const rt = await initFirebaseRuntime();
+  if (!rt.enabled || !rt.auth) {
+    throw new Error(buildFirebaseDisabledErrorMessage(rt));
+  }
+
+  const result = await signInWithEmailLink(rt.auth, email.trim().toLowerCase(), url);
+  return result.user;
+}
+
+export async function isMagicLinkUrl(url: string): Promise<boolean> {
+  const rt = await getFirebaseRuntimeSnapshot();
+  if (!rt.enabled || !rt.auth) {
+    return false;
+  }
+  return isSignInWithEmailLink(rt.auth, url);
 }
 
 export async function syncScansWithFirebase(local: ScanRecord[]) {

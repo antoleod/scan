@@ -28,7 +28,7 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import { useAppTheme } from '../constants/theme';
-import { normalizeIdentifier } from '../core/auth';
+import { normalizeIdentifier, resolveAuthEmailForLogin } from '../core/auth';
 import {
   clearSavedCredentials,
   loadLastIdentifier,
@@ -39,6 +39,7 @@ import { loadSettings, saveSettings } from '../core/settings';
 import { isValidIdentifier } from '../core/validation';
 import { useCtrlEnterSave } from '../hooks/useCtrlEnterSave';
 import { useAuth } from './useAuth';
+import MagicLinkForm from './MagicLinkForm';
 
 const fullBrandingText = 'MyKit TECH \u00b7 MyKit \u00b7 SECURE TRAIL';
 
@@ -191,7 +192,7 @@ interface LoginFormProps {
 export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: LoginFormProps) {
   usePremiumCssEffects();
 
-  const { login, enterAsGuest, firebase } = useAuth();
+  const { login, loginWithGoogle, sendMagicLink, enterAsGuest, firebase } = useAuth();
   const [username, setUsername] = useState('');
   const [pin, setPin] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -201,6 +202,7 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
   const [focusedField, setFocusedField] = useState<'username' | 'pin' | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
   const [rememberPassword, setRememberPassword] = useState(false);
+  const [showMagicLink, setShowMagicLink] = useState(false);
 
   const pinInputRef = useRef<TextInput>(null);
   const glitchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -550,7 +552,8 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
     setIsLoading(true);
     setAuthError(null);
     try {
-      await login(firebaseEmail, pin, { persistSession: rememberPassword });
+      const resolvedEmail = await resolveAuthEmailForLogin(username);
+      await login(resolvedEmail, pin, { persistSession: rememberPassword });
       await saveLastIdentifier(username);
       const prev = await loadSettings();
       await saveSettings({ ...prev, savePasswordEncrypted: rememberPassword });
@@ -571,6 +574,20 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
     enterAsGuest();
   };
 
+  const handleGoogleLogin = async () => {
+    setIsLoading(true);
+    setAuthError(null);
+    try {
+      await loginWithGoogle();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Google sign-in failed. Please try again.";
+      setAuthError(message);
+      triggerShake();
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleSubmitShortcut = (event: unknown) => {
     const e = (event as { nativeEvent?: { key?: string; ctrlKey?: boolean; metaKey?: boolean; shiftKey?: boolean } })?.nativeEvent;
     if (!e) return;
@@ -578,6 +595,10 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
       void handleSignIn();
     }
   };
+
+  if (showMagicLink) {
+    return <MagicLinkForm onBack={() => setShowMagicLink(false)} />;
+  }
 
   return (
     <KeyboardAvoidingView
@@ -904,6 +925,20 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
 
             </View>
 
+            <View style={styles.socialButtonRow}>
+              <Pressable
+                style={[styles.socialButton, { borderColor: theme.secondary }]}
+                onPress={handleGoogleLogin}
+                disabled={isLoading}
+              >
+                {({ pressed }) => (
+                  <View style={[{ opacity: pressed ? 0.7 : 1 }]}>
+                    <Ionicons name="logo-google" size={20} color={theme.secondary} />
+                  </View>
+                )}
+              </Pressable>
+            </View>
+
             {/* Tooltip Copied */}
             <Animated.View style={[styles.tooltip, { backgroundColor: theme.secondary }, tooltipStyle]} pointerEvents="none">
               <Text style={[styles.tooltipText, { color: theme.primary }]}>COPIED!</Text>
@@ -941,6 +976,10 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
               <Text style={[styles.linkDivider, { color: theme.textSecondary }]}>|</Text>
               <Pressable onPress={onSwitchToForgot} style={styles.linkAction}>
                 <Text style={[styles.link, { color: theme.textSecondary }]}>Forgot password</Text>
+              </Pressable>
+              <Text style={[styles.linkDivider, { color: theme.textSecondary }]}>|</Text>
+              <Pressable onPress={() => setShowMagicLink(true)} style={styles.linkAction}>
+                <Text style={[styles.link, { color: theme.textSecondary }]}>Passwordless login</Text>
               </Pressable>
               <Text style={[styles.linkDivider, { color: theme.textSecondary }]}>|</Text>
               <Pressable onPress={handleGuestAccess} style={styles.linkAction}>
@@ -1039,6 +1078,8 @@ const styles = StyleSheet.create({
   rememberLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   rememberText: { fontSize: 12, fontWeight: '600' },
   actionRow: { flexDirection: 'row', gap: 10, alignItems: 'center' },
+  socialButtonRow: { flexDirection: 'row', justifyContent: 'center', gap: 12, marginVertical: 8 },
+  socialButton: { width: 44, height: 44, borderRadius: 22, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   primaryButton: { borderRadius: 10, overflow: 'hidden' },
   primaryDisabled: { opacity: 0.6 },
   primaryButtonInner: { height: 48, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },

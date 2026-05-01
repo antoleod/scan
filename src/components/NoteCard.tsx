@@ -29,7 +29,7 @@ type Palette = {
   chipBorder: string;
 };
 
-type NoteCategory = 'general' | 'work';
+type NoteCategory = 'general' | 'work' | 'health' | 'shopping';
 type NoteColor = 'default' | 'amber' | 'mint' | 'sky' | 'rose';
 
 type NoteItem = {

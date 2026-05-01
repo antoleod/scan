@@ -14,7 +14,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 const RECENT_KEY = '@MyKit_smart_recent_v1';
 const MAX_RECENT = 8;
 
-type NoteCategory = 'general' | 'work';
+type NoteCategory = 'general' | 'work' | 'health' | 'shopping';
 
 type Palette = {
   bg: string;

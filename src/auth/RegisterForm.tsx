@@ -156,15 +156,20 @@ export default function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [recoveryEmail, setRecoveryEmail] = useState('');
+  const [phone, setPhone] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const normalizedUsername = username.trim().toLowerCase().replace(/\s+/g, '');
   const usernameValid = /^[a-z0-9._-]{3,}$/.test(normalizedUsername);
-  const normalizedEmail = `${normalizedUsername}@MyKit.tech`;
+  const normalizedRecoveryEmail = recoveryEmail.trim().toLowerCase();
+  const authEmailSource = normalizedRecoveryEmail ? 'recoveryEmail' : 'internalUsername';
+  const authEmail = normalizedRecoveryEmail || `${normalizedUsername}@MyKit.tech`;
 
-  const emailValid = usernameValid && isValidEmail(normalizedEmail);
+  const recoveryEmailValid = !normalizedRecoveryEmail || isValidEmail(normalizedRecoveryEmail);
+  const emailValid = usernameValid && isValidEmail(authEmail) && recoveryEmailValid;
   const passwordValid = password.length >= 6;
   const matches = password === confirmPassword && confirmPassword.length > 0;
   const submitDisabled = loading || !emailValid || !passwordValid || !matches;
@@ -259,8 +264,13 @@ export default function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
       return;
     }
 
-    if (!usernameValid || !isValidEmail(normalizedEmail)) {
+    if (!usernameValid || !isValidEmail(authEmail)) {
       setError('Username must be at least 3 characters and can include letters, numbers, dots, underscores, and hyphens.');
+      return;
+    }
+
+    if (normalizedRecoveryEmail && !isValidEmail(normalizedRecoveryEmail)) {
+      setError('Recovery email format is invalid.');
       return;
     }
 
@@ -276,7 +286,12 @@ export default function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
 
     setLoading(true);
     try {
-      await register(normalizedEmail, password);
+      await register(authEmail, password, {
+        username: normalizedUsername,
+        recoveryEmail: normalizedRecoveryEmail || undefined,
+        phone: phone.trim() || undefined,
+        authEmailSource,
+      });
       setIsSuccess(true);
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : 'Could not create the account.');
@@ -330,9 +345,8 @@ export default function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
           autoCorrect={false}
         />
         <Text style={{ color: theme.textSecondary, fontSize: 11, marginTop: 6 }}>
-          Email generated: {normalizedUsername ? normalizedEmail : '@MyKit.tech'}
+          {normalizedRecoveryEmail ? 'Password reset will be sent to this email.' : 'You can add a recovery email later from profile settings.'}
         </Text>
-        <Text style={{ color: theme.textSecondary, fontSize: 11, marginTop: 2 }}>Create account will be sent to Firebase Auth.</Text>
       </View>
 
       <View style={styles.inputGroup}>
@@ -407,12 +421,32 @@ export default function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
             importantForAutofill="yes"
             autoCapitalize="none"
             autoCorrect={false}
-            returnKeyType="go"
-            onSubmitEditing={() => {
-              void handleSubmit();
-            }}
           />
         </View>
+      </View>
+
+      <View style={styles.inputGroup}>
+        <Text style={[styles.label, { color: theme.secondary }]}>Recovery email (optional)</Text>
+        <TextInput
+          value={recoveryEmail}
+          onChangeText={setRecoveryEmail}
+          style={[styles.input, { borderColor: theme.border, backgroundColor: theme.inputBg, color: theme.text }]}
+          placeholder="you@example.com"
+          keyboardType="email-address"
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
+      </View>
+
+      <View style={styles.inputGroup}>
+        <Text style={[styles.label, { color: theme.secondary }]}>Recovery phone (optional)</Text>
+        <TextInput
+          value={phone}
+          onChangeText={setPhone}
+          style={[styles.input, { borderColor: theme.border, backgroundColor: theme.inputBg, color: theme.text }]}
+          placeholder="+1 (555) 123-4567"
+          keyboardType="phone-pad"
+        />
       </View>
 
       <Pressable

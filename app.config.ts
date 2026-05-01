@@ -44,10 +44,11 @@ const config: ExpoConfig = {
     themeColor: "#1A1A1A",
     backgroundColor: "#111111",
   },
+  scheme: "mykit",
   experiments: {
     baseUrl,
   },
-  plugins: ["expo-sharing", "expo-font", "@react-native-community/datetimepicker"],
+  plugins: ["expo-sharing", "expo-font", "@react-native-community/datetimepicker", "expo-secure-store", "expo-web-browser"],
   updates: {
     enabled: updatesEnabled,
     checkAutomatically: "ON_ERROR_RECOVERY",

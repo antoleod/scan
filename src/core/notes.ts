@@ -17,13 +17,33 @@ const TEMPLATES_KEY = '@barra_note_templates_v1';
 const TEMPLATES_PURGED_KEY = '@barra_templates_purged_v1';
 
 export type NoteKind = 'text' | 'image';
-export type NoteCategory = 'general' | 'work';
+export type NoteCategory = 'general' | 'work' | 'health' | 'shopping';
 export type NoteVersion = {
   id: string;
   title?: string;
   text: string;
   createdAt: number;
 };
+
+export type SmartWorkflowType = 'none' | 'medication' | 'shopping' | 'reminder' | 'task';
+export type WorkflowStatus = 'draft' | 'active' | 'completed' | 'dismissed';
+
+export interface WorkflowMetadata {
+  medicationName?: string;
+  doseText?: string;
+  takenAt?: number;
+  takenAtText?: string;
+  reason?: string;
+  symptomLevel?: number;
+  followUpAt?: number;
+  followUpLabel?: string;
+  checklistItems?: {
+    id: string;
+    text: string;
+    completed: boolean;
+  }[];
+  extractedFromText?: boolean;
+}
 
 export interface NoteItem {
   id: string;
@@ -42,6 +62,9 @@ export interface NoteItem {
   createdAt: number;
   updatedAt: number;
   deletedAt?: number;
+  smartType?: SmartWorkflowType;
+  workflowStatus?: WorkflowStatus;
+  workflowMetadata?: WorkflowMetadata;
 }
 
 export type TemplateKind = 'email' | 'appointment';

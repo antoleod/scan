@@ -11,6 +11,7 @@ import {
 import { useAuth } from './useAuth';
 import { useAppTheme } from '../constants/theme';
 import { isValidEmail } from './validation';
+import { resolveUsernameToAuthEmail } from '../core/firebase';
 
 interface ForgotPasswordFormProps {
   onSwitchToLogin: () => void;
@@ -19,35 +20,60 @@ interface ForgotPasswordFormProps {
 export default function ForgotPasswordForm({ onSwitchToLogin }: ForgotPasswordFormProps) {
   const { sendPasswordReset } = useAuth();
   const { theme } = useAppTheme();
-  const [email, setEmail] = useState('');
+  const [input, setInput] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const submitDisabled = loading || !email.trim();
+  const submitDisabled = loading || !input.trim();
 
   const handleSubmit = async () => {
     setError(null);
     setSuccess(null);
 
-    const normalizedEmail = email.trim().toLowerCase();
+    const value = input.trim().toLowerCase();
 
-    if (!normalizedEmail) {
-      setError('Email is required.');
-      return;
-    }
-
-    if (!isValidEmail(normalizedEmail)) {
-      setError('Invalid email format.');
+    if (!value) {
+      setError('Enter your username or recovery email.');
       return;
     }
 
     setLoading(true);
     try {
-      await sendPasswordReset(normalizedEmail);
-      setSuccess('Password reset email sent.');
+      if (value.includes('@')) {
+        // Direct email path
+        await sendPasswordReset(value);
+        setSuccess('Password reset email sent.');
+      } else {
+        // Username path — resolve via index
+        let resolved: { authEmail: string; authEmailSource: string } | null = null;
+        try {
+          resolved = await resolveUsernameToAuthEmail(value);
+        } catch {
+          // Firebase unavailable — tell user to use email directly
+          setError('Could not connect. If you registered with a recovery email, enter it directly.');
+          return;
+        }
+
+        if (!resolved) {
+          setError('No account found for that username. Try entering your recovery email instead.');
+          return;
+        }
+
+        if (resolved.authEmailSource === 'recoveryEmail') {
+          await sendPasswordReset(resolved.authEmail);
+          setSuccess('Password reset email sent.');
+        } else {
+          // account exists but has no real recovery email
+          setError(
+            'This account does not have a recovery email. ' +
+            'Please sign in and add one in Profile settings to enable password reset.'
+          );
+        }
+      }
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : 'Could not send reset email.');
+      const message = submitError instanceof Error ? submitError.message : 'Failed to send reset email.';
+      setError(message);
     } finally {
       setLoading(false);
     }
@@ -59,14 +85,13 @@ export default function ForgotPasswordForm({ onSwitchToLogin }: ForgotPasswordFo
       {error ? <Text style={[styles.errorText, { color: theme.error }]}>{error}</Text> : null}
 
       <View style={styles.inputGroup}>
-        <Text style={[styles.label, { color: theme.secondary }]}>Email</Text>
+        <Text style={[styles.label, { color: theme.secondary }]}>Username or recovery email</Text>
         <TextInput
-          value={email}
-          onChangeText={setEmail}
+          value={input}
+          onChangeText={setInput}
           style={[styles.input, { borderColor: theme.border, backgroundColor: theme.inputBg, color: theme.text }]}
-          placeholder="user@company.com"
+          placeholder="jean or jean@example.com"
           keyboardType="email-address"
-          textContentType="emailAddress"
           autoCapitalize="none"
           autoCorrect={false}
         />

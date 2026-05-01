@@ -1,13 +1,15 @@
 import React, { createContext, useEffect, useMemo, useState } from 'react';
+import { Linking, Platform } from 'react-native';
 import { User } from 'firebase/auth';
 
-import { loadLastAuthTimestamp, saveLastAuthTimestamp, clearLastAuthTimestamp } from '../core/auth-storage';
+import { loadLastAuthTimestamp, saveLastAuthTimestamp, clearLastAuthTimestamp, saveBiometricEmail, loadBiometricEmail, clearBiometricEmail, saveBiometricEnabled, loadBiometricEnabled } from '../core/auth-storage';
 import { diag } from '../core/diagnostics';
 import { onFirebaseAuthState } from '../core/firebase';
 import { loadSettings } from '../core/settings';
+import { getBiometricStatus, authenticateWithBiometrics, type BiometricStatus } from '../core/biometrics';
 
-import { getFirebaseGuardState, login, logout, register, sendPasswordReset } from './authService';
-import type { LoginOptions } from './authTypes';
+import { getFirebaseGuardState, login, logout, register, sendPasswordReset, loginWithGoogle as loginWithGoogleService, sendMagicLink as sendMagicLinkService, verifyMagicLink as verifyMagicLinkService } from './authService';
+import type { LoginOptions, RegisterProfile } from './authTypes';
 import { AuthContextValue, FirebaseGuardState } from './authTypes';
 
 const defaultFirebaseGuard: FirebaseGuardState = {
@@ -26,13 +28,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [isGuest, setIsGuest] = useState(false);
   const [firebase, setFirebase] = useState<FirebaseGuardState>(defaultFirebaseGuard);
+  const [isBiometricLocked, setIsBiometricLocked] = useState(false);
+  const [biometricStatus, setBiometricStatus] = useState<BiometricStatus>({ available: false, type: 'none', label: 'Not available' });
 
   useEffect(() => {
     let unsubscribe: (() => void) | undefined;
     let mounted = true;
+    let deepLinkSubscription: ReturnType<typeof Linking.addEventListener> | undefined;
+
+    const handleDeepLink = async (event: { url: string }) => {
+      const url = event.url;
+      // Check if it's a magic link
+      if (url.includes('mykit://') || url.includes('__/auth/action')) {
+        try {
+          // Extract the full URL from the deep link
+          const fullUrl = url.replace('mykit://', 'https://');
+          // The email will be stored in browser or we need to get it from context
+          // For now, we'll just trigger a re-check
+          await diag.info('auth.deeplink.magic', { url });
+        } catch (error) {
+          await diag.warn('auth.deeplink.error', { message: String(error) });
+        }
+      }
+    };
 
     const bootstrap = async () => {
       try {
+        // Get biometric status
+        const status = await getBiometricStatus();
+        if (mounted) setBiometricStatus(status);
+
         const guard = await getFirebaseGuardState();
         if (mounted) {
           setFirebase(guard);
@@ -49,6 +74,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             if (!nextUser) {
               setUser(null);
               setIsGuest(false);
+              setIsBiometricLocked(false);
               void diag.info('auth.state.changed', { authenticated: false });
               setIsLoading(false);
               return;
@@ -65,6 +91,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               if (mounted) {
                 setUser(null);
                 setIsGuest(false);
+                setIsBiometricLocked(false);
                 setIsLoading(false);
               }
               void diag.info('auth.session.relogin_required', {
@@ -73,18 +100,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               return;
             }
 
-            // Update timestamp to extend session (resets the 15-day inactivity window)
-            await saveLastAuthTimestamp(Date.now());
+            // Check if biometric email is saved and biometric is enabled
+            const biometricEnabled = await loadBiometricEnabled();
+            const biometricEmail = await loadBiometricEmail();
+            const shouldLockWithBiometric = biometricEnabled && biometricEmail && status.available;
 
-            setUser(nextUser);
-            setIsGuest(false);
-            void diag.info('auth.state.changed', { authenticated: true, uid: nextUser.uid });
-            setIsLoading(false);
+            if (shouldLockWithBiometric) {
+              if (mounted) setIsBiometricLocked(true);
+            } else {
+              // Update timestamp to extend session
+              await saveLastAuthTimestamp(Date.now());
+              setUser(nextUser);
+              setIsGuest(false);
+              setIsBiometricLocked(false);
+              void diag.info('auth.state.changed', { authenticated: true, uid: nextUser.uid });
+              setIsLoading(false);
+            }
           })().catch(async (error) => {
             await diag.error('auth.state.error', { message: String(error) });
-            if (mounted) setIsLoading(false);
+            if (mounted) {
+              setIsBiometricLocked(false);
+              setIsLoading(false);
+            }
           });
         });
+
+        // Setup deep link listener for magic links (mobile only)
+        if (Platform.OS !== 'web') {
+          deepLinkSubscription = Linking.addEventListener('url', handleDeepLink);
+        }
       } catch (error) {
         await diag.error('auth.bootstrap.error', { message: String(error) });
         if (mounted) {
@@ -98,6 +142,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => {
       mounted = false;
       unsubscribe?.();
+      deepLinkSubscription?.remove();
     };
   }, []);
 
@@ -112,15 +157,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setIsGuest(false);
     setUser(authenticatedUser);
     await saveLastAuthTimestamp(Date.now());
+    if (biometricStatus.available) {
+      await saveBiometricEmail(email);
+      await saveBiometricEnabled(true);
+    }
     await diag.info('auth.login.success', { uid: authenticatedUser.uid });
     return authenticatedUser;
   };
 
-  const registerWithEmailPassword = async (email: string, password: string) => {
-    const authenticatedUser = await register(email, password);
+  const registerWithEmailPassword = async (email: string, password: string, profile?: RegisterProfile) => {
+    const authenticatedUser = await register(email, password, profile);
     setIsGuest(false);
     setUser(authenticatedUser);
     await saveLastAuthTimestamp(Date.now());
+    if (biometricStatus.available) {
+      await saveBiometricEmail(email);
+      await saveBiometricEnabled(true);
+    }
     await diag.info('auth.register.success', { uid: authenticatedUser.uid });
     return authenticatedUser;
   };
@@ -130,10 +183,57 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await diag.info('auth.reset.sent', { email });
   };
 
+  const loginWithGoogleWrapper = async () => {
+    const isMobile = Platform.OS !== 'web';
+    const authenticatedUser = await loginWithGoogleService(isMobile);
+    setIsGuest(false);
+    setUser(authenticatedUser);
+    await saveLastAuthTimestamp(Date.now());
+    if (biometricStatus.available) {
+      await saveBiometricEmail(authenticatedUser.email || '');
+      await saveBiometricEnabled(true);
+    }
+    await diag.info('auth.google.success', { uid: authenticatedUser.uid });
+    return authenticatedUser;
+  };
+
+  const sendMagicLinkWrapper = async (email: string) => {
+    const redirectUrl = Platform.OS === 'web' ? window.location.origin : 'mykit://auth';
+    await sendMagicLinkService(email, redirectUrl);
+    await diag.info('auth.magiclink.sent', { email: email.split('@')[0] });
+  };
+
+  const verifyMagicLinkWrapper = async (email: string, url: string) => {
+    const authenticatedUser = await verifyMagicLinkService(email, url);
+    setIsGuest(false);
+    setUser(authenticatedUser);
+    await saveLastAuthTimestamp(Date.now());
+    if (biometricStatus.available) {
+      await saveBiometricEmail(email);
+      await saveBiometricEnabled(true);
+    }
+    await diag.info('auth.magiclink.success', { uid: authenticatedUser.uid });
+    return authenticatedUser;
+  };
+
+  const unlockWithBiometric = async () => {
+    const success = await authenticateWithBiometrics('Unlock MyKit');
+    if (success) {
+      await saveLastAuthTimestamp(Date.now());
+      setIsBiometricLocked(false);
+      setUser(user); // Keep existing user
+      return true;
+    }
+    return false;
+  };
+
   const logoutCurrentUser = async () => {
     await logout();
+    await clearBiometricEmail();
+    await saveBiometricEnabled(false);
     setUser(null);
     setIsGuest(false);
+    setIsBiometricLocked(false);
     await clearLastAuthTimestamp();
     await diag.info('auth.logout.success');
   };
@@ -142,13 +242,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     user,
     isLoading,
     isGuest,
+    isBiometricLocked,
+    biometricStatus,
     firebase,
     enterAsGuest,
     login: loginWithEmailPassword,
     register: registerWithEmailPassword,
     sendPasswordReset: sendResetPasswordEmail,
+    loginWithGoogle: loginWithGoogleWrapper,
+    sendMagicLink: sendMagicLinkWrapper,
+    verifyMagicLink: verifyMagicLinkWrapper,
+    unlockWithBiometric,
     logout: logoutCurrentUser,
-  }), [firebase, isGuest, isLoading, user]);
+  }), [firebase, isGuest, isLoading, user, isBiometricLocked, biometricStatus]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

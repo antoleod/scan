@@ -14,7 +14,7 @@ import { useCtrlEnterSave } from '../hooks/useCtrlEnterSave';
 import { parseServiceNowFields, buildRedactedText } from '../core/smartNotes';
 import { useFieldVisibility } from '../hooks/useFieldVisibility';
 
-type NoteCategory = 'general' | 'work';
+type NoteCategory = 'general' | 'work' | 'health' | 'shopping';
 type NoteColor   = 'default' | 'amber' | 'mint' | 'sky' | 'rose';
 
 type NoteItem = {

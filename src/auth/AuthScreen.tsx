@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 
 import { Easing } from 'react-native-reanimated';
+import BiometricLockScreen from './BiometricLockScreen';
 import ForgotPasswordForm from './ForgotPasswordForm';
 import LoginForm from './LoginForm';
 import RegisterForm from './RegisterForm';
@@ -82,8 +83,13 @@ function AuthBackgroundEffects() {
 }
 
 export default function AuthScreen() {
-  const { enterAsGuest } = useAuth();
+  const { enterAsGuest, isBiometricLocked } = useAuth();
   const [view, setView] = useState<AuthView>('login');
+
+  // Show biometric lock screen if session is locked
+  if (isBiometricLocked) {
+    return <BiometricLockScreen />;
+  }
 
   if (view === 'login') {
     return (

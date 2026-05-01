@@ -4,13 +4,19 @@ import { diag } from '../core/diagnostics';
 import {
   getFirebaseRuntimeSnapshot,
   loginWithEmail,
+  loginWithGoogleWeb,
+  loginWithGoogleCredential,
   logoutFirebase,
   registerWithEmail,
   sendResetPasswordEmail,
+  sendMagicLinkEmail,
+  verifyMagicLink as verifyMagicLinkFirebase,
+  upsertUserPrivateProfile,
+  upsertUsernameIndex,
 } from '../core/firebase';
 
 
-import { FirebaseGuardState, type LoginOptions } from './authTypes';
+import { FirebaseGuardState, type LoginOptions, type RegisterProfile } from './authTypes';
 
 export type { LoginOptions } from './authTypes';
 
@@ -95,10 +101,29 @@ export async function login(email: string, password: string, options?: LoginOpti
   }
 }
 
-export async function register(email: string, password: string): Promise<User> {
+export async function register(email: string, password: string, profile?: RegisterProfile): Promise<User> {
   await diag.info('auth.register.attempt', { emailDomain: (email.split('@')[1] || '').toLowerCase() || 'n/a' });
   try {
-    return await registerWithEmail(email, password);
+    const user = await registerWithEmail(email, password);
+
+    if (profile?.username) {
+      const username = profile.username.toLowerCase().trim();
+      const authEmailSource = profile.authEmailSource ?? 'internalUsername';
+
+      await upsertUserPrivateProfile(user.uid, {
+        username,
+        authEmail: email,
+        authEmailSource,
+        recoveryEmail: profile.recoveryEmail || undefined,
+        phone: profile.phone || undefined,
+        createdAt: Date.now(),
+      }).catch((err) => diag.warn('auth.register.profile.error', { message: String(err) }));
+
+      await upsertUsernameIndex(username, user.uid, email, authEmailSource)
+        .catch((err) => diag.warn('auth.register.username.error', { message: String(err) }));
+    }
+
+    return user;
   } catch (error) {
     const friendly = toFriendlyAuthError(error);
     await diag.warn('auth.register.error', { reason: friendly, raw: readFirebaseErrorCode(error) || readFirebaseErrorMessage(error) });
@@ -123,6 +148,41 @@ export async function logout(): Promise<void> {
   } catch (error) {
     const friendly = toFriendlyAuthError(error);
     await diag.warn('auth.logout.error', { reason: friendly });
+    throw new Error(friendly);
+  }
+}
+
+export async function loginWithGoogle(isMobile: boolean = false, idToken?: string): Promise<User> {
+  await diag.info('auth.google.attempt', { platform: isMobile ? 'mobile' : 'web' });
+  try {
+    const user = isMobile && idToken ? await loginWithGoogleCredential(idToken) : await loginWithGoogleWeb();
+    return user;
+  } catch (error) {
+    const friendly = toFriendlyAuthError(error);
+    await diag.warn('auth.google.error', { reason: friendly, raw: readFirebaseErrorCode(error) });
+    throw new Error(friendly);
+  }
+}
+
+export async function sendMagicLink(email: string, redirectUrl: string = window.location.origin): Promise<void> {
+  await diag.info('auth.magiclink.send', { email: email.split('@')[0] });
+  try {
+    await sendMagicLinkEmail(email, redirectUrl);
+  } catch (error) {
+    const friendly = toFriendlyAuthError(error);
+    await diag.warn('auth.magiclink.error', { reason: friendly });
+    throw new Error(friendly);
+  }
+}
+
+export async function verifyMagicLink(email: string, url: string): Promise<User> {
+  await diag.info('auth.magiclink.verify', { email: email.split('@')[0] });
+  try {
+    const user = await verifyMagicLinkFirebase(email, url);
+    return user;
+  } catch (error) {
+    const friendly = toFriendlyAuthError(error);
+    await diag.warn('auth.magiclink.verify.error', { reason: friendly });
     throw new Error(friendly);
   }
 }
