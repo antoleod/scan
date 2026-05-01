@@ -105,16 +105,18 @@ function sortNotes(items: NoteItem[]): NoteItem[] {
   return [...items].sort((a, b) => (a.pinned === b.pinned ? b.updatedAt - a.updatedAt : a.pinned ? -1 : 1));
 }
 
-function mergeServerNotes(serverNotes: NoteItem[], sharedNotes: NoteItem[], deletedKeys: Set<string>): NoteItem[] {
+function mergeNotesByNewest(localNotes: NoteItem[], serverNotes: NoteItem[], sharedNotes: NoteItem[], deletedKeys: Set<string>): NoteItem[] {
   const map = new Map<string, NoteItem>();
-  for (const item of [...serverNotes, ...sharedNotes]) {
+  for (const item of [...localNotes, ...serverNotes, ...sharedNotes]) {
     const key = noteKey(item);
     if (item.deletedAt || deletedKeys.has(key)) {
       map.delete(key);
       continue;
     }
     const prev = map.get(key);
-    if (!prev || item.updatedAt >= prev.updatedAt) map.set(key, item);
+    if (!prev || Number(item.updatedAt || 0) >= Number(prev.updatedAt || 0)) {
+      map.set(key, item);
+    }
   }
   return sortNotes(Array.from(map.values()));
 }
@@ -223,8 +225,8 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
   subscribeToNotes(({ notes: serverNotes, templates: serverTemplates }) => {
       serverUpdateRef.current = true;
       serverNotesRef.current = serverNotes;
-      setNotes(() => {
-        return mergeServerNotes(serverNotesRef.current, sharedNotesRef.current, deletedNoteKeysRef.current);
+      setNotes((current) => {
+        return mergeNotesByNewest(current, serverNotesRef.current, sharedNotesRef.current, deletedNoteKeysRef.current);
       });
       setTemplates((current) => {
         return mergeTemplatesByNewest(current, serverTemplates);
@@ -236,10 +238,12 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
   // Auto-push notes to Firebase when they change locally (debounced, skips server-initiated updates).
   useEffect(() => {
     if (!user) return;
-    if (serverUpdateRef.current) {
+    const hasPendingLocalNotes = notes.some((item) => item.syncStatus === 'pending');
+    if (serverUpdateRef.current && !hasPendingLocalNotes) {
       serverUpdateRef.current = false;
       return;
     }
+    serverUpdateRef.current = false;
     if (notesSyncTimerRef.current) clearTimeout(notesSyncTimerRef.current);
     notesSyncTimerRef.current = setTimeout(() => {
       syncNotesWithFirebase(notes, templates).catch(() => undefined);
@@ -247,6 +251,16 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
     return () => {
       if (notesSyncTimerRef.current) clearTimeout(notesSyncTimerRef.current);
     };
+  }, [notes, templates, user?.uid]);
+
+  useEffect(() => {
+    if (!user || Platform.OS !== 'web' || typeof window === 'undefined') return;
+    const retryPendingSync = () => {
+      if (!notes.some((item) => item.syncStatus === 'pending')) return;
+      syncNotesWithFirebase(notes, templates).catch(() => undefined);
+    };
+    window.addEventListener('online', retryPendingSync);
+    return () => window.removeEventListener('online', retryPendingSync);
   }, [notes, templates, user?.uid]);
 
   // Live shared groups + their notes (cross-device / multi-user).
@@ -258,8 +272,8 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
     subscribeToSharedGroupNotes((sharedNotes) => {
       serverUpdateRef.current = true;
       sharedNotesRef.current = sharedNotes;
-      setNotes(() => {
-        return mergeServerNotes(serverNotesRef.current, sharedNotesRef.current, deletedNoteKeysRef.current);
+      setNotes((current) => {
+        return mergeNotesByNewest(current, serverNotesRef.current, sharedNotesRef.current, deletedNoteKeysRef.current);
       });
     }).then((u) => { notesUnsub = u; }).catch(() => undefined);
     return () => { groupsUnsub?.(); notesUnsub?.(); };
