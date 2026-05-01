@@ -1,4 +1,5 @@
 // Smart workflow detection for notes: medication, shopping, reminder, task
+import { isLikelyShoppingNote, extractShoppingItemsFromText } from './groceryCatalog';
 
 export type SmartWorkflowType = 'none' | 'medication' | 'shopping' | 'reminder' | 'task';
 
@@ -48,19 +49,6 @@ const MEDICATION_ALIASES = [
   'ibuprofen', 'ibuprofeno', 'ibuprofène', 'nurofen',
   'amoxicillin', 'amoxicilina', 'amoxicilline', 'augmentin',
 ];
-
-// Shopping keywords by language
-const SHOPPING_KEYWORDS = {
-  es: [
-    'comprar', 'compra', 'supermercado', 'mercado', 'necesito comprar', 'lista de compras',
-  ],
-  fr: [
-    'acheter', 'courses', 'supermarché', 'liste de courses',
-  ],
-  en: [
-    'buy', 'shopping', 'groceries', 'grocery list', 'need to buy',
-  ],
-};
 
 // Reminder keywords by language
 const REMINDER_KEYWORDS = {
@@ -191,34 +179,33 @@ function detectMedicationWorkflow(text: string): SmartWorkflowDetection {
 }
 
 function detectShoppingWorkflow(text: string): SmartWorkflowDetection {
-  const lang = detectLanguage(text);
-  const keywords = SHOPPING_KEYWORDS[lang] || SHOPPING_KEYWORDS.en;
+  // Use grocery catalog for smart detection
+  const isLikelyShoppingNote_detected = isLikelyShoppingNote(text);
 
-  let confidence = 0;
-
-  // Check for shopping keywords
-  const keywordMatches = countKeywordMatches(text, keywords);
-  confidence += Math.min(keywordMatches * 0.3, 0.4);
-
-  // Check for list pattern (commas, newlines, "y/and/et")
-  const hasListPattern = /[,\n]|(\s(?:y|and|et)\s)/.test(text);
-  if (hasListPattern) {
-    confidence += 0.3;
+  if (!isLikelyShoppingNote_detected) {
+    return {
+      type: 'none',
+      confidence: 0,
+      title: '',
+      reason: '',
+    };
   }
 
-  // Check for multiple items
-  const items = text.split(/[,\n]/).filter(s => s.trim().length > 2);
-  if (items.length >= 2) {
-    confidence += 0.2;
-  }
+  // Extract items from text using grocery catalog
+  const extractedItems = extractShoppingItemsFromText(text);
+
+  // Build confidence based on item count
+  let confidence = 0.65; // Base confidence from catalog match
+  if (extractedItems.length >= 2) confidence += 0.2;
+  if (extractedItems.length >= 5) confidence += 0.15;
 
   return {
-    type: keywordMatches >= 1 || (hasListPattern && items.length >= 2) ? 'shopping' : 'none',
+    type: 'shopping',
     confidence: Math.min(confidence, 1),
     title: 'Shopping list detected',
     reason: 'We can turn this note into a checklist.',
     extracted: {
-      items: items.map(s => s.trim()).filter(s => s),
+      items: extractedItems.map(item => ({ text: item.text, category: item.category })),
     },
   };
 }

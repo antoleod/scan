@@ -1,0 +1,459 @@
+{
+  "version": 1,
+  "description": "Multilingual grocery catalog for Smart Notes shopping workflow detection",
+  "languages": ["en", "es", "fr", "nl"],
+  "categories": ["fruit", "vegetable", "herb", "legume", "grocery"],
+  "items": [
+    {
+      "id": "apple",
+      "category": "fruit",
+      "canonical": {
+        "en": "apple",
+        "es": "manzana",
+        "fr": "pomme",
+        "nl": "appel"
+      },
+      "aliases": ["apple", "apples", "manzana", "manzanas", "pomme", "pommes", "appel", "appels"]
+    },
+    {
+      "id": "banana",
+      "category": "fruit",
+      "canonical": {
+        "en": "banana",
+        "es": "plátano",
+        "fr": "banane",
+        "nl": "banaan"
+      },
+      "aliases": ["banana", "bananas", "platano", "platanos", "plátano", "plátanos", "banane", "bananes", "banaan", "bananen"]
+    },
+    {
+      "id": "orange",
+      "category": "fruit",
+      "canonical": {
+        "en": "orange",
+        "es": "naranja",
+        "fr": "orange",
+        "nl": "sinaasappel"
+      },
+      "aliases": ["orange", "oranges", "naranja", "naranjas", "orange", "oranges", "sinaasappel", "sinaasappels"]
+    },
+    {
+      "id": "lemon",
+      "category": "fruit",
+      "canonical": {
+        "en": "lemon",
+        "es": "limón",
+        "fr": "citron",
+        "nl": "citroen"
+      },
+      "aliases": ["lemon", "lemons", "limón", "limones", "limon", "limones", "citron", "citrons", "citroen", "citroenen"]
+    },
+    {
+      "id": "lime",
+      "category": "fruit",
+      "canonical": {
+        "en": "lime",
+        "es": "lima",
+        "fr": "citron vert",
+        "nl": "limoen"
+      },
+      "aliases": ["lime", "limes", "lima", "limas", "citron vert", "limoen", "limoenen"]
+    },
+    {
+      "id": "pear",
+      "category": "fruit",
+      "canonical": {
+        "en": "pear",
+        "es": "pera",
+        "fr": "poire",
+        "nl": "peer"
+      },
+      "aliases": ["pear", "pears", "pera", "peras", "poire", "poires", "peer", "peren"]
+    },
+    {
+      "id": "peach",
+      "category": "fruit",
+      "canonical": {
+        "en": "peach",
+        "es": "durazno",
+        "fr": "pêche",
+        "nl": "perzik"
+      },
+      "aliases": ["peach", "peaches", "durazno", "duraznos", "peche", "pêche", "péches", "pêches", "perzik", "perziken"]
+    },
+    {
+      "id": "strawberry",
+      "category": "fruit",
+      "canonical": {
+        "en": "strawberry",
+        "es": "fresa",
+        "fr": "fraise",
+        "nl": "aardbei"
+      },
+      "aliases": ["strawberry", "strawberries", "fresa", "fresas", "fraise", "fraises", "aardbei", "aardbeien"]
+    },
+    {
+      "id": "raspberry",
+      "category": "fruit",
+      "canonical": {
+        "en": "raspberry",
+        "es": "frambuesa",
+        "fr": "framboise",
+        "nl": "framboos"
+      },
+      "aliases": ["raspberry", "raspberries", "frambuesa", "frambuesas", "framboise", "framboises", "framboos", "frambozen"]
+    },
+    {
+      "id": "blueberry",
+      "category": "fruit",
+      "canonical": {
+        "en": "blueberry",
+        "es": "arándano",
+        "fr": "myrtille",
+        "nl": "bosbes"
+      },
+      "aliases": ["blueberry", "blueberries", "arandano", "arándano", "arándanos", "myrtille", "myrtilles", "bosbes", "bosbessen"]
+    },
+    {
+      "id": "watermelon",
+      "category": "fruit",
+      "canonical": {
+        "en": "watermelon",
+        "es": "sandía",
+        "fr": "pastèque",
+        "nl": "watermeloen"
+      },
+      "aliases": ["watermelon", "watermelons", "sandia", "sandía", "sandías", "pasteque", "pastèque", "pastèques", "watermeloen", "watermeloenen"]
+    },
+    {
+      "id": "melon",
+      "category": "fruit",
+      "canonical": {
+        "en": "melon",
+        "es": "melón",
+        "fr": "melon",
+        "nl": "meloen"
+      },
+      "aliases": ["melon", "melons", "melon", "melones", "melón", "melones", "melon", "melons", "meloen", "meloenen"]
+    },
+    {
+      "id": "grape",
+      "category": "fruit",
+      "canonical": {
+        "en": "grape",
+        "es": "uva",
+        "fr": "raisin",
+        "nl": "druif"
+      },
+      "aliases": ["grape", "grapes", "uva", "uvas", "raisin", "raisins", "druif", "druiven"]
+    },
+    {
+      "id": "tomato",
+      "category": "vegetable",
+      "canonical": {
+        "en": "tomato",
+        "es": "tomate",
+        "fr": "tomate",
+        "nl": "tomaat"
+      },
+      "aliases": ["tomato", "tomatoes", "tomate", "tomates", "tomaat", "tomaten"]
+    },
+    {
+      "id": "potato",
+      "category": "vegetable",
+      "canonical": {
+        "en": "potato",
+        "es": "papa",
+        "fr": "pomme de terre",
+        "nl": "aardappel"
+      },
+      "aliases": ["potato", "potatoes", "papa", "papas", "pomme de terre", "pommes de terre", "aardappel", "aardappels"]
+    },
+    {
+      "id": "carrot",
+      "category": "vegetable",
+      "canonical": {
+        "en": "carrot",
+        "es": "zanahoria",
+        "fr": "carotte",
+        "nl": "wortel"
+      },
+      "aliases": ["carrot", "carrots", "zanahoria", "zanahorias", "carotte", "carottes", "wortel", "wortels"]
+    },
+    {
+      "id": "onion",
+      "category": "vegetable",
+      "canonical": {
+        "en": "onion",
+        "es": "cebolla",
+        "fr": "oignon",
+        "nl": "ui"
+      },
+      "aliases": ["onion", "onions", "cebolla", "cebollas", "oignon", "oignons", "ui", "uien"]
+    },
+    {
+      "id": "garlic",
+      "category": "vegetable",
+      "canonical": {
+        "en": "garlic",
+        "es": "ajo",
+        "fr": "ail",
+        "nl": "knoflook"
+      },
+      "aliases": ["garlic", "ajo", "ajos", "ail", "knoflook"]
+    },
+    {
+      "id": "lettuce",
+      "category": "vegetable",
+      "canonical": {
+        "en": "lettuce",
+        "es": "lechuga",
+        "fr": "laitue",
+        "nl": "sla"
+      },
+      "aliases": ["lettuce", "lechuga", "lechugas", "laitue", "laitues", "sla", "slabonen"]
+    },
+    {
+      "id": "cucumber",
+      "category": "vegetable",
+      "canonical": {
+        "en": "cucumber",
+        "es": "pepino",
+        "fr": "concombre",
+        "nl": "komkommer"
+      },
+      "aliases": ["cucumber", "cucumbers", "pepino", "pepinos", "concombre", "concombres", "komkommer", "komkommers"]
+    },
+    {
+      "id": "pepper",
+      "category": "vegetable",
+      "canonical": {
+        "en": "pepper",
+        "es": "pimiento",
+        "fr": "poivron",
+        "nl": "paprika"
+      },
+      "aliases": ["pepper", "peppers", "pimiento", "pimientos", "poivron", "poivrons", "paprika", "paprika's"]
+    },
+    {
+      "id": "zucchini",
+      "category": "vegetable",
+      "canonical": {
+        "en": "zucchini",
+        "es": "calabacín",
+        "fr": "courgette",
+        "nl": "courgette"
+      },
+      "aliases": ["zucchini", "calabacin", "calabacín", "calabacines", "courgette", "courgettes"]
+    },
+    {
+      "id": "broccoli",
+      "category": "vegetable",
+      "canonical": {
+        "en": "broccoli",
+        "es": "brócoli",
+        "fr": "brocoli",
+        "nl": "broccoli"
+      },
+      "aliases": ["broccoli", "brocoli", "brócoli", "brócolis", "brocoli", "broccoli"]
+    },
+    {
+      "id": "spinach",
+      "category": "vegetable",
+      "canonical": {
+        "en": "spinach",
+        "es": "espinaca",
+        "fr": "épinard",
+        "nl": "spinazie"
+      },
+      "aliases": ["spinach", "espinaca", "espinacas", "epinard", "épinard", "épinards", "spinazie"]
+    },
+    {
+      "id": "cabbage",
+      "category": "vegetable",
+      "canonical": {
+        "en": "cabbage",
+        "es": "repollo",
+        "fr": "chou",
+        "nl": "kool"
+      },
+      "aliases": ["cabbage", "repollo", "repollos", "chou", "choux", "kool"]
+    },
+    {
+      "id": "celery",
+      "category": "vegetable",
+      "canonical": {
+        "en": "celery",
+        "es": "apio",
+        "fr": "céleri",
+        "nl": "selderij"
+      },
+      "aliases": ["celery", "apio", "apios", "celeri", "céleri", "céléris", "selderij"]
+    },
+    {
+      "id": "peas",
+      "category": "legume",
+      "canonical": {
+        "en": "peas",
+        "es": "guisantes",
+        "fr": "petits pois",
+        "nl": "erwten"
+      },
+      "aliases": ["pea", "peas", "guisante", "guisantes", "petit pois", "petits pois", "erwtje", "erwten"]
+    },
+    {
+      "id": "beans",
+      "category": "legume",
+      "canonical": {
+        "en": "beans",
+        "es": "frijoles",
+        "fr": "haricots",
+        "nl": "bonen"
+      },
+      "aliases": ["bean", "beans", "frijol", "frijoles", "haricot", "haricots", "boon", "bonen"]
+    },
+    {
+      "id": "lentils",
+      "category": "legume",
+      "canonical": {
+        "en": "lentils",
+        "es": "lentejas",
+        "fr": "lentilles",
+        "nl": "linzen"
+      },
+      "aliases": ["lentil", "lentils", "lenteja", "lentejas", "lentille", "lentilles", "linzen"]
+    },
+    {
+      "id": "chickpeas",
+      "category": "legume",
+      "canonical": {
+        "en": "chickpeas",
+        "es": "garbanzos",
+        "fr": "pois chiches",
+        "nl": "kikkererwten"
+      },
+      "aliases": ["chickpea", "chickpeas", "garbanzo", "garbanzos", "pois chiche", "pois chiches", "kikkererwt", "kikkererwten"]
+    },
+    {
+      "id": "parsley",
+      "category": "herb",
+      "canonical": {
+        "en": "parsley",
+        "es": "perejil",
+        "fr": "persil",
+        "nl": "peterselie"
+      },
+      "aliases": ["parsley", "perejil", "persil", "peterselie"]
+    },
+    {
+      "id": "basil",
+      "category": "herb",
+      "canonical": {
+        "en": "basil",
+        "es": "albahaca",
+        "fr": "basilic",
+        "nl": "basilicum"
+      },
+      "aliases": ["basil", "albahaca", "basilic", "basilicum"]
+    },
+    {
+      "id": "mint",
+      "category": "herb",
+      "canonical": {
+        "en": "mint",
+        "es": "menta",
+        "fr": "menthe",
+        "nl": "munt"
+      },
+      "aliases": ["mint", "menta", "menthe", "munt"]
+    },
+    {
+      "id": "cilantro",
+      "category": "herb",
+      "canonical": {
+        "en": "cilantro",
+        "es": "cilantro",
+        "fr": "coriandre",
+        "nl": "koriander"
+      },
+      "aliases": ["cilantro", "coriander", "cilantro", "coriandre", "koriander"]
+    },
+    {
+      "id": "milk",
+      "category": "grocery",
+      "canonical": {
+        "en": "milk",
+        "es": "leche",
+        "fr": "lait",
+        "nl": "melk"
+      },
+      "aliases": ["milk", "leche", "lait", "melk"]
+    },
+    {
+      "id": "bread",
+      "category": "grocery",
+      "canonical": {
+        "en": "bread",
+        "es": "pan",
+        "fr": "pain",
+        "nl": "brood"
+      },
+      "aliases": ["bread", "breads", "pan", "panes", "pain", "pains", "brood", "broden"]
+    },
+    {
+      "id": "butter",
+      "category": "grocery",
+      "canonical": {
+        "en": "butter",
+        "es": "mantequilla",
+        "fr": "beurre",
+        "nl": "boter"
+      },
+      "aliases": ["butter", "mantequilla", "beurre", "boter"]
+    },
+    {
+      "id": "cheese",
+      "category": "grocery",
+      "canonical": {
+        "en": "cheese",
+        "es": "queso",
+        "fr": "fromage",
+        "nl": "kaas"
+      },
+      "aliases": ["cheese", "queso", "quesos", "fromage", "fromages", "kaas"]
+    },
+    {
+      "id": "eggs",
+      "category": "grocery",
+      "canonical": {
+        "en": "eggs",
+        "es": "huevos",
+        "fr": "œufs",
+        "nl": "eieren"
+      },
+      "aliases": ["egg", "eggs", "huevo", "huevos", "œuf", "œufs", "ei", "eieren"]
+    },
+    {
+      "id": "rice",
+      "category": "grocery",
+      "canonical": {
+        "en": "rice",
+        "es": "arroz",
+        "fr": "riz",
+        "nl": "rijst"
+      },
+      "aliases": ["rice", "arroz", "riz", "rijst"]
+    },
+    {
+      "id": "pasta",
+      "category": "grocery",
+      "canonical": {
+        "en": "pasta",
+        "es": "pasta",
+        "fr": "pâtes",
+        "nl": "pasta"
+      },
+      "aliases": ["pasta", "pastas", "pasta", "pastas", "pates", "pâtes", "pasta"]
+    }
+  ]
+}

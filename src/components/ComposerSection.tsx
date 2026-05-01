@@ -2,6 +2,7 @@ import React, { forwardRef, useEffect, useMemo, useState } from 'react';
 import { Modal, Platform, Pressable, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useCtrlEnterSave } from '../hooks/useCtrlEnterSave';
+import { NoteComposerOcrPreview } from './NoteComposerOcrPreview';
 
 type Palette = {
   bg: string;
@@ -39,6 +40,9 @@ export const ComposerSection = forwardRef<TextInput, {
   onPasteImage: () => void;
   onSave: () => void;
   onSetCategory: (category: NoteCategory) => void;
+  onRemoveImage?: (index: number) => void;
+  onOcrAppendText?: (text: string) => void;
+  onOcrReplaceText?: (text: string) => void;
   generating?: boolean;
 }>(
   function ComposerSection(
@@ -58,6 +62,9 @@ export const ComposerSection = forwardRef<TextInput, {
       onPasteImage,
       onSave,
       onSetCategory,
+      onRemoveImage,
+      onOcrAppendText,
+      onOcrReplaceText,
       generating,
     },
     ref
@@ -293,6 +300,22 @@ export const ComposerSection = forwardRef<TextInput, {
             textAlignVertical: 'top',
           }}
         />
+
+        {draftImages.length > 0 && draftImages[0] && (
+          <NoteComposerOcrPreview
+            imageUri={draftImages[0]}
+            noteText={draftText}
+            onAppendText={(text) => {
+              onOcrAppendText?.(text);
+              onRemoveImage?.(0);
+            }}
+            onReplaceText={(text) => {
+              onOcrReplaceText?.(text);
+              onRemoveImage?.(0);
+            }}
+            onDismiss={() => onRemoveImage?.(0)}
+          />
+        )}
 
       </View>
     );

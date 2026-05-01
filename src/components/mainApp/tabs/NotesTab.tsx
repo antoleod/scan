@@ -358,6 +358,23 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
     }
   }
 
+  function handleRemoveImage(index: number) {
+    setDraftImages((current) => current.filter((_, i) => i !== index));
+  }
+
+  async function handleOcrAppendText(ocrText: string) {
+    const updatedText = draftText.trim()
+      ? `${draftText}\n\n--- Extracted text ---\n${ocrText}`
+      : ocrText;
+    setDraftText(updatedText);
+    // Smart workflow detection will happen on the next text change or save
+    // since we've updated the draft text
+  }
+
+  async function handleOcrReplaceText(ocrText: string) {
+    setDraftText(ocrText);
+  }
+
   async function duplicateNote(note: NoteItem) {
     const dupText = note.text + (note.text.trim() ? ' (copy)' : '(copy)');
     const groupId = note.groupId || (activeGroupId === 'personal' ? undefined : activeGroupId);
@@ -620,6 +637,9 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
                 onPasteImage={() => pasteImageFromClipboardToDraft().catch(() => undefined)}
                 onSave={() => saveDraftAsNote().catch(() => undefined)}
                 onSetCategory={setManualCategory}
+                onRemoveImage={handleRemoveImage}
+                onOcrAppendText={handleOcrAppendText}
+                onOcrReplaceText={handleOcrReplaceText}
                 generating={false}
               />
 
