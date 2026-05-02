@@ -11,6 +11,7 @@ import {
 } from './firebase';
 import { diag } from './diagnostics';
 import { clearDeletedNoteKeys, loadDeletedNoteKeys, markDeletedNoteKey, noteStorageKey } from './noteDeletions';
+import { enqueueOperation } from './offlineQueue';
 
 const NOTES_KEY = '@barra_notes_v1';
 const TEMPLATES_KEY = '@barra_note_templates_v1';
@@ -142,6 +143,9 @@ export async function loadNotes(): Promise<NoteItem[]> {
           createdAt: Number(item?.createdAt || Date.now()),
           updatedAt: Number(item?.updatedAt || Date.now()),
           deletedAt: typeof item?.deletedAt === 'number' ? Number(item.deletedAt) : undefined,
+          smartType: (['none', 'medication', 'shopping', 'reminder', 'task'].includes(String(item?.smartType || 'none')) ? item.smartType : 'none') as SmartWorkflowType,
+          workflowStatus: (['draft', 'active', 'completed', 'dismissed'].includes(String(item?.workflowStatus || '')) ? item.workflowStatus : undefined) as WorkflowStatus | undefined,
+          workflowMetadata: typeof item?.workflowMetadata === 'object' ? item.workflowMetadata : undefined,
           syncStatus: item?.syncStatus === 'pending' ? 'pending' : item?.syncStatus === 'synced' ? 'synced' : undefined,
         }))
         .filter((item) => {
@@ -164,6 +168,7 @@ async function pushNoteIfAuthenticated(note: NoteItem): Promise<boolean> {
     return true;
   } catch (error) {
     await diag.warn('notes.push.note.error', { message: String(error), noteId: note.id });
+    await enqueueOperation('upsertNote', note).catch(() => undefined);
     return false;
   }
 }
@@ -526,6 +531,43 @@ export async function clearDraftFlag(id: string): Promise<NoteItem[]> {
     await upsertSharedGroupNote(updated.groupId, updated);
   }
   return normalizeNotes(next);
+}
+
+export async function updateWorkflowStatus(
+  id: string,
+  status: WorkflowStatus,
+): Promise<NoteItem[]> {
+  const current = await loadNotes();
+  const next = current.map((item) =>
+    item.id === id
+      ? { ...item, workflowStatus: status, updatedAt: Date.now(), syncStatus: 'pending' as const }
+      : item,
+  );
+  await saveNotes(next);
+  const updated = next.find((item) => item.id === id);
+  if (updated) {
+    const synced = await pushNoteIfAuthenticated(updated);
+    if (synced) {
+      const syncedNext = next.map((item) => item.id === id ? { ...item, syncStatus: 'synced' as const } : item);
+      await saveNotes(syncedNext);
+      return normalizeNotes(syncedNext);
+    }
+  }
+  if (updated?.groupId) {
+    await upsertSharedGroupNote(updated.groupId, updated);
+  }
+  return normalizeNotes(next);
+}
+
+export async function markNotesSynced(noteIds: ReadonlySet<string>): Promise<NoteItem[]> {
+  const current = await loadNotes();
+  const updated = current.map((n) =>
+    noteIds.has(n.id) && n.syncStatus === 'pending'
+      ? { ...n, syncStatus: 'synced' as const }
+      : n,
+  );
+  await saveNotes(updated);
+  return normalizeNotes(updated);
 }
 
 export async function clearNotes(): Promise<void> {

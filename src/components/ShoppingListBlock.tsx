@@ -274,11 +274,15 @@ export function ShoppingListBlock({
   palette,
   expanded,
   onRawTextChange,
+  isShared,
+  sharedGroupName,
 }: {
   model: ShoppingListModel;
   palette: Palette;
   expanded: boolean;
   onRawTextChange: (newText: string) => void;
+  isShared?: boolean;
+  sharedGroupName?: string;
 }) {
   const [items, setItems]       = useState<ExtItem[]>(model.items);
   const [showRaw, setShowRaw]   = useState(false);
@@ -492,6 +496,26 @@ export function ShoppingListBlock({
         <Pill icon="pricetag-outline"    label={showPrice ? 'Hide prices' : 'Prices'} color="#F59E0B" onPress={() => setShowPrice((v) => !v)} />
         <Pill icon="share-social-outline" label="Share list"  color="#7C3AED"    onPress={() => handleShare()} />
         <Pill icon="code-outline"        label="Edit raw"     color={palette.textDim} onPress={() => { setRawDraft(shoppingListToText(items)); setShowRaw(true); }} />
+        {isShared && (
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 4,
+              paddingHorizontal: 8,
+              paddingVertical: 4,
+              borderRadius: 99,
+              backgroundColor: '#22c55e18',
+              borderWidth: 0.5,
+              borderColor: '#22c55e44',
+            }}
+          >
+            <Ionicons name="people-outline" size={12} color="#22c55e" />
+            <Text style={{ color: '#22c55e', fontSize: 11, fontWeight: '600' }}>
+              {sharedGroupName ? `Shared · ${sharedGroupName}` : 'Shared'}
+            </Text>
+          </View>
+        )}
       </View>
 
       {/* Toolbar — row 2: reset / clear done (only when relevant) */}

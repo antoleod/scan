@@ -35,9 +35,14 @@ import {
   updateNoteText,
   updateNoteTitle,
   buildAppointmentIcs,
+  updateWorkflowStatus,
+  markNotesSynced,
+  type WorkflowStatus,
 } from '../../../core/notes';
 import { detectSmartWorkflow, type SmartWorkflowDetection, type SmartWorkflowType } from '../../../core/smartNoteWorkflows';
 import { findMedication } from '../../../core/euMedicationDatabase';
+import { checkDueReminders, dismissReminder, snoozeReminder, scheduleReminder, type MedicationReminder } from '../../../core/medicationReminders';
+import { flushQueue } from '../../../core/offlineQueue';
 import { isShoppingList, parseShoppingList, shoppingListToText } from '../../../core/shoppingList';
 import { safeText } from '../../../utils/groceryDetection';
 import { ClipboardEntry } from '../../../core/clipboard.types';
@@ -146,6 +151,7 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
   const [draftImages, setDraftImages] = useState<string[]>([]);
   const [manualCategory, setManualCategory] = useState<NoteCategory | null>(null);
   const [detectedWorkflow, setDetectedWorkflow] = useState<SmartWorkflowDetection | null>(null);
+  const [dueReminders, setDueReminders] = useState<MedicationReminder[]>([]);
   const [filter, setFilter] = useState<NoteFilter>('all');
   const [expandedNoteId, setExpandedNoteId] = useState<string | null>(null);
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
@@ -245,8 +251,20 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
     }
     serverUpdateRef.current = false;
     if (notesSyncTimerRef.current) clearTimeout(notesSyncTimerRef.current);
-    notesSyncTimerRef.current = setTimeout(() => {
-      syncNotesWithFirebase(notes, templates).catch(() => undefined);
+    notesSyncTimerRef.current = setTimeout(async () => {
+      const pendingIds = new Set(
+        notes.filter((n) => n.syncStatus === 'pending').map((n) => n.id),
+      );
+      try {
+        await syncNotesWithFirebase(notes, templates);
+        if (pendingIds.size > 0) {
+          const updated = await markNotesSynced(pendingIds);
+          serverUpdateRef.current = true;   // prevents re-sync loop
+          setNotes(updated);
+        }
+      } catch {
+        // network/auth failure — notes stay pending, next sync will retry
+      }
     }, 1500);
     return () => {
       if (notesSyncTimerRef.current) clearTimeout(notesSyncTimerRef.current);
@@ -255,9 +273,19 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
 
   useEffect(() => {
     if (!user || Platform.OS !== 'web' || typeof window === 'undefined') return;
-    const retryPendingSync = () => {
-      if (!notes.some((item) => item.syncStatus === 'pending')) return;
-      syncNotesWithFirebase(notes, templates).catch(() => undefined);
+    const retryPendingSync = async () => {
+      const pendingIds = new Set(
+        notes.filter((n) => n.syncStatus === 'pending').map((n) => n.id),
+      );
+      if (pendingIds.size === 0) return;
+      try {
+        await syncNotesWithFirebase(notes, templates);
+        const updated = await markNotesSynced(pendingIds);
+        serverUpdateRef.current = true;
+        setNotes(updated);
+      } catch {
+        // network failure or auth issue
+      }
     };
     window.addEventListener('online', retryPendingSync);
     return () => window.removeEventListener('online', retryPendingSync);
@@ -360,6 +388,34 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
       setDetectedWorkflow(null);
     }
   }, [draftTextValue]);
+
+  // Poll for due medication reminders every 60 seconds
+  useEffect(() => {
+    const poll = async () => {
+      const due = await checkDueReminders();
+      setDueReminders(due);
+    };
+    void poll();
+    const interval = setInterval(() => void poll(), 60_000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Flush offline queue every 5 minutes
+  useEffect(() => {
+    void flushQueue();
+    const interval = setInterval(() => void flushQueue(), 5 * 60_000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Flush offline queue on web focus
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    const handleFocus = () => {
+      void flushQueue();
+    };
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, []);
 
   const filteredNotes = useMemo(() => {
     const q = String(searchText || '').trim().toLowerCase();
@@ -522,7 +578,17 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
     const noteText = lines.join('\n');
     const result = await addRichNoteUnique(noteText, 'health', [], groupId);
     setNotes(result.notes);
-    if (result.inserted) setFilter('all');
+    if (result.inserted) {
+      setFilter('all');
+      // Schedule reminder if follow-up time is set
+      if (metadata.followUpAt && metadata.medicationName) {
+        await scheduleReminder(
+          result.notes[0].id,
+          metadata.followUpAt,
+          String(metadata.medicationName),
+        ).catch(() => undefined);
+      }
+    }
   }
 
   function handleRemoveImage(index: number) {
@@ -862,6 +928,86 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
                 </View>
               )}
 
+              {dueReminders.length > 0 && (
+                <View
+                  style={{
+                    borderRadius: 12,
+                    borderWidth: 1,
+                    borderColor: '#4DA3FF44',
+                    backgroundColor: '#0F1A2E',
+                    padding: 12,
+                    marginBottom: 8,
+                    gap: 10,
+                  }}
+                >
+                  {dueReminders.map((reminder) => (
+                    <View key={reminder.noteId} style={{ gap: 6 }}>
+                      <Text style={{ color: '#4DA3FF', fontSize: 13, fontWeight: '700' }}>
+                        💊 Check in: {reminder.medicationName}
+                      </Text>
+                      <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
+                        <Pressable
+                          onPress={() =>
+                            dismissReminder(reminder.noteId)
+                              .then(() => checkDueReminders())
+                              .then(setDueReminders)
+                          }
+                          style={({ pressed }) => ({
+                            paddingHorizontal: 10,
+                            paddingVertical: 6,
+                            borderRadius: 6,
+                            backgroundColor: pressed ? '#22c55ecc' : '#22c55e',
+                            opacity: pressed ? 0.9 : 1,
+                          })}
+                        >
+                          <Text style={{ color: '#fff', fontSize: 12, fontWeight: '600' }}>
+                            Feeling better
+                          </Text>
+                        </Pressable>
+                        <Pressable
+                          onPress={() =>
+                            dismissReminder(reminder.noteId)
+                              .then(() => checkDueReminders())
+                              .then(setDueReminders)
+                          }
+                          style={({ pressed }) => ({
+                            paddingHorizontal: 10,
+                            paddingVertical: 6,
+                            borderRadius: 6,
+                            backgroundColor: pressed ? '#f59e0bcc' : '#f59e0b',
+                            opacity: pressed ? 0.9 : 1,
+                          })}
+                        >
+                          <Text style={{ color: '#fff', fontSize: 12, fontWeight: '600' }}>
+                            Still unwell
+                          </Text>
+                        </Pressable>
+                        <Pressable
+                          onPress={() =>
+                            snoozeReminder(reminder.noteId, 3_600_000)
+                              .then(() => checkDueReminders())
+                              .then(setDueReminders)
+                          }
+                          style={({ pressed }) => ({
+                            paddingHorizontal: 10,
+                            paddingVertical: 6,
+                            borderRadius: 6,
+                            borderWidth: 1,
+                            borderColor: palette.border,
+                            backgroundColor: pressed ? `${palette.muted}12` : 'transparent',
+                            opacity: pressed ? 0.9 : 1,
+                          })}
+                        >
+                          <Text style={{ color: palette.muted, fontSize: 12, fontWeight: '600' }}>
+                            Snooze 1h
+                          </Text>
+                        </Pressable>
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              )}
+
               {detectedWorkflow && detectedWorkflow.type !== 'none' && detectedWorkflow.confidence >= 0.65 && (
                 <SmartWorkflowCard
                   detection={detectedWorkflow}
@@ -991,6 +1137,10 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
                             onSetColor={(color) => setNoteColor(note.id, color).then(setNotes)}
                             onDoubleTap={() => setDetailNote(note)}
                             onDuplicate={() => duplicateNote(note).catch(() => undefined)}
+                            onUpdateWorkflowStatus={async (id, status) => {
+                              const next = await updateWorkflowStatus(id, status);
+                              setNotes(next);
+                            }}
                           />
                         </View>
                       );

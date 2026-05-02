@@ -105,15 +105,44 @@ export function isLikelyShoppingList(text: unknown): boolean {
 }
 
 function hasUserQuantity(line: string): boolean {
-  return QTY_RE.test(stripLeadingArticle(line));
+  const stripped = stripLeadingArticle(line);
+  // Quantity at start: "1 kg pommes"
+  if (QTY_RE.test(stripped)) return true;
+  // Quantity after separator: "Pommes — 1 kg" or "Pommes: 1 kg"
+  if (/[—\-:]\s*\d+(?:[,.]\d+)?\s*(?:kg|kilo|kilos|g|gr|grammes?|grams?|l|lt|litres?|liters?|ml|pcs|pieces?|pack|packs|paquet|paquets|bottle|bouteilles?|box|boites?|caja)\b/i.test(line)) {
+    return true;
+  }
+  return false;
 }
 
 export function formatShoppingList(text: unknown, options?: { language?: AppLanguage }): string {
   const language = options?.language || 'en';
+
+  // Common typo corrections
+  const typoMap: Record<string, string> = {
+    "jus d'organe": "jus d'orange",
+    "jus dorgane": "jus d'orange",
+    "creame": "crème",
+    "mozarella": "mozzarella",
+  };
+
+  const applyTypoCorrections = (str: string): string => {
+    let result = str;
+    for (const [typo, correction] of Object.entries(typoMap)) {
+      const regex = new RegExp(`\\b${typo}\\b`, 'gi');
+      result = result.replace(regex, correction);
+    }
+    return result;
+  };
+
   return splitLines(text)
     .map((line) => {
-      const original = safeText(line).trim().replace(/^[-*•]\s*/, '');
+      let original = safeText(line).trim().replace(/^[-*•]\s*/, '');
       if (!original) return '';
+
+      // Apply typo corrections
+      original = applyTypoCorrections(original);
+
       const detected = detectGroceryItem(original, language);
       if (hasUserQuantity(original) || !detected.defaultQuantity || detected.confidence < 0.65) {
         return original.startsWith('- ') ? original : `- ${original}`;

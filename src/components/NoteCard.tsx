@@ -13,7 +13,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { detectNoteEntities, buildSmartNoteModel, segmentNoteText, parseServiceNowFields, buildRedactedText, SmartNoteEntities, SmartNoteModel, ServiceNowField, ServiceNowModel, NoteSegment, SENSITIVE_FIELD_KEYS } from '../core/smartNotes';
 import { isShoppingList, parseShoppingList } from '../core/shoppingList';
 import { ShoppingListBlock } from './ShoppingListBlock';
+import { MedicationCard } from './MedicationCard';
 import { AppSettings } from '../types';
+import type { WorkflowStatus } from '../core/notes';
 import { useFieldVisibility } from '../hooks/useFieldVisibility';
 
 type Palette = {
@@ -44,6 +46,19 @@ type NoteItem = {
   versions?: { id: string; title?: string; text: string; createdAt: number }[];
   updatedAt: number;
   syncStatus?: 'pending' | 'synced';
+  smartType?: 'none' | 'medication' | 'shopping' | 'reminder' | 'task';
+  workflowStatus?: 'draft' | 'active' | 'completed' | 'dismissed';
+  workflowMetadata?: {
+    medicationName?: string;
+    doseText?: string;
+    takenAt?: number;
+    takenAtText?: string;
+    reason?: string;
+    followUpAt?: number;
+    followUpLabel?: string;
+    checklistItems?: { id: string; text: string; completed: boolean }[];
+  };
+  groupId?: string;
 };
 
 const colorSwatches: { key: NoteColor; hex: string; label: string }[] = [
@@ -165,6 +180,7 @@ export function NoteCard({
   onLongPress,
   onDoubleTap,
   onDuplicate,
+  onUpdateWorkflowStatus,
   settings,
 }: {
   note: NoteItem;
@@ -193,6 +209,7 @@ export function NoteCard({
   onLongPress?: () => void;
   onDoubleTap?: () => void;
   onDuplicate?: () => void;
+  onUpdateWorkflowStatus?: (id: string, status: WorkflowStatus) => void;
   settings: AppSettings;
 }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -528,12 +545,21 @@ export function NoteCard({
                 onPressOffice={onPressOffice}
                 onCopyValue={onCopyValue}
               />
+            ) : note.smartType === 'medication' ? (
+              <MedicationCard
+                metadata={note.workflowMetadata}
+                workflowStatus={note.workflowStatus}
+                palette={palette}
+                onComplete={() => onUpdateWorkflowStatus?.(note.id, 'completed')}
+                onDismiss={() => onUpdateWorkflowStatus?.(note.id, 'dismissed')}
+              />
             ) : isShopping && shoppingModel ? (
               <ShoppingListBlock
                 model={shoppingModel}
                 palette={palette}
                 expanded={expanded}
                 onRawTextChange={onChangeEditingText}
+                isShared={Boolean(note.groupId)}
               />
             ) : model.isList ? (
               <NoteListBlock model={model} palette={palette} expanded={expanded} />

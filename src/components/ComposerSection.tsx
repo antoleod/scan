@@ -86,6 +86,12 @@ export const ComposerSection = forwardRef<TextInput, {
     const { width } = useWindowDimensions();
     const isCompact = width < 520;
     const looksLikeShopping = useMemo(() => isLikelyShoppingList(draftTextValue), [draftTextValue]);
+    const [isFormatting, setIsFormatting] = useState(false);
+    const formattedPreview = useMemo(
+      () => (looksLikeShopping ? formatShoppingList(draftTextValue) : null),
+      [looksLikeShopping, draftTextValue],
+    );
+    const showFormatButton = looksLikeShopping && formattedPreview !== null && formattedPreview !== draftTextValue;
 
     // Ctrl+Enter / Cmd+Enter → save (only when there's something to save)
     useCtrlEnterSave(onSave, Boolean(draftTextValue.trim() || draftImages.length > 0));
@@ -368,11 +374,11 @@ export const ComposerSection = forwardRef<TextInput, {
           }}
         />
 
-        {looksLikeShopping ? (
+        {showFormatButton ? (
           <View style={{ marginTop: 8, padding: 10, borderRadius: 10, borderWidth: 1, borderColor: `${palette.accent}66`, backgroundColor: `${palette.accent}12`, flexDirection: 'row', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
             <Ionicons name="cart-outline" size={15} color={palette.accent} />
             <Text style={{ color: palette.textBody, fontSize: 12, fontWeight: '600', flex: 1, minWidth: 160 }}>Looks like a shopping list</Text>
-            <Pressable onPress={() => onChangeText(formatShoppingList(draftTextValue))} style={({ pressed }) => ({ minHeight: 34, paddingHorizontal: 12, borderRadius: 999, backgroundColor: palette.accent, justifyContent: 'center', opacity: pressed ? 0.82 : 1 })}>
+            <Pressable disabled={isFormatting} onPress={() => { if (isFormatting) return; setIsFormatting(true); onChangeText(formatShoppingList(draftTextValue)); setTimeout(() => setIsFormatting(false), 300); }} style={({ pressed }) => ({ minHeight: 34, paddingHorizontal: 12, borderRadius: 999, backgroundColor: palette.accent, justifyContent: 'center', opacity: isFormatting ? 0.5 : (pressed ? 0.82 : 1) })}>
               <Text style={{ color: '#000', fontSize: 12, fontWeight: '800' }}>Format list</Text>
             </Pressable>
           </View>
