@@ -1213,10 +1213,85 @@ export async function updateNoteSmartType(
 
 **Content Rendering** (`NoteContentRenderer.tsx`):
 Centralized component that renders notes based on smartType:
-1. Medication → `MedicationCard` (with complete/dismiss actions)
+1. Medication → `MedicationCard` (event/reminder UI — see below)
 2. Shopping → `ShoppingListBlock` (with editable items)
 3. List-like → `NoteListBlock` (checkboxes, bullets, numbered)
 4. Default → Plain text
+
+`NoteContentRenderer` passes `note.text` and `expanded` into `MedicationCard` so it can parse multi-med follow-up notes that only have a single `medicationName` in their stored metadata.
+
+**Medication card as cyclic event/reminder** (`MedicationCard.tsx`):
+Each medication in a follow-up note is rendered as **its own independent reminder row** with its own `[Taken] [Snooze] [Dismiss]` actions. There is no "global" or "focused" action that could affect the wrong medication. Single-medication notes use the same row layout (no special focus/secondary split).
+- Top label: `MEDICATION REMINDER` or `N MEDICATION REMINDERS` (and `SNOOZED REMINDER` if all active meds are snoozed).
+- Per-row content (one per medication):
+  - Name + dose chip + per-row badge (`SNOOZED` / `CANCELLED` if applicable).
+  - `Next suggested · HH:mm` or `Follow prescription schedule`.
+  - Countdown (color-coded: safe green / warn amber / due amber / overdue red / snoozed violet).
+  - Subtle taken meta: `Taken HH:mm · dose 500 mg` (uses the **user-entered dose label**; never a fabricated "dose 12" count).
+  - Inline action row: green `Taken`, violet outline `Snooze`, plain outline `Dismiss`.
+  - Snooze opens an inline `+10m / +30m / +1h` picker scoped to that row.
+  - Dismiss opens an inline confirmation row scoped to that row.
+- When *all* medications are dismissed, the whole card collapses to an `All reminders dismissed` placeholder; the note itself is never deleted.
+
+**Cycle data model** (`src/core/notes.ts`):
+- Time row: `Next suggested · HH:mm` or `Follow prescription schedule`.
+- Prominent countdown block: `in 2h 10m` / `Due now` / `Overdue 35m` / `Snoozed · in 25m`, color-coded:
+  - safe (>30m away): green `#22c55e`
+  - warn (≤30m away): amber `#f59e0b`
+  - due (±60s): amber `Due now`
+  - danger (overdue): red `#ef4444`
+  - snoozed: violet `#A970FF`
+- Secondary meds list ("Also today") — tappable rows switch focus; rows show snoozed/dismissed icons inline.
+- Subtle footer: `Taken HH:mm · dose N` (always when present), `Reason: …` (expanded only), `safetyNote` (expanded only).
+- Cyclic actions:
+  - **Taken** (green primary) → resets the cycle: `takenAt = now`, `nextSuggestedAt = now + recommendedIntervalHours·3600000`. If the medication has no `recommendedIntervalHours`, falls back to `Follow prescription schedule` (no invented intervals — important for antibiotics and meds without a fixed cadence).
+  - **Snooze** → inline picker with `+10m`, `+30m`, `+1h`. Sets med status to `snoozed`, shifts `nextSuggestedAt = now + snoozeMs`, the countdown updates immediately.
+  - **Dismiss** → inline confirmation ("Dismiss this reminder? The note stays saved.") before calling `dismissMedication`. Marks the focused med's status as `dismissed` *without* deleting the note.
+
+All three actions affect only the focused/selected medication — never the whole batch.
+
+**Cycle data model** (`src/core/notes.ts`):
+- `WorkflowStatus` extended to include `'snoozed'` (alongside `draft | active | completed | dismissed`).
+- `MedicationCycleEntry`: `{ name, dose?, takenAt?, lastTakenAt?, nextSuggestedAt?, snoozedUntil?, lastActionAt?, recommendedIntervalHours?, minimumIntervalHours?, followPrescription?, status?: 'active'|'snoozed'|'dismissed', safetyNote? }`. `dose` is **never** mutated by the cycle helpers — it only changes when the user edits it manually.
+- `WorkflowMetadata.medications?: MedicationCycleEntry[]` is now persisted on the note (was previously dropped after creation).
+- Note-level `workflowStatus` is derived from per-med statuses by `deriveNoteStatusFromMeds`: any active → `active`; all dismissed → `dismissed`; otherwise `snoozed`.
+- `syncMetadataFromMeds` keeps top-level shortcuts (`medicationName`, `doseText`, `followUpAt`, `takenAt`) aligned with the focused (nearest active/snoozed) med so legacy consumers keep working.
+
+**New cycle helpers** (`src/core/notes.ts`) — each operates on a **single medIndex** and never touches sibling medications:
+- `markMedicationTaken(noteId, medIndex, takenAt = Date.now())` — sets `takenAt = lastTakenAt = takenAt`, recalculates `nextSuggestedAt` from `recommendedIntervalHours` (or sets `followPrescription` when no interval is configured — no invented intervals), clears `snoozedUntil`, sets `status = 'active'`, updates `lastActionAt`. **Does not touch `dose`.**
+- `snoozeMedication(noteId, medIndex, snoozeMs)` — sets `snoozedUntil = nextSuggestedAt = now + snoozeMs`, `status = 'snoozed'`, updates `lastActionAt`. `takenAt` is preserved. Clamps `snoozeMs >= 60s`.
+- `dismissMedication(noteId, medIndex)` — sets med `status = 'dismissed'`, clears `nextSuggestedAt` and `snoozedUntil`, updates `lastActionAt`. For legacy notes without a `medications` array, falls back to setting note `workflowStatus = 'dismissed'`.
+- All three reuse a shared `persistNoteMutation(id, mutate)` helper that loads → mutates → saves → pushes to Firebase (or falls back to shared-group upsert).
+
+**Datetime UX in `MedicationWorkflowModal`**:
+- `Taken at` is no longer a manual `YYYY-MM-DD HH:mm` string. On web it renders a native `<input type="datetime-local">` (via `React.createElement` to bypass RN-Web TextInput limits); on native it falls back to a tolerant `TextInput`.
+- Quick presets below the picker: `Now`, `1h ago`, `4h ago`, `6h ago` (interpreted as offsets from now).
+- Internally `takenAtMs` is held as a number, persisted on each `MedicationCycleEntry` as `takenAt` (ms epoch) and as ISO via `takenAtIso` for legacy consumers; the human-readable string `takenAtText` is also written for backward compatibility.
+
+**Reminder scheduling integration**:
+`NotesTab.handleMedicationTaken` reschedules the reminder for the new `nextSuggestedAt` after a Taken action; `handleMedicationSnooze` reschedules to the snoozed time; `handleMedicationDismissCycle` calls `dismissReminder` so the reminders panel stops surfacing it.
+
+**Backwards compatibility**:
+- Notes created before the cycle work have no `medications[]` array. `resolveMedications` in the card synthesizes one entry from `metadata.medicationName/doseText/takenAt/followUpAt` if present, else falls back to `parseLegacyMedicationNote` which parses the legacy note text format (`{name} · {dose} · Next suggested HH:MM`).
+- The legacy `onMedicationComplete` / `onMedicationDismiss` path on `NoteContentRenderer` is preserved; the new `onTaken` / `onSnooze` / `onDismissCycle` callbacks take precedence when wired.
+- Legacy `'completed'` status still renders the green "Completed" placeholder (no auto-completion in the new flow — Taken keeps the card active).
+
+**Constraints preserved**:
+- Swipe actions (Remind / Archive / Delete) and footer actions (Copy / Edit / Duplicate / Pin) live at the `NoteCard` level. The redesigned medication card only replaces the card *content*; all gestures, sync, offline queue and selection mode remain intact.
+- No new dependencies. Theme tokens reused (`surface`, `border`, `textPrimary`, `textBody`, `textDim`, `textMuted`) plus the existing `#4DA3FF` (medication accent) and `#A970FF` (snoozed/device accent — already in palette via `typeMeta`).
+- Mobile-first; flex rows wrap cleanly on desktop. Inline confirmations / snooze picker reuse the card body so the bottom navigation is never overlapped.
+- Defensive parsing: `safeStr`, `Number.isFinite` checks on every timestamp, hour/minute bounds, `clampMedIndex` for selection, `ensureMedicationsList` for legacy notes — no `undefined.trim()` paths.
+
+**Tests** (run with `npm run typecheck` + `npm test`):
+- Existing test suite (23/23 ✅) including smart-type detection, shopping list parsing, classify/extract/PI, backup roundtrip — all green after the refactor.
+- Manual verification (no UI test harness in repo):
+  - create follow-up: modal saves `medications[]` with proper `takenAt` ms + ISO; note shows on the list.
+  - datetime picker: web shows native `datetime-local`; native shows tolerant `TextInput`; quick buttons set `takenAt = now − offset`.
+  - Taken: `markMedicationTaken` → fresh `nextSuggestedAt`, card stays active, countdown re-renders, reminder rescheduled.
+  - Snooze: `+10m / +30m / +1h` shifts `nextSuggestedAt`, countdown immediately reflects, label switches to `Snoozed · in …`.
+  - Dismiss: confirmation row appears first; confirming sets med `status = 'dismissed'`, card greys out and shows "Reminder cancelled" once *all* meds are dismissed; the underlying note is not deleted (Copy / Edit / Archive / Delete remain available).
+  - Multi-medication: secondary rows tappable to switch focus; per-med actions (only the focused med advances/snoozes/dismisses); pager `i/N` reflects selection.
+  - Old notes: notes without `medications[]` still render — `parseLegacyMedicationNote` reconstructs from text + top-level metadata, and the legacy complete/dismiss callbacks still work.
 
 **Health Keyword Blockers**:
 Prevents medication/doctor/health notes from being misclassified as shopping lists:

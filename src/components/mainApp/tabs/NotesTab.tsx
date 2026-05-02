@@ -38,13 +38,17 @@ import {
   updateWorkflowStatus,
   updateNoteSmartType,
   markNotesSynced,
+  markMedicationTaken,
+  snoozeMedication,
+  dismissMedication,
   type WorkflowStatus,
+  type MedicationCycleEntry,
 } from '../../../core/notes';
 import { detectSmartWorkflow, type SmartWorkflowDetection, type SmartWorkflowType } from '../../../core/smartNoteWorkflows';
 import { findMedication } from '../../../core/euMedicationDatabase';
 import { checkDueReminders, dismissReminder, snoozeReminder, scheduleReminder, type MedicationReminder } from '../../../core/medicationReminders';
 import { flushQueue } from '../../../core/offlineQueue';
-import { isShoppingList, parseShoppingList, shoppingListToText } from '../../../core/shoppingList';
+import { parseShoppingList, shoppingListToText, type ShoppingListCandidateAnalysis } from '../../../core/shoppingList';
 import { safeText } from '../../../utils/groceryDetection';
 import { ClipboardEntry } from '../../../core/clipboard.types';
 import { loadDeletedNoteKeys, markDeletedNoteKey, noteStorageKey } from '../../../core/noteDeletions';
@@ -383,7 +387,7 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
     }
 
     const detection = detectSmartWorkflow(draftTextValue);
-    if (detection.type !== 'none' && detection.confidence >= 0.65) {
+    if (detection.type !== 'none' && detection.type !== 'shopping' && detection.confidence >= 0.65) {
       setDetectedWorkflow(detection);
     } else {
       setDetectedWorkflow(null);
@@ -512,14 +516,7 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
 
   async function saveDraftAsNote() {
     const groupId = activeGroupId === 'personal' ? undefined : activeGroupId;
-    const shoppingModel = isShoppingList(draftTextValue) ? parseShoppingList(draftTextValue) : null;
-    const noteText = shoppingModel?.isShoppingList && shoppingModel.items.length >= 4
-      ? shoppingListToText(shoppingModel.items)
-      : draftTextValue;
-    const noteCategory = shoppingModel?.isShoppingList && shoppingModel.items.length >= 4
-      ? 'shopping'
-      : activeCategory;
-    const result = await addRichNoteUnique(noteText, noteCategory, draftImages, groupId, true);
+    const result = await addRichNoteUnique(draftTextValue, activeCategory, draftImages, groupId, true, false);
     setNotes(result.notes);
     if (result.inserted) {
       showToast('Note saved');
@@ -528,7 +525,7 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
       // Detect smart workflows (medication, shopping, reminder, task)
       if (draftTextValue.trim().length > 0) {
         const detection = detectSmartWorkflow(draftTextValue);
-        if (detection.type !== 'none' && detection.confidence >= 0.65) {
+        if (detection.type !== 'none' && detection.type !== 'shopping' && detection.confidence >= 0.65) {
           setDetectedWorkflow(detection);
         }
       }
@@ -549,6 +546,22 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
     }
   }
 
+  function openShoppingWorkflowFromDraft(analysis?: ShoppingListCandidateAnalysis) {
+    const model = analysis?.parsedItems?.length
+      ? { items: analysis.parsedItems }
+      : parseShoppingList(draftTextValue);
+    const items = model.items.filter((item) => String(item.label || '').trim());
+    if (items.length < 3) {
+      showToast('Add at least 3 items');
+      return;
+    }
+    setWorkflowModalData({
+      items: shoppingListToText(items).split('\n').filter(Boolean),
+      sourceText: draftTextValue,
+    });
+    setWorkflowModalType('shopping');
+  }
+
   async function createMedicationFollowUpNote(metadata: WorkflowMetadata) {
     // Validate medication name is provided
     const medicationName = String(metadata.medicationName || '').trim();
@@ -564,28 +577,78 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
     }
 
     const groupId = activeGroupId === 'personal' ? undefined : activeGroupId;
-    const meds = Array.isArray((metadata as WorkflowMetadata & { medications?: Array<{ name?: string; dose?: string; nextSuggestedAt?: string; followPrescription?: boolean }> }).medications)
-      ? ((metadata as WorkflowMetadata & { medications?: Array<{ name?: string; dose?: string; nextSuggestedAt?: string; followPrescription?: boolean }> }).medications || [])
+    type IncomingMed = {
+      name?: string;
+      dose?: string;
+      takenAt?: number | string;
+      lastTakenAt?: number | string;
+      lastActionAt?: number | string;
+      nextSuggestedAt?: number | string;
+      snoozedUntil?: number | string;
+      recommendedIntervalHours?: number;
+      minIntervalHours?: number;
+      minimumIntervalHours?: number;
+      followPrescription?: boolean;
+      safetyNote?: string;
+      status?: 'active' | 'snoozed' | 'dismissed';
+    };
+    const incomingMeds: IncomingMed[] = Array.isArray((metadata as WorkflowMetadata & { medications?: IncomingMed[] }).medications)
+      ? ((metadata as WorkflowMetadata & { medications?: IncomingMed[] }).medications || [])
       : [];
-    const reason = String(metadata.reason || '').trim();
-    const takenAt = String(metadata.takenAtText || '').trim();
-    const medLines = meds.length > 0
-      ? meds.map((entry) => {
+
+    const toMs = (v: unknown): number | undefined => {
+      if (typeof v === 'number' && Number.isFinite(v)) return v;
+      if (typeof v === 'string' && v.trim()) {
+        const t = new Date(v).getTime();
+        return Number.isFinite(t) ? t : undefined;
+      }
+      return undefined;
+    };
+
+    const cycleMeds: MedicationCycleEntry[] = (incomingMeds.length
+      ? incomingMeds
+      : [{ name: medicationName, dose: String(metadata.doseText || '').trim() || undefined } as IncomingMed]
+    )
+      .map((entry): MedicationCycleEntry | null => {
         const name = String(entry.name || '').trim();
-        if (!name) return '';
-        const dose = String(entry.dose || '').trim();
-        const nextText = entry.nextSuggestedAt
-          ? `Next suggested ${new Date(entry.nextSuggestedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
-          : 'Follow prescription';
-        return `${name}${dose ? ` · ${dose}` : ''} · ${nextText}`;
-      }).filter(Boolean)
-      : [medicationName].filter(Boolean);
-    if (!medLines.length) return;
-    const header = medLines.length > 1 ? `Medication Follow-up · ${medLines.length} meds` : 'Medication Follow-up';
+        if (!name) return null;
+        const takenAtMs = toMs(entry.takenAt) ?? toMs(metadata.takenAt);
+        return {
+          name,
+          dose: String(entry.dose || '').trim() || undefined,
+          takenAt: takenAtMs,
+          lastTakenAt: toMs(entry.lastTakenAt) ?? takenAtMs,
+          lastActionAt: toMs(entry.lastActionAt) ?? takenAtMs,
+          nextSuggestedAt: toMs(entry.nextSuggestedAt),
+          snoozedUntil: toMs(entry.snoozedUntil),
+          recommendedIntervalHours: typeof entry.recommendedIntervalHours === 'number' ? entry.recommendedIntervalHours : undefined,
+          minimumIntervalHours: typeof entry.minimumIntervalHours === 'number'
+            ? entry.minimumIntervalHours
+            : (typeof entry.minIntervalHours === 'number' ? entry.minIntervalHours : undefined),
+          followPrescription: Boolean(entry.followPrescription) || !entry.nextSuggestedAt,
+          safetyNote: typeof entry.safetyNote === 'string' ? entry.safetyNote : undefined,
+          status: entry.status || 'active',
+        };
+      })
+      .filter((m): m is MedicationCycleEntry => m !== null);
+
+    if (!cycleMeds.length) return;
+
+    const reason = String(metadata.reason || '').trim();
+    const takenAtText = String(metadata.takenAtText || '').trim();
+    const medLines = cycleMeds.map((entry) => {
+      const dose = entry.dose ? ` · ${entry.dose}` : '';
+      const next = typeof entry.nextSuggestedAt === 'number'
+        ? ` · Next suggested ${new Date(entry.nextSuggestedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+        : ' · Follow prescription';
+      return `${entry.name}${dose}${next}`;
+    });
+
+    const header = cycleMeds.length > 1 ? `Medication Follow-up · ${cycleMeds.length} meds` : 'Medication Follow-up';
     const lines = [
       header,
       ...medLines,
-      takenAt ? `Taken ${takenAt}` : '',
+      takenAtText ? `Taken ${takenAtText}` : '',
       reason ? `Reason: ${reason}` : '',
       'Verify with leaflet, prescription, doctor or pharmacist.',
     ].filter(Boolean);
@@ -596,14 +659,16 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
       setFilter('all');
       const createdNote = result.notes[0];
 
-      // Set smartType and workflow metadata on the created note
+      const focus = cycleMeds[0];
       const workflowMeta: WorkflowMetadata = {
-        medicationName: String(metadata.medicationName || ''),
-        doseText: meds.map((m) => String(m.dose || '')).filter(Boolean).join(', ') || undefined,
-        takenAtText: takenAt || undefined,
+        medicationName: focus.name,
+        doseText: focus.dose,
+        takenAt: focus.takenAt,
+        takenAtText: takenAtText || undefined,
         reason: reason || undefined,
-        followUpAt: metadata.followUpAt,
+        followUpAt: focus.nextSuggestedAt,
         followUpLabel: metadata.followUpLabel || undefined,
+        medications: cycleMeds,
       };
       const updatedNotes = await updateNoteSmartType(
         createdNote.id,
@@ -613,15 +678,47 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
       );
       setNotes(updatedNotes);
 
-      // Schedule reminder if follow-up time is set
-      if (metadata.followUpAt && metadata.medicationName) {
+      if (typeof focus.nextSuggestedAt === 'number' && focus.nextSuggestedAt > Date.now()) {
         await scheduleReminder(
           createdNote.id,
-          metadata.followUpAt,
-          String(metadata.medicationName),
+          focus.nextSuggestedAt,
+          focus.name,
         ).catch(() => undefined);
       }
     }
+  }
+
+  async function handleMedicationTaken(noteId: string, medIndex: number) {
+    const updated = await markMedicationTaken(noteId, medIndex, Date.now());
+    setNotes(updated);
+    const note = updated.find((n) => n.id === noteId);
+    const focus = note?.workflowMetadata?.medications?.[medIndex];
+    if (focus && typeof focus.nextSuggestedAt === 'number' && focus.nextSuggestedAt > Date.now()) {
+      await scheduleReminder(noteId, focus.nextSuggestedAt, focus.name).catch(() => undefined);
+      showToast(`Cycle reset · next ${new Date(focus.nextSuggestedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`);
+    } else {
+      showToast('Marked taken · follow prescription');
+    }
+  }
+
+  async function handleMedicationSnooze(noteId: string, medIndex: number, snoozeMs: number) {
+    const updated = await snoozeMedication(noteId, medIndex, snoozeMs);
+    setNotes(updated);
+    const note = updated.find((n) => n.id === noteId);
+    const focus = note?.workflowMetadata?.medications?.[medIndex];
+    if (focus && typeof focus.nextSuggestedAt === 'number') {
+      await scheduleReminder(noteId, focus.nextSuggestedAt, focus.name).catch(() => undefined);
+    } else {
+      await snoozeReminder(noteId, snoozeMs).catch(() => undefined);
+    }
+    showToast('Snoozed');
+  }
+
+  async function handleMedicationDismissCycle(noteId: string, medIndex: number) {
+    const updated = await dismissMedication(noteId, medIndex);
+    setNotes(updated);
+    await dismissReminder(noteId).catch(() => undefined);
+    showToast('Reminder dismissed');
   }
 
   function handleRemoveImage(index: number) {
@@ -927,6 +1024,9 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
                   setManualCategory('shopping');
                   showToast('Shopping item added');
                 }}
+                onConvertShoppingCandidate={(analysis) => {
+                  openShoppingWorkflowFromDraft(analysis);
+                }}
                 onRemoveImage={handleRemoveImage}
                 onOcrAppendText={handleOcrAppendText}
                 onOcrReplaceText={handleOcrReplaceText}
@@ -1174,6 +1274,9 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
                               const next = await updateWorkflowStatus(id, status);
                               setNotes(next);
                             }}
+                            onMedicationTaken={(id, medIndex) => handleMedicationTaken(id, medIndex).catch(() => undefined)}
+                            onMedicationSnooze={(id, medIndex, ms) => handleMedicationSnooze(id, medIndex, ms).catch(() => undefined)}
+                            onMedicationDismissCycle={(id, medIndex) => handleMedicationDismissCycle(id, medIndex).catch(() => undefined)}
                           />
                         </View>
                       );
@@ -1504,6 +1607,15 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
             if (result.inserted) {
               showToast('Shopping list created');
               setFilter('all');
+              setDraftText('');
+              setDraftImages([]);
+              setManualCategory(null);
+              setDraftAutoSaveStatus('idle');
+              if (draftAutoSaveTimerRef.current) {
+                clearTimeout(draftAutoSaveTimerRef.current);
+                draftAutoSaveTimerRef.current = null;
+              }
+              AsyncStorage.removeItem(DRAFT_KEY).catch(() => undefined);
             } else {
               showToast('Shopping list already exists');
             }

@@ -49,7 +49,7 @@ type NoteItem = {
   updatedAt: number;
   syncStatus?: 'pending' | 'synced';
   smartType?: 'none' | 'medication' | 'shopping' | 'reminder' | 'task';
-  workflowStatus?: 'draft' | 'active' | 'completed' | 'dismissed';
+  workflowStatus?: 'draft' | 'active' | 'snoozed' | 'completed' | 'dismissed';
   workflowMetadata?: {
     medicationName?: string;
     doseText?: string;
@@ -58,6 +58,20 @@ type NoteItem = {
     reason?: string;
     followUpAt?: number;
     followUpLabel?: string;
+    medications?: Array<{
+      name: string;
+      dose?: string;
+      takenAt?: number;
+      lastTakenAt?: number;
+      nextSuggestedAt?: number;
+      snoozedUntil?: number;
+      lastActionAt?: number;
+      recommendedIntervalHours?: number;
+      minimumIntervalHours?: number;
+      followPrescription?: boolean;
+      status?: 'active' | 'snoozed' | 'dismissed';
+      safetyNote?: string;
+    }>;
     checklistItems?: { id: string; text: string; completed: boolean }[];
   };
   groupId?: string;
@@ -183,6 +197,9 @@ export function NoteCard({
   onDoubleTap,
   onDuplicate,
   onUpdateWorkflowStatus,
+  onMedicationTaken,
+  onMedicationSnooze,
+  onMedicationDismissCycle,
   settings,
 }: {
   note: NoteItem;
@@ -212,6 +229,9 @@ export function NoteCard({
   onDoubleTap?: () => void;
   onDuplicate?: () => void;
   onUpdateWorkflowStatus?: (id: string, status: WorkflowStatus) => void;
+  onMedicationTaken?: (id: string, medIndex: number) => void;
+  onMedicationSnooze?: (id: string, medIndex: number, snoozeMs: number) => void;
+  onMedicationDismissCycle?: (id: string, medIndex: number) => void;
   settings: AppSettings;
 }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -322,7 +342,7 @@ export function NoteCard({
   const isSmart = smart.type !== 'general';
   const model = useMemo(() => buildSmartNoteModel(noteText, smart), [noteText, smart]);
   const sfModel = useMemo(() => parseServiceNowFields(noteText), [noteText]);
-  const isShopping = useMemo(() => isShoppingList(noteText), [noteText]);
+  const isShopping = useMemo(() => note.smartType === 'shopping' || note.category === 'shopping' || isShoppingList(noteText), [note.category, note.smartType, noteText]);
   const shoppingModel = useMemo(() => isShopping ? parseShoppingList(noteText) : null, [isShopping, noteText]);
   const { hiddenKeys, toggleField } = useFieldVisibility();
   // Word / char count for the footer stat chip
@@ -560,6 +580,9 @@ export function NoteCard({
                 onCopyValue={onCopyValue}
                 onMedicationComplete={() => onUpdateWorkflowStatus?.(note.id, 'completed')}
                 onMedicationDismiss={() => onUpdateWorkflowStatus?.(note.id, 'dismissed')}
+                onMedicationTaken={onMedicationTaken ? (idx) => onMedicationTaken(note.id, idx) : undefined}
+                onMedicationSnooze={onMedicationSnooze ? (idx, ms) => onMedicationSnooze(note.id, idx, ms) : undefined}
+                onMedicationDismissCycle={onMedicationDismissCycle ? (idx) => onMedicationDismissCycle(note.id, idx) : undefined}
               />
             )}
 
@@ -1212,4 +1235,3 @@ function SmartEntityBlock({
     </View>
   );
 }
-

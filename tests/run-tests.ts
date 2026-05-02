@@ -7,7 +7,8 @@ import { extractFields } from "../src/core/extract";
 import { historyKey } from "../src/core/history";
 import { defaultSettings, piLogic } from "../src/core/settings";
 import { detectGroceryItem, formatShoppingList, isLikelyShoppingList, searchGroceryCatalog } from "../src/utils/groceryDetection";
-import { isShoppingList } from "../src/core/shoppingList";
+import { analyzeShoppingListCandidate, isShoppingList, parseShoppingList } from "../src/core/shoppingList";
+import { findProductAlias, getAllShoppingDictionaries, isConnector, isKnownUnit, isNarrativeBlocker } from "../src/core/shoppingDictionary";
 import { detectSmartTypeFromContent } from "../src/core/smartNoteWorkflows";
 import { createTrieFromWords } from "../src/utils/trie";
 
@@ -232,6 +233,107 @@ run("health keywords in French prevent shopping list misclassification", () => {
 run("time formats like 08:40 are excluded from quantity parsing", () => {
   const timeNote = "Meeting at 08:40, reminder set for 10:30 AM";
   assert.equal(isShoppingList(timeNote), false);
+});
+
+run("shopping candidate analysis suggests short product lists", () => {
+  const analysis = analyzeShoppingListCandidate("arroz, leche, huevos");
+  assert.equal(analysis.isCandidate, true);
+  assert.equal(analysis.parsedItems.length, 3);
+});
+
+run("shopping candidate analysis rejects narrative sentences", () => {
+  const analysis = analyzeShoppingListCandidate("Hoy comí arroz con leche y huevos");
+  assert.equal(analysis.isCandidate, false);
+});
+
+run("shopping dictionaries load language data", () => {
+  const dictionaries = getAllShoppingDictionaries();
+  assert.equal(dictionaries.length >= 4, true);
+  assert.equal(dictionaries.some((dictionary) => dictionary.language === "es"), true);
+  assert.equal(dictionaries.some((dictionary) => dictionary.products.length > 0), true);
+});
+
+run("shopping dictionary aliases and typos resolve to canonical products", () => {
+  assert.equal(findProductAlias("azura")?.canonical, "Azúcar");
+  assert.equal(findProductAlias("azucar")?.canonical, "Azúcar");
+  assert.equal(findProductAlias("pain au lait")?.canonical, "Pain au lait");
+  assert.equal(findProductAlias("coca-cola")?.canonical, "Coca cola");
+});
+
+run("shopping dictionary helpers detect connectors blockers and units", () => {
+  assert.equal(isConnector("y"), true);
+  assert.equal(isConnector("et"), true);
+  assert.equal(isConnector("and"), true);
+  assert.equal(isNarrativeBlocker("me gusta el arroz con leche"), true);
+  assert.equal(isKnownUnit("kg"), true);
+  assert.equal(isKnownUnit("bouteilles"), true);
+});
+
+[
+  "arroz, leche, huevos",
+  "arroz leche huevos azucar",
+  "arroz leche huevos azúcar",
+  "azura leche y pan",
+  "leche y pan",
+  "arroz, leche y huevos",
+  "lait sucre et pain",
+  "pain, lait et coca cola, beurre",
+  "pain au lait, coca cola, beurre",
+  "pommes de terre oignons ail",
+  "rice milk eggs sugar",
+  "milk bread and cheese",
+  "rijst melk eieren suiker",
+  "melk brood en kaas",
+].forEach((input) => {
+  run(`shopping candidate detects ${input}`, () => {
+    assert.equal(analyzeShoppingListCandidate(input).isCandidate, true);
+  });
+});
+
+[
+  "hoy comí arroz con leche y huevos",
+  "hoy comi arroz con leche y huevos",
+  "me gusta el arroz con leche",
+  "arroz con leche es un postre",
+  "necesito comprar pan mañana",
+  "quiero leche pero no sé si comprarla",
+  "j’aime le pain au lait",
+  "lait et pain sont sur la table",
+  "I like milk and bread",
+  "I ate rice with eggs today",
+  "ik hou van melk en brood",
+].forEach((input) => {
+  run(`shopping candidate rejects ${input}`, () => {
+    assert.equal(analyzeShoppingListCandidate(input).isCandidate, false);
+  });
+});
+
+run("shopping parser canonicalizes typo and connector products", () => {
+  const labels = parseShoppingList("azura leche y pan").items.map((item) => item.label);
+  assert.deepEqual(labels, ["Azúcar", "Leche", "Pan"]);
+});
+
+run("shopping parser preserves French connector products", () => {
+  const labels = parseShoppingList("lait sucre et pain").items.map((item) => item.label);
+  assert.deepEqual(labels, ["Lait", "Sucre", "Pain"]);
+});
+
+run("shopping parser preserves multi-word products", () => {
+  const labels = parseShoppingList("pain, lait et coca cola, beurre").items.map((item) => item.label);
+  assert.deepEqual(labels, ["Pain", "Lait", "Coca cola", "Beurre"]);
+  const multiLabels = parseShoppingList("pain au lait, coca cola, beurre").items.map((item) => item.label);
+  assert.deepEqual(multiLabels, ["Pain au lait", "Coca cola", "Beurre"]);
+});
+
+run("shopping parser extracts quantities and units", () => {
+  const poires = parseShoppingList("3 poires").items[0];
+  assert.equal(poires.label, "Poire");
+  assert.equal(poires.quantity, "3");
+  assert.equal(poires.unit, "pièces");
+  const lardons = parseShoppingList("400 g lardons").items[0];
+  assert.equal(lardons.label, "Lardons");
+  assert.equal(lardons.quantity, "400");
+  assert.equal(lardons.unit, "g");
 });
 
 run("trie keyword matching detects medication keywords efficiently", () => {

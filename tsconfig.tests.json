@@ -8,6 +8,7 @@
     "noEmit": false,
     "strict": true,
     "esModuleInterop": true,
+    "resolveJsonModule": true,
     "skipLibCheck": true,
     "declaration": false,
     "sourceMap": false
@@ -18,6 +19,8 @@
     "src/core/barcode.ts",
     "src/core/classify.ts",
     "src/core/extract.ts",
+    "src/core/shoppingDictionary.ts",
+    "src/core/shoppingList.ts",
     "src/core/settings.ts",
     "src/types.ts"
   ]

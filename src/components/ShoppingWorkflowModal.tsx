@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Modal,
   Pressable,
@@ -45,6 +45,18 @@ export function ShoppingWorkflowModal({
   );
   const [newItemText, setNewItemText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    if (!visible) return;
+    setItems(
+      initialItems.map((text, idx) => ({
+        id: `item_${idx}_${Date.now()}`,
+        text,
+        completed: false,
+      })),
+    );
+    setNewItemText('');
+  }, [initialItems, visible]);
 
   const handleAddItem = () => {
     if (!newItemText.trim()) return;
@@ -104,6 +116,15 @@ export function ShoppingWorkflowModal({
         </View>
 
         <ScrollView style={styles.content} keyboardShouldPersistTaps="handled">
+          <View style={styles.intro}>
+            <Text style={[styles.introTitle, { color: theme.text }]}>
+              Review your shopping list
+            </Text>
+            <Text style={[styles.introText, { color: theme.textSecondary }]}>
+              Add anything else you want to attach before creating it.
+            </Text>
+          </View>
+
           {/* Items list */}
           <View style={styles.itemsContainer}>
             {items.map(item => (
@@ -241,6 +262,20 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
+  },
+  intro: {
+    paddingHorizontal: 12,
+    paddingTop: 12,
+    paddingBottom: 4,
+    gap: 4,
+  },
+  introTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  introText: {
+    fontSize: 12,
+    lineHeight: 16,
   },
   itemsContainer: {
     padding: 12,

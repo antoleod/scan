@@ -39,7 +39,7 @@ type NoteItem = {
   updatedAt: number;
   syncStatus?: 'pending' | 'synced';
   smartType?: 'none' | 'medication' | 'shopping' | 'reminder' | 'task';
-  workflowStatus?: 'draft' | 'active' | 'completed' | 'dismissed';
+  workflowStatus?: 'draft' | 'active' | 'snoozed' | 'completed' | 'dismissed';
   workflowMetadata?: {
     medicationName?: string;
     doseText?: string;
@@ -48,6 +48,20 @@ type NoteItem = {
     reason?: string;
     followUpAt?: number;
     followUpLabel?: string;
+    medications?: Array<{
+      name: string;
+      dose?: string;
+      takenAt?: number;
+      lastTakenAt?: number;
+      nextSuggestedAt?: number;
+      snoozedUntil?: number;
+      lastActionAt?: number;
+      recommendedIntervalHours?: number;
+      minimumIntervalHours?: number;
+      followPrescription?: boolean;
+      status?: 'active' | 'snoozed' | 'dismissed';
+      safetyNote?: string;
+    }>;
     checklistItems?: { id: string; text: string; completed: boolean }[];
   };
   groupId?: string;
@@ -65,6 +79,9 @@ interface NoteContentRendererProps {
   onCopyValue?: (value: string, label: 'IP' | 'Hostname') => void;
   onMedicationComplete?: () => void;
   onMedicationDismiss?: () => void;
+  onMedicationTaken?: (medIndex: number) => void;
+  onMedicationSnooze?: (medIndex: number, snoozeMs: number) => void;
+  onMedicationDismissCycle?: (medIndex: number) => void;
 }
 
 /**
@@ -86,16 +103,24 @@ export function NoteContentRenderer({
   onCopyValue,
   onMedicationComplete,
   onMedicationDismiss,
+  onMedicationTaken,
+  onMedicationSnooze,
+  onMedicationDismissCycle,
 }: NoteContentRendererProps): React.ReactNode {
   // Priority 1: Medication notes
   if (note.smartType === 'medication') {
     return (
       <MedicationCard
+        noteText={note.text}
         metadata={note.workflowMetadata}
         workflowStatus={note.workflowStatus}
         palette={palette}
+        expanded={expanded}
         onComplete={onMedicationComplete || (() => {})}
         onDismiss={onMedicationDismiss || (() => {})}
+        onTaken={onMedicationTaken}
+        onSnooze={onMedicationSnooze}
+        onDismissCycle={onMedicationDismissCycle}
       />
     );
   }

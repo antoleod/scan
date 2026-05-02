@@ -4,7 +4,8 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useCtrlEnterSave } from '../hooks/useCtrlEnterSave';
 import { NoteComposerOcrPreview } from './NoteComposerOcrPreview';
 import { QuickTemplatesModal } from './QuickTemplatesModal';
-import { formatShoppingList, isLikelyShoppingList, safeText } from '../utils/groceryDetection';
+import { safeText } from '../utils/groceryDetection';
+import { analyzeShoppingListCandidate, type ShoppingListCandidateAnalysis } from '../core/shoppingList';
 import { ThemedActionIconButton } from './ThemedActionIconButton';
 
 type Palette = {
@@ -45,6 +46,7 @@ export const ComposerSection = forwardRef<TextInput, {
   onSetCategory: (category: NoteCategory) => void;
   onQuickTemplateMedication?: (medication: string) => void;
   onQuickTemplateShopping?: (items: string) => void;
+  onConvertShoppingCandidate?: (analysis: ShoppingListCandidateAnalysis) => void;
   onRemoveImage?: (index: number) => void;
   onOcrAppendText?: (text: string) => void;
   onOcrReplaceText?: (text: string) => void;
@@ -69,6 +71,7 @@ export const ComposerSection = forwardRef<TextInput, {
       onSetCategory,
       onQuickTemplateMedication,
       onQuickTemplateShopping,
+      onConvertShoppingCandidate,
       onRemoveImage,
       onOcrAppendText,
       onOcrReplaceText,
@@ -84,15 +87,17 @@ export const ComposerSection = forwardRef<TextInput, {
     const [templatesModalVisible, setTemplatesModalVisible] = useState(false);
     const [dictationMessage, setDictationMessage] = useState<string | null>(null);
     const localInputRef = useRef<TextInput | null>(null);
+    const [shoppingAnalysis, setShoppingAnalysis] = useState<ShoppingListCandidateAnalysis | null>(null);
+    const [dismissedShoppingSignature, setDismissedShoppingSignature] = useState<string | null>(null);
     const { width } = useWindowDimensions();
     const isCompact = width < 520;
-    const looksLikeShopping = useMemo(() => isLikelyShoppingList(draftTextValue), [draftTextValue]);
-    const [isFormatting, setIsFormatting] = useState(false);
-    const formattedPreview = useMemo(
-      () => (looksLikeShopping ? formatShoppingList(draftTextValue) : null),
-      [looksLikeShopping, draftTextValue],
+    const shoppingSignature = useMemo(() => safeText(draftTextValue).toLowerCase().replace(/\s+/g, ' ').trim(), [draftTextValue]);
+    const showShoppingSuggestion = Boolean(
+      shoppingAnalysis?.isCandidate
+      && shoppingSignature
+      && shoppingSignature !== dismissedShoppingSignature
+      && onConvertShoppingCandidate,
     );
-    const showFormatButton = looksLikeShopping && formattedPreview !== null && formattedPreview !== draftTextValue;
 
     // Ctrl+Enter / Cmd+Enter → save (only when there's something to save)
     useCtrlEnterSave(onSave, Boolean(draftTextValue.trim() || draftImages.length > 0));
@@ -101,6 +106,14 @@ export const ComposerSection = forwardRef<TextInput, {
       if (!draftTextValue.trim()) {
         setInputHeight(68);
       }
+    }, [draftTextValue]);
+
+    useEffect(() => {
+      const timer = setTimeout(() => {
+        const analysis = analyzeShoppingListCandidate(draftTextValue);
+        setShoppingAnalysis(analysis.isCandidate ? analysis : null);
+      }, 400);
+      return () => clearTimeout(timer);
     }, [draftTextValue]);
 
     const activeGroupLabel = useMemo(() => {
@@ -401,12 +414,15 @@ export const ComposerSection = forwardRef<TextInput, {
           }}
         />
 
-        {showFormatButton ? (
+        {showShoppingSuggestion ? (
           <View style={{ marginTop: 8, padding: 10, borderRadius: 10, borderWidth: 1, borderColor: `${palette.accent}66`, backgroundColor: `${palette.accent}12`, flexDirection: 'row', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
             <Ionicons name="cart-outline" size={15} color={palette.accent} />
-            <Text style={{ color: palette.textBody, fontSize: 12, fontWeight: '600', flex: 1, minWidth: 160 }}>Looks like a shopping list</Text>
-            <Pressable disabled={isFormatting} onPress={() => { if (isFormatting) return; setIsFormatting(true); onChangeText(formatShoppingList(draftTextValue)); setTimeout(() => setIsFormatting(false), 300); }} style={({ pressed }) => ({ minHeight: 34, paddingHorizontal: 12, borderRadius: 999, backgroundColor: palette.accent, justifyContent: 'center', opacity: isFormatting ? 0.5 : (pressed ? 0.82 : 1) })}>
-              <Text style={{ color: '#000', fontSize: 12, fontWeight: '800' }}>Format list</Text>
+            <Text style={{ color: palette.textBody, fontSize: 12, fontWeight: '600', flex: 1, minWidth: 170 }}>Looks like a shopping list. Convert it?</Text>
+            <Pressable onPress={() => shoppingAnalysis && onConvertShoppingCandidate?.(shoppingAnalysis)} style={({ pressed }) => ({ minHeight: 34, paddingHorizontal: 12, borderRadius: 999, backgroundColor: palette.accent, justifyContent: 'center', opacity: pressed ? 0.82 : 1 })}>
+              <Text style={{ color: '#000', fontSize: 12, fontWeight: '800' }}>Convert</Text>
+            </Pressable>
+            <Pressable onPress={() => setDismissedShoppingSignature(shoppingSignature)} style={({ pressed }) => ({ minHeight: 34, paddingHorizontal: 12, borderRadius: 999, borderWidth: 1, borderColor: palette.border, justifyContent: 'center', opacity: pressed ? 0.82 : 1 })}>
+              <Text style={{ color: palette.textMuted, fontSize: 12, fontWeight: '700' }}>Keep as note</Text>
             </Pressable>
           </View>
         ) : null}
