@@ -49,6 +49,7 @@ import { detectSmartWorkflow, type SmartWorkflowDetection, type SmartWorkflowTyp
 import { findMedication } from '../../../core/euMedicationDatabase';
 import { checkDueReminders, dismissReminder, snoozeReminder, scheduleReminder, type MedicationReminder } from '../../../core/medicationReminders';
 import { flushQueue } from '../../../core/offlineQueue';
+import { detectSearchKind } from '../../../core/smartSearch';
 import { analyzeShoppingListCandidate, parseShoppingList, shoppingListToText, type ShoppingListCandidateAnalysis } from '../../../core/shoppingList';
 import { safeText } from '../../../utils/groceryDetection';
 import { ClipboardEntry } from '../../../core/clipboard.types';
@@ -73,6 +74,65 @@ type Palette = { bg: string; fg: string; accent: string; muted: string; card: st
 type WorkspaceTab = 'notes' | 'templates' | 'clipboard';
 type NoteFilter = 'all' | 'work' | 'pinned' | 'draft' | 'archived';
 type InboxView = 'all' | 'shopping' | 'medication' | 'work' | 'reminder' | 'image';
+
+function detectUiLang(): 'en' | 'es' | 'fr' {
+  if (typeof navigator === 'undefined' || !navigator.language) return 'en';
+  const lang = navigator.language.toLowerCase();
+  if (lang.startsWith('es')) return 'es';
+  if (lang.startsWith('fr')) return 'fr';
+  return 'en';
+}
+
+const UI_COPY = {
+  en: {
+    quickNote: 'Quick Add: Note',
+    quickShopping: 'Quick Add: Shopping',
+    quickMedication: 'Quick Add: Medication',
+    syncHealth: 'Sync health',
+    pendingSync: 'Pending sync',
+    syncFailed: 'Sync failed',
+    synced: 'Synced',
+    syncedNotes: 'Synced notes',
+    online: 'Online',
+    savedOffline: 'Saved offline',
+    today: 'Today',
+    inbox: 'Inbox',
+    noteVersions: 'Note versions',
+    noVersions: 'No versions yet.',
+  },
+  es: {
+    quickNote: 'Rápido: Nota',
+    quickShopping: 'Rápido: Compras',
+    quickMedication: 'Rápido: Medicación',
+    syncHealth: 'Estado de sync',
+    pendingSync: 'Sync pendiente',
+    syncFailed: 'Sync fallido',
+    synced: 'Sincronizado',
+    syncedNotes: 'Notas sincronizadas',
+    online: 'En línea',
+    savedOffline: 'Guardado offline',
+    today: 'Hoy',
+    inbox: 'Bandeja',
+    noteVersions: 'Versiones de nota',
+    noVersions: 'Sin versiones aún.',
+  },
+  fr: {
+    quickNote: 'Ajout rapide: Note',
+    quickShopping: 'Ajout rapide: Courses',
+    quickMedication: 'Ajout rapide: Médication',
+    syncHealth: 'Santé de sync',
+    pendingSync: 'Sync en attente',
+    syncFailed: 'Échec sync',
+    synced: 'Synchronisé',
+    syncedNotes: 'Notes synchronisées',
+    online: 'En ligne',
+    savedOffline: 'Sauvé hors ligne',
+    today: "Aujourd'hui",
+    inbox: 'Boîte',
+    noteVersions: 'Versions de note',
+    noVersions: 'Aucune version.',
+  },
+} as const;
 
 const DRAFT_KEY = '@MyKit_notes_draft_v2';
 
@@ -144,6 +204,8 @@ function mergeTemplatesByNewest(local: NoteTemplate[], incoming: NoteTemplate[])
 }
 
 export function NotesTab({ palette, settings }: { palette: Palette; settings: AppSettings }) {
+  const uiLang = detectUiLang();
+  const t = UI_COPY[uiLang];
   const { user } = useAuth();
   const { width } = useWindowDimensions();
   const isDesktop = width >= 1024;
@@ -453,8 +515,17 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
   };
 
   const filteredNotes = useMemo(() => {
-    const q = String(searchText || '').trim().toLowerCase();
-    let next = q ? notes.filter((n) => `${String(n.text || '')} ${(n.attachments || []).join(' ')} ${n.category}`.toLowerCase().includes(q)) : notes;
+    const qRaw = String(searchText || '').trim();
+    const q = qRaw.toLowerCase();
+    const searchKind = detectSearchKind(qRaw);
+    let next = q ? notes.filter((n) => {
+      const text = String(n.text || '');
+      const hay = `${text} ${(n.attachments || []).join(' ')} ${n.category}`.toLowerCase();
+      if (searchKind === 'text' || searchKind === 'empty') return hay.includes(q);
+      const compact = hay.replace(/[^a-z0-9]/gi, '').toLowerCase();
+      const compactNeedle = q.replace(/[^a-z0-9]/gi, '');
+      return compact.includes(compactNeedle);
+    }) : notes;
     if (activeGroupId === 'personal') {
       next = next.filter((n) => !n.groupId);
     } else {
@@ -1140,7 +1211,7 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
                   }}
                   style={({ pressed }) => ({ paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: palette.border, backgroundColor: pressed ? `${palette.muted}14` : 'transparent' })}
                 >
-                  <Text style={{ color: palette.fg, fontSize: 12, fontWeight: '600' }}>Quick Add: Note</Text>
+                  <Text style={{ color: palette.fg, fontSize: 12, fontWeight: '600' }}>{t.quickNote}</Text>
                 </Pressable>
                 <Pressable
                   onPress={() => {
@@ -1149,7 +1220,7 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
                   }}
                   style={({ pressed }) => ({ paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: '#22c55e77', backgroundColor: pressed ? '#22c55e22' : '#22c55e12' })}
                 >
-                  <Text style={{ color: '#22c55e', fontSize: 12, fontWeight: '700' }}>Quick Add: Shopping</Text>
+                  <Text style={{ color: '#22c55e', fontSize: 12, fontWeight: '700' }}>{t.quickShopping}</Text>
                 </Pressable>
                 <Pressable
                   onPress={() => {
@@ -1158,34 +1229,34 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
                   }}
                   style={({ pressed }) => ({ paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: '#4DA3FF66', backgroundColor: pressed ? '#4DA3FF22' : '#4DA3FF12' })}
                 >
-                  <Text style={{ color: '#4DA3FF', fontSize: 12, fontWeight: '700' }}>Quick Add: Medication</Text>
+                  <Text style={{ color: '#4DA3FF', fontSize: 12, fontWeight: '700' }}>{t.quickMedication}</Text>
                 </Pressable>
               </View>
 
               <View style={{ borderWidth: 1, borderColor: palette.border, borderRadius: 10, backgroundColor: palette.card, padding: 10, gap: 6 }}>
-                <Text style={{ color: palette.fg, fontSize: 12, fontWeight: '700' }}>Sync health</Text>
+                <Text style={{ color: palette.fg, fontSize: 12, fontWeight: '700' }}>{t.syncHealth}</Text>
                 <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
                   <Text style={{ color: pendingSyncCount > 0 ? '#f59e0b' : '#22c55e', fontSize: 12, fontWeight: '600' }}>
-                    {pendingSyncCount > 0 ? `Pending sync: ${pendingSyncCount}` : 'Synced'}
+                    {pendingSyncCount > 0 ? `${t.pendingSync}: ${pendingSyncCount}` : t.synced}
                   </Text>
                   {failedSyncCount > 0 ? (
                     <Text style={{ color: '#ef4444', fontSize: 12, fontWeight: '600' }}>
-                      Sync failed: {failedSyncCount}
+                      {t.syncFailed}: {failedSyncCount}
                     </Text>
                   ) : null}
                   <Text style={{ color: palette.muted, fontSize: 12 }}>
-                    Synced notes: {syncedCount}
+                    {t.syncedNotes}: {syncedCount}
                   </Text>
                   {Platform.OS === 'web' && typeof navigator !== 'undefined' ? (
                     <Text style={{ color: navigator.onLine ? '#22c55e' : '#f59e0b', fontSize: 12, fontWeight: '600' }}>
-                      {navigator.onLine ? 'Online' : 'Saved offline'}
+                      {navigator.onLine ? t.online : t.savedOffline}
                     </Text>
                   ) : null}
                 </View>
               </View>
 
               <View style={{ borderWidth: 1, borderColor: palette.border, borderRadius: 10, backgroundColor: palette.card, padding: 10, gap: 8 }}>
-                <Text style={{ color: palette.fg, fontSize: 12, fontWeight: '700' }}>Today</Text>
+                <Text style={{ color: palette.fg, fontSize: 12, fontWeight: '700' }}>{t.today}</Text>
                 <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
                   {todaySummary.map((chip) => (
                     <Pressable
@@ -1207,7 +1278,7 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
               </View>
 
               <View style={{ borderWidth: 1, borderColor: palette.border, borderRadius: 10, backgroundColor: palette.card, padding: 10, gap: 8 }}>
-                <Text style={{ color: palette.fg, fontSize: 12, fontWeight: '700' }}>Inbox</Text>
+                <Text style={{ color: palette.fg, fontSize: 12, fontWeight: '700' }}>{t.inbox}</Text>
                 <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
                   {([
                     { key: 'all', label: `All (${notes.length})`, color: palette.fg },
@@ -1882,7 +1953,7 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
         <Pressable style={mainAppStyles.modalBackdrop} onPress={() => { setVersionNoteId(null); setSelectedVersionId(null); }}>
           <Pressable style={[mainAppStyles.modalForm, { backgroundColor: palette.card, borderColor: palette.border, maxWidth: 640 }]} onPress={() => null}>
             <View style={mainAppStyles.modalHeader}>
-              <Text style={[mainAppStyles.sectionTitle, { color: palette.fg }]}>Note versions</Text>
+              <Text style={[mainAppStyles.sectionTitle, { color: palette.fg }]}>{t.noteVersions}</Text>
               <Pressable style={[mainAppStyles.modalCloseBtn, { borderColor: palette.border }]} onPress={() => { setVersionNoteId(null); setSelectedVersionId(null); }}>
                 <Ionicons name="close" size={18} color={palette.fg} />
               </Pressable>
@@ -1994,7 +2065,7 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
                 ))}
               </View>
             ) : (
-              <Text style={{ color: palette.muted, fontSize: 12 }}>No versions yet.</Text>
+              <Text style={{ color: palette.muted, fontSize: 12 }}>{t.noVersions}</Text>
             )}
           </Pressable>
         </Pressable>

@@ -94,7 +94,7 @@ export interface NoteItem {
   smartType?: SmartWorkflowType;
   workflowStatus?: WorkflowStatus;
   workflowMetadata?: WorkflowMetadata;
-  syncStatus?: 'pending' | 'synced';
+  syncStatus?: 'pending' | 'retrying' | 'failed' | 'offline' | 'synced';
 }
 
 export type TemplateKind = 'email' | 'appointment';
@@ -169,7 +169,13 @@ export async function loadNotes(): Promise<NoteItem[]> {
           smartType: (['none', 'medication', 'shopping', 'reminder', 'task'].includes(String(item?.smartType || 'none')) ? item.smartType : 'none') as SmartWorkflowType,
           workflowStatus: (['draft', 'active', 'snoozed', 'completed', 'dismissed'].includes(String(item?.workflowStatus || '')) ? item.workflowStatus : undefined) as WorkflowStatus | undefined,
           workflowMetadata: typeof item?.workflowMetadata === 'object' ? item.workflowMetadata : undefined,
-          syncStatus: item?.syncStatus === 'pending' ? 'pending' : item?.syncStatus === 'synced' ? 'synced' : undefined,
+          syncStatus: (
+            item?.syncStatus === 'pending' ||
+            item?.syncStatus === 'retrying' ||
+            item?.syncStatus === 'failed' ||
+            item?.syncStatus === 'offline' ||
+            item?.syncStatus === 'synced'
+          ) ? item.syncStatus : undefined,
         }))
         .filter((item) => {
           const key = noteStorageKey(item.id, item.groupId ? 'group' : 'personal', item.groupId);

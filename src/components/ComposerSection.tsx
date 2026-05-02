@@ -6,6 +6,7 @@ import { NoteComposerOcrPreview } from './NoteComposerOcrPreview';
 import { QuickTemplatesModal } from './QuickTemplatesModal';
 import { safeText } from '../utils/groceryDetection';
 import { analyzeShoppingListCandidate, type ShoppingListCandidateAnalysis } from '../core/shoppingList';
+import { detectSmartWorkflow } from '../core/smartNoteWorkflows';
 import { ThemedActionIconButton } from './ThemedActionIconButton';
 
 type Palette = {
@@ -46,6 +47,7 @@ export const ComposerSection = forwardRef<TextInput, {
   onSetCategory: (category: NoteCategory) => void;
   onQuickTemplateMedication?: (medication: string) => void;
   onQuickTemplateShopping?: (items: string) => void;
+  onQuickTemplateReminder?: () => void;
   onConvertShoppingCandidate?: (analysis: ShoppingListCandidateAnalysis) => void;
   onRemoveImage?: (index: number) => void;
   onOcrAppendText?: (text: string) => void;
@@ -71,6 +73,7 @@ export const ComposerSection = forwardRef<TextInput, {
       onSetCategory,
       onQuickTemplateMedication,
       onQuickTemplateShopping,
+      onQuickTemplateReminder,
       onConvertShoppingCandidate,
       onRemoveImage,
       onOcrAppendText,
@@ -98,6 +101,8 @@ export const ComposerSection = forwardRef<TextInput, {
       && shoppingSignature !== dismissedShoppingSignature
       && onConvertShoppingCandidate,
     );
+    const contextualWorkflow = useMemo(() => detectSmartWorkflow(draftTextValue), [draftTextValue]);
+    const showContextualActions = Boolean(draftTextValue.trim().length >= 6 && contextualWorkflow.type !== 'none' && contextualWorkflow.confidence >= 0.65);
 
     // Ctrl+Enter / Cmd+Enter → save (only when there's something to save)
     useCtrlEnterSave(onSave, Boolean(draftTextValue.trim() || draftImages.length > 0));
@@ -424,6 +429,30 @@ export const ComposerSection = forwardRef<TextInput, {
             <Pressable onPress={() => setDismissedShoppingSignature(shoppingSignature)} style={({ pressed }) => ({ minHeight: 34, paddingHorizontal: 12, borderRadius: 999, borderWidth: 1, borderColor: palette.border, justifyContent: 'center', opacity: pressed ? 0.82 : 1 })}>
               <Text style={{ color: palette.textMuted, fontSize: 12, fontWeight: '700' }}>Keep as note</Text>
             </Pressable>
+          </View>
+        ) : null}
+
+        {showContextualActions ? (
+          <View style={{ marginTop: 8, padding: 10, borderRadius: 10, borderWidth: 1, borderColor: palette.border, backgroundColor: palette.surfaceAlt, flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <Text style={{ color: palette.textMuted, fontSize: 12, fontWeight: '700' }}>Suggested</Text>
+            {contextualWorkflow.type === 'medication' ? (
+              <Pressable onPress={() => setTemplatesModalVisible(true)} style={({ pressed }) => ({ minHeight: 32, paddingHorizontal: 10, borderRadius: 999, backgroundColor: '#4DA3FF22', justifyContent: 'center', opacity: pressed ? 0.82 : 1 })}>
+                <Text style={{ color: '#4DA3FF', fontSize: 12, fontWeight: '700' }}>Open Medication Template</Text>
+              </Pressable>
+            ) : null}
+            {contextualWorkflow.type === 'shopping' ? (
+              <Pressable
+                onPress={() => shoppingAnalysis && onConvertShoppingCandidate?.(shoppingAnalysis)}
+                style={({ pressed }) => ({ minHeight: 32, paddingHorizontal: 10, borderRadius: 999, backgroundColor: '#22c55e22', justifyContent: 'center', opacity: pressed ? 0.82 : 1 })}
+              >
+                <Text style={{ color: '#22c55e', fontSize: 12, fontWeight: '700' }}>Convert to Shopping</Text>
+              </Pressable>
+            ) : null}
+            {contextualWorkflow.type === 'reminder' ? (
+              <Pressable onPress={() => onQuickTemplateReminder?.()} style={({ pressed }) => ({ minHeight: 32, paddingHorizontal: 10, borderRadius: 999, backgroundColor: '#f59e0b22', justifyContent: 'center', opacity: pressed ? 0.82 : 1 })}>
+                <Text style={{ color: '#f59e0b', fontSize: 12, fontWeight: '700' }}>Create Reminder</Text>
+              </Pressable>
+            ) : null}
           </View>
         ) : null}
 

@@ -7,7 +7,8 @@ import React from 'react';
 import { Text } from 'react-native';
 import { SmartNoteModel } from '../core/smartNotes';
 import { ShoppingListModel } from '../core/shoppingList';
-import { ShoppingListBlock } from './ShoppingListBlock';
+import { ShoppingListBlockV2 } from './ShoppingListBlockV2';
+import { parseShoppingListV2 } from '../core/shoppingListV2';
 import { MedicationCard } from './MedicationCard';
 import { NoteListBlock } from './NoteListBlock';
 
@@ -37,7 +38,7 @@ type NoteItem = {
   attachments?: string[];
   versions?: { id: string; title?: string; text: string; createdAt: number }[];
   updatedAt: number;
-  syncStatus?: 'pending' | 'synced';
+  syncStatus?: 'pending' | 'retrying' | 'failed' | 'offline' | 'synced';
   smartType?: 'none' | 'medication' | 'shopping' | 'reminder' | 'task';
   workflowStatus?: 'draft' | 'active' | 'snoozed' | 'completed' | 'dismissed';
   workflowMetadata?: {
@@ -130,13 +131,12 @@ export function NoteContentRenderer({
 
   // Priority 2: Shopping lists
   if ((note.smartType === 'shopping' || (shoppingModel?.isShoppingList)) && shoppingModel) {
+    const modelV2 = parseShoppingListV2(note.text);
     return (
-      <ShoppingListBlock
-        model={shoppingModel}
+      <ShoppingListBlockV2
+        model={modelV2}
         palette={palette}
-        expanded={expanded}
         onRawTextChange={onRawTextChange || (() => {})}
-        isShared={Boolean(note.groupId)}
       />
     );
   }

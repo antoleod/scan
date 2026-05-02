@@ -47,7 +47,7 @@ type NoteItem = {
   attachments?: string[];
   versions?: { id: string; title?: string; text: string; createdAt: number }[];
   updatedAt: number;
-  syncStatus?: 'pending' | 'synced';
+  syncStatus?: 'pending' | 'retrying' | 'failed' | 'offline' | 'synced';
   smartType?: 'none' | 'medication' | 'shopping' | 'reminder' | 'task';
   workflowStatus?: 'draft' | 'active' | 'snoozed' | 'completed' | 'dismissed';
   workflowMetadata?: {
@@ -469,9 +469,36 @@ export function NoteCard({
                   </View>
                 ) : null}
                 {note.syncStatus ? (
-                  <View style={{ borderRadius: 3, paddingHorizontal: 5, paddingVertical: 1, backgroundColor: note.syncStatus === 'pending' ? '#f59e0b18' : '#22c55e18' }}>
-                    <Text style={{ color: note.syncStatus === 'pending' ? '#f59e0b' : '#22c55e', fontSize: 8, fontWeight: '700', letterSpacing: 0.3, textTransform: 'uppercase' }}>
-                      {note.syncStatus === 'pending' ? 'Pending sync' : 'Synced'}
+                  <View style={{
+                    borderRadius: 3,
+                    paddingHorizontal: 5,
+                    paddingVertical: 1,
+                    backgroundColor:
+                      note.syncStatus === 'synced' ? '#22c55e18'
+                      : note.syncStatus === 'failed' ? '#ef444418'
+                      : note.syncStatus === 'offline' ? '#94a3b818'
+                      : '#f59e0b18',
+                  }}>
+                    <Text style={{
+                      color:
+                        note.syncStatus === 'synced' ? '#22c55e'
+                        : note.syncStatus === 'failed' ? '#ef4444'
+                        : note.syncStatus === 'offline' ? '#94a3b8'
+                        : '#f59e0b',
+                      fontSize: 8,
+                      fontWeight: '700',
+                      letterSpacing: 0.3,
+                      textTransform: 'uppercase',
+                    }}>
+                      {note.syncStatus === 'synced'
+                        ? 'Synced'
+                        : note.syncStatus === 'failed'
+                        ? 'Sync failed'
+                        : note.syncStatus === 'offline'
+                        ? 'Saved offline'
+                        : note.syncStatus === 'retrying'
+                        ? 'Retrying'
+                        : 'Pending sync'}
                     </Text>
                   </View>
                 ) : null}
