@@ -492,20 +492,32 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
     }
   }
 
-  async function createMedicationFollowUpNote(metadata: WorkflowMetadata, sourceText?: string) {
+  async function createMedicationFollowUpNote(metadata: WorkflowMetadata) {
     const groupId = activeGroupId === 'personal' ? undefined : activeGroupId;
-    const med = String(metadata.medicationName || '').trim();
-    if (!med) return;
-    const followLabel = String(metadata.followUpLabel || 'in 2h').trim();
+    const meds = Array.isArray((metadata as WorkflowMetadata & { medications?: Array<{ name?: string; dose?: string; nextSuggestedAt?: string; followPrescription?: boolean }> }).medications)
+      ? ((metadata as WorkflowMetadata & { medications?: Array<{ name?: string; dose?: string; nextSuggestedAt?: string; followPrescription?: boolean }> }).medications || [])
+      : [];
     const reason = String(metadata.reason || '').trim();
-    const dose = String(metadata.doseText || '').trim();
+    const takenAt = String(metadata.takenAtText || '').trim();
+    const medLines = meds.length > 0
+      ? meds.map((entry) => {
+        const name = String(entry.name || '').trim();
+        if (!name) return '';
+        const dose = String(entry.dose || '').trim();
+        const nextText = entry.nextSuggestedAt
+          ? `Next suggested ${new Date(entry.nextSuggestedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+          : 'Follow prescription';
+        return `${name}${dose ? ` · ${dose}` : ''} · ${nextText}`;
+      }).filter(Boolean)
+      : [String(metadata.medicationName || '').trim()].filter(Boolean);
+    if (!medLines.length) return;
+    const header = medLines.length > 1 ? `Medication Follow-up · ${medLines.length} meds` : 'Medication Follow-up';
     const lines = [
-      `Medication Follow-up`,
-      `Medication: ${med}`,
-      dose ? `Dose: ${dose}` : '',
+      header,
+      ...medLines,
+      takenAt ? `Taken ${takenAt}` : '',
       reason ? `Reason: ${reason}` : '',
-      `Reminder: ${followLabel}`,
-      sourceText ? `Source: ${sourceText}` : '',
+      'Verify with leaflet, prescription, doctor or pharmacist.',
     ].filter(Boolean);
     const noteText = lines.join('\n');
     const result = await addRichNoteUnique(noteText, 'health', [], groupId);
@@ -802,8 +814,6 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
                     .filter(Boolean);
                   if (meds.length === 0) return;
                   const primaryMedication = meds[0];
-                  const nextText = draftTextValue ? `${draftTextValue}\n${medicationTemplateText}` : medicationTemplateText;
-                  setDraftText(nextText);
                   setWorkflowModalData({
                     medicationName: primaryMedication,
                     medicationNames: meds,
@@ -1265,34 +1275,25 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
       <MedicationWorkflowModal
         visible={workflowModalType === 'medication'}
         onClose={() => setWorkflowModalType(null)}
-        originalNoteText={draftTextValue}
         initialData={{
           medicationName: String(workflowModalData.medicationName || ''),
+          medicationNames: Array.isArray(workflowModalData.medicationNames) ? workflowModalData.medicationNames as string[] : [],
           doseText: String(workflowModalData.doseText || ''),
           takenAtText: String(workflowModalData.takenAtText || ''),
           reason: String(workflowModalData.reason || ''),
         }}
         onSave={(metadata) => {
-          const medicationNames = Array.isArray(workflowModalData.medicationNames)
-            ? (workflowModalData.medicationNames as string[]).map((entry) => String(entry || '').trim()).filter(Boolean)
-            : [];
-
-          if (medicationNames.length > 1) {
-            Promise.all(
-              medicationNames.map((medicationName) =>
-                createMedicationFollowUpNote(
-                  { ...metadata, medicationName },
-                  'Quick template',
-                ),
-              ),
-            ).then(() => {
-              showToast(`${medicationNames.length} medication follow-ups created`);
-            }).catch(() => undefined);
-          } else {
-            createMedicationFollowUpNote(metadata, 'Workflow').then(() => {
-              showToast('Medication follow-up created');
-            }).catch(() => undefined);
-          }
+          createMedicationFollowUpNote(metadata).then(() => {
+            showToast('Medication follow-up created');
+          }).catch(() => undefined);
+          setDraftText((current) => {
+            const quickText = Array.isArray(workflowModalData.medicationNames)
+              ? (workflowModalData.medicationNames as string[]).join(', ')
+              : String(workflowModalData.medicationName || '');
+            const safeCurrent = String(current || '');
+            if (!quickText.trim()) return safeCurrent;
+            return safeCurrent.replace(quickText, '').replace(/\n{3,}/g, '\n\n').trim();
+          });
           setWorkflowModalType(null);
           setWorkflowModalData({});
           setDetectedWorkflow(null);

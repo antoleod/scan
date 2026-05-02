@@ -427,11 +427,18 @@ export async function mergeNoteVersion(noteId: string, versionId: string): Promi
 export async function togglePinned(id: string): Promise<NoteItem[]> {
   const current = await loadNotes();
   const next = current.map((item) =>
-    item.id === id ? { ...item, pinned: !item.pinned, updatedAt: Date.now() } : item,
+    item.id === id ? { ...item, pinned: !item.pinned, updatedAt: Date.now(), syncStatus: 'pending' as const } : item,
   );
   await saveNotes(next);
   const updated = next.find((item) => item.id === id);
-  if (updated) await pushNoteIfAuthenticated(updated);
+  if (updated) {
+    const synced = await pushNoteIfAuthenticated(updated);
+    if (synced) {
+      const syncedNext = next.map((item) => item.id === id ? { ...item, syncStatus: 'synced' as const } : item);
+      await saveNotes(syncedNext);
+      return normalizeNotes(syncedNext);
+    }
+  }
   if (updated?.groupId) {
     await upsertSharedGroupNote(updated.groupId, updated);
   }
@@ -441,11 +448,18 @@ export async function togglePinned(id: string): Promise<NoteItem[]> {
 export async function setNoteColor(id: string, color: NoteItem['color'] = 'default'): Promise<NoteItem[]> {
   const current = await loadNotes();
   const next = current.map((item) =>
-    item.id === id ? { ...item, color, updatedAt: Date.now() } : item,
+    item.id === id ? { ...item, color, updatedAt: Date.now(), syncStatus: 'pending' as const } : item,
   );
   await saveNotes(next);
   const updated = next.find((item) => item.id === id);
-  if (updated) await pushNoteIfAuthenticated(updated);
+  if (updated) {
+    const synced = await pushNoteIfAuthenticated(updated);
+    if (synced) {
+      const syncedNext = next.map((item) => item.id === id ? { ...item, syncStatus: 'synced' as const } : item);
+      await saveNotes(syncedNext);
+      return normalizeNotes(syncedNext);
+    }
+  }
   if (updated?.groupId) {
     await upsertSharedGroupNote(updated.groupId, updated);
   }
@@ -459,7 +473,15 @@ export async function updateNoteTitle(id: string, title: string): Promise<NoteIt
   );
   await saveNotes(next);
   const updated = next.find((item) => item.id === id);
-  if (updated) await pushNoteIfAuthenticated(updated);
+  if (updated) {
+    const synced = await pushNoteIfAuthenticated(updated);
+    if (synced) {
+      const syncedNext = next.map((item) => item.id === id ? { ...item, syncStatus: 'synced' as const } : item);
+      await saveNotes(syncedNext);
+      if (updated.groupId) await upsertSharedGroupNote(updated.groupId, { ...updated, syncStatus: 'synced' });
+      return normalizeNotes(syncedNext);
+    }
+  }
   if (updated?.groupId) await upsertSharedGroupNote(updated.groupId, updated);
   return normalizeNotes(next);
 }
@@ -467,11 +489,18 @@ export async function updateNoteTitle(id: string, title: string): Promise<NoteIt
 export async function toggleArchived(id: string): Promise<NoteItem[]> {
   const current = await loadNotes();
   const next = current.map((item) =>
-    item.id === id ? { ...item, archived: !item.archived, updatedAt: Date.now() } : item,
+    item.id === id ? { ...item, archived: !item.archived, updatedAt: Date.now(), syncStatus: 'pending' as const } : item,
   );
   await saveNotes(next);
   const updated = next.find((item) => item.id === id);
-  if (updated) await pushNoteIfAuthenticated(updated);
+  if (updated) {
+    const synced = await pushNoteIfAuthenticated(updated);
+    if (synced) {
+      const syncedNext = next.map((item) => item.id === id ? { ...item, syncStatus: 'synced' as const } : item);
+      await saveNotes(syncedNext);
+      return normalizeNotes(syncedNext);
+    }
+  }
   if (updated?.groupId) {
     await upsertSharedGroupNote(updated.groupId, updated);
   }
@@ -481,11 +510,18 @@ export async function toggleArchived(id: string): Promise<NoteItem[]> {
 export async function clearDraftFlag(id: string): Promise<NoteItem[]> {
   const current = await loadNotes();
   const next = current.map((item) =>
-    item.id === id ? { ...item, draft: false, updatedAt: Date.now() } : item,
+    item.id === id ? { ...item, draft: false, updatedAt: Date.now(), syncStatus: 'pending' as const } : item,
   );
   await saveNotes(next);
   const updated = next.find((item) => item.id === id);
-  if (updated) await pushNoteIfAuthenticated(updated);
+  if (updated) {
+    const synced = await pushNoteIfAuthenticated(updated);
+    if (synced) {
+      const syncedNext = next.map((item) => item.id === id ? { ...item, syncStatus: 'synced' as const } : item);
+      await saveNotes(syncedNext);
+      return normalizeNotes(syncedNext);
+    }
+  }
   if (updated?.groupId) {
     await upsertSharedGroupNote(updated.groupId, updated);
   }

@@ -1,4 +1,4 @@
-import React, { forwardRef, useEffect, useMemo, useState } from 'react';
+import React, { forwardRef, useEffect, useMemo, useRef, useState } from 'react';
 import { Modal, Platform, Pressable, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useCtrlEnterSave } from '../hooks/useCtrlEnterSave';
@@ -78,9 +78,11 @@ export const ComposerSection = forwardRef<TextInput, {
     const draftTextValue = typeof draftText === 'string' ? draftText : '';
     const [inputHeight, setInputHeight] = useState(68);
     const [pickerVisible, setPickerVisible] = useState(false);
+    const [mediaPickerVisible, setMediaPickerVisible] = useState(false);
     const [hoveredAction, setHoveredAction] = useState<string | null>(null);
     const [templatesModalVisible, setTemplatesModalVisible] = useState(false);
     const [dictationMessage, setDictationMessage] = useState<string | null>(null);
+    const localInputRef = useRef<TextInput | null>(null);
     const { width } = useWindowDimensions();
     const isCompact = width < 520;
     const looksLikeShopping = useMemo(() => isLikelyShoppingList(draftTextValue), [draftTextValue]);
@@ -102,6 +104,7 @@ export const ComposerSection = forwardRef<TextInput, {
     const startDictation = () => {
       if (Platform.OS !== 'web' || typeof window === 'undefined') {
         setDictationMessage('Voice dictation is not available in this browser. You can use your device keyboard microphone.');
+        localInputRef.current?.focus();
         return;
       }
       const SpeechRecognition = (window as unknown as {
@@ -146,8 +149,7 @@ export const ComposerSection = forwardRef<TextInput, {
     };
 
     const actionItems = [
-      { key: 'camera', label: 'Camera', icon: 'camera-outline' as const, action: onTakePhoto, active: false },
-      { key: 'photo', label: 'Gallery', icon: 'image-outline' as const, action: onAddImage, active: draftImages.length > 0 },
+      { key: 'media', label: 'Photo', icon: 'camera-plus-outline' as const, action: () => setMediaPickerVisible(true), active: draftImages.length > 0 },
       { key: 'paste', label: 'Paste', icon: 'clipboard-text-outline' as const, action: onPasteImage, active: false },
       { key: 'dictation', label: 'Dictate', icon: 'microphone-outline' as const, action: startDictation, active: false },
       { key: 'ocr', label: 'OCR', icon: 'text-recognition' as const, action: onOcr ?? (() => {}), active: false },
@@ -323,7 +325,14 @@ export const ComposerSection = forwardRef<TextInput, {
         </Modal>
 
         <TextInput
-          ref={ref}
+          ref={(node) => {
+            localInputRef.current = node;
+            if (typeof ref === 'function') {
+              ref(node);
+            } else if (ref) {
+              ref.current = node;
+            }
+          }}
           value={draftTextValue}
           onChangeText={onChangeText}
           onKeyPress={(event) => {
@@ -374,6 +383,45 @@ export const ComposerSection = forwardRef<TextInput, {
             <Text style={{ color: palette.textMuted, fontSize: 12 }}>{dictationMessage}</Text>
           </Pressable>
         ) : null}
+
+        <Modal animationType="fade" transparent visible={mediaPickerVisible} onRequestClose={() => setMediaPickerVisible(false)} statusBarTranslucent>
+          <Pressable
+            onPress={() => setMediaPickerVisible(false)}
+            style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0, 0, 0, 0.5)', paddingHorizontal: 12, paddingBottom: 18 }}
+          >
+            <Pressable
+              onPress={() => undefined}
+              style={{
+                backgroundColor: palette.surface,
+                borderWidth: 1,
+                borderColor: palette.border,
+                borderRadius: 20,
+                padding: 12,
+                gap: 8,
+              }}
+            >
+              <View style={{ alignSelf: 'center', width: 42, height: 4, borderRadius: 99, backgroundColor: palette.chipBorder }} />
+              <Pressable
+                onPress={() => {
+                  setMediaPickerVisible(false);
+                  onTakePhoto();
+                }}
+                style={{ minHeight: 44, justifyContent: 'center', borderRadius: 12, paddingHorizontal: 12 }}
+              >
+                <Text style={{ color: palette.textBody, fontSize: 14, fontWeight: '500' }}>Take photo</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => {
+                  setMediaPickerVisible(false);
+                  onAddImage();
+                }}
+                style={{ minHeight: 44, justifyContent: 'center', borderRadius: 12, paddingHorizontal: 12 }}
+              >
+                <Text style={{ color: palette.textBody, fontSize: 14, fontWeight: '500' }}>Choose from gallery</Text>
+              </Pressable>
+            </Pressable>
+          </Pressable>
+        </Modal>
 
         {draftImages.length > 0 && draftImages[0] && (
           <NoteComposerOcrPreview
