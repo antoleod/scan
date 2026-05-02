@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Animated, FlatList, Linking, Modal, PanResponder, Platform, Pressable, ScrollView, Text, TextInput, View, useWindowDimensions } from 'react-native';
+import { ActivityIndicator, Alert, Animated, FlatList, Linking, Modal, PanResponder, Platform, Pressable, RefreshControl, ScrollView, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 
@@ -237,6 +237,8 @@ function HistoryItemCard({
   );
 }
 
+const PAGE_SIZE = 30;
+
 export function HistoryTab({
   palette,
   filteredHistory,
@@ -260,6 +262,7 @@ export function HistoryTab({
   onOpenScanner,
   historyCount,
   visibleScanType,
+  onRefresh,
 }: {
   palette: Palette;
   filteredHistory: ScanRecord[];
@@ -283,6 +286,7 @@ export function HistoryTab({
   onOpenBarcode: (value: string, codeType?: 'pi' | 'office' | 'other') => void;
   onOpenScanner: () => void;
   visibleScanType: (type: string) => string;
+  onRefresh?: () => void | Promise<void>;
 }) {
   const { width } = useWindowDimensions();
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -291,6 +295,8 @@ export function HistoryTab({
   const [deleteTarget, setDeleteTarget] = useState<ScanRecord | null>(null);
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [calendarDate, setCalendarDate] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [page, setPage] = useState(1);
   const editLockRef = useRef(false);
 
   // Palette bridge for MiniCalendar (which expects the extended Palette type)
@@ -308,11 +314,35 @@ export function HistoryTab({
   const columns = width >= 1600 ? 3 : width >= 1100 ? 2 : 1;
   const showActionLabels = width >= 1200;
 
+  // Reset pagination when filtered results change
+  useEffect(() => {
+    setPage(1);
+  }, [filteredHistory]);
+
   useEffect(() => {
     if (!copiedId) return;
     const timer = setTimeout(() => setCopiedId(null), 1200);
     return () => clearTimeout(timer);
   }, [copiedId]);
+
+  const handleRefresh = useCallback(async () => {
+    if (!onRefresh) return;
+    setRefreshing(true);
+    try {
+      await onRefresh();
+    } finally {
+      setRefreshing(false);
+    }
+  }, [onRefresh]);
+
+  const handleEndReached = useCallback(() => {
+    if (page * PAGE_SIZE < filteredHistory.length) {
+      setPage((p) => p + 1);
+    }
+  }, [page, filteredHistory.length]);
+
+  const pagedHistory = displayHistory.slice(0, page * PAGE_SIZE);
+  const hasMore = pagedHistory.length < displayHistory.length;
 
   const allFilterTypes = useMemo(() => {
     const discovered = Array.from(new Set(filteredHistory.map((item) => formatType(visibleScanType(item.type)))));
@@ -338,7 +368,7 @@ export function HistoryTab({
   return (
     <View style={[mainAppStyles.screen, mainAppStyles.screenLocked, { alignSelf: 'center', maxWidth: width >= 1280 ? 1280 : 1200, minWidth: 0 }]}>
       <FlatList
-        data={displayHistory}
+        data={pagedHistory}
         numColumns={columns}
         key={`history-grid-${columns}`}
         keyExtractor={(item) => item.id}
@@ -346,6 +376,19 @@ export function HistoryTab({
         style={Platform.OS === 'web' ? ({ scrollbarWidth: 'none', msOverflowStyle: 'none' } as any) : undefined}
         contentContainerStyle={[mainAppStyles.listContent, { gap: 8, paddingTop: 8, paddingBottom: 120, paddingHorizontal: 0, minWidth: 0 }]}
         columnWrapperStyle={columns > 1 ? { gap: 10, width: '100%', minWidth: 0 } : undefined}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor={palette.accent}
+            colors={[palette.accent]}
+          />
+        }
+        onEndReached={handleEndReached}
+        onEndReachedThreshold={0.3}
+        ListFooterComponent={
+          hasMore ? <ActivityIndicator size="small" color={palette.accent} style={{ padding: 16 }} /> : null
+        }
         ListHeaderComponent={(
           <View style={[mainAppStyles.card, { backgroundColor: palette.card, borderColor: palette.border, marginBottom: 0, gap: 10, paddingVertical: width >= 1280 ? 16 : 12, paddingHorizontal: width >= 1280 ? 16 : 12 }]}>
             <View style={[mainAppStyles.filterBar, { marginTop: 0 }]}>

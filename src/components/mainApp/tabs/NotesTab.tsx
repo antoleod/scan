@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Image, Linking, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View, Alert } from 'react-native';
+import { ActivityIndicator, Image, Linking, Modal, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import * as ImagePicker from 'expo-image-picker';
@@ -49,7 +49,7 @@ import { detectSmartWorkflow, type SmartWorkflowDetection, type SmartWorkflowTyp
 import { findMedication } from '../../../core/euMedicationDatabase';
 import { checkDueReminders, dismissReminder, snoozeReminder, scheduleReminder, type MedicationReminder } from '../../../core/medicationReminders';
 import { flushQueue } from '../../../core/offlineQueue';
-import { parseShoppingList, shoppingListToText, type ShoppingListCandidateAnalysis } from '../../../core/shoppingList';
+import { analyzeShoppingListCandidate, parseShoppingList, shoppingListToText, type ShoppingListCandidateAnalysis } from '../../../core/shoppingList';
 import { safeText } from '../../../utils/groceryDetection';
 import { ClipboardEntry } from '../../../core/clipboard.types';
 import { loadDeletedNoteKeys, markDeletedNoteKey, noteStorageKey } from '../../../core/noteDeletions';
@@ -72,6 +72,7 @@ import { AppSettings } from '../../../types';
 type Palette = { bg: string; fg: string; accent: string; muted: string; card: string; border: string };
 type WorkspaceTab = 'notes' | 'templates' | 'clipboard';
 type NoteFilter = 'all' | 'work' | 'pinned' | 'draft' | 'archived';
+type InboxView = 'all' | 'shopping' | 'medication' | 'work' | 'reminder' | 'image';
 
 const DRAFT_KEY = '@MyKit_notes_draft_v2';
 
@@ -190,6 +191,9 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
   const [selectedNoteIds, setSelectedNoteIds] = useState<Set<string>>(new Set());
   const [dateFilter, setDateFilter] = useState<string | null>(null);
   const [officeEntityFilter, setOfficeEntityFilter] = useState<string | null>(null);
+  const [inboxView, setInboxView] = useState<InboxView>('all');
+  const [refreshing, setRefreshing] = useState(false);
+  const [notesPage, setNotesPage] = useState(1);
   const draftInputRef = useRef<React.ElementRef<typeof TextInput> | null>(null);
   const templateInputRef = useRef<React.ElementRef<typeof TextInput> | null>(null);
 
@@ -250,7 +254,7 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
   // Auto-push notes to Firebase when they change locally (debounced, skips server-initiated updates).
   useEffect(() => {
     if (!user) return;
-    const hasPendingLocalNotes = notes.some((item) => item.syncStatus === 'pending');
+    const hasPendingLocalNotes = notes.some((item) => item.syncStatus === 'pending' || item.syncStatus === 'retrying' || item.syncStatus === 'offline');
     if (serverUpdateRef.current && !hasPendingLocalNotes) {
       serverUpdateRef.current = false;
       return;
@@ -259,9 +263,12 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
     if (notesSyncTimerRef.current) clearTimeout(notesSyncTimerRef.current);
     notesSyncTimerRef.current = setTimeout(async () => {
       const pendingIds = new Set(
-        notes.filter((n) => n.syncStatus === 'pending').map((n) => n.id),
+        notes.filter((n) => n.syncStatus === 'pending' || n.syncStatus === 'retrying' || n.syncStatus === 'offline').map((n) => n.id),
       );
       try {
+        setNotes((current) => current.map((item) =>
+          pendingIds.has(item.id) ? { ...item, syncStatus: 'retrying' as const } : item,
+        ));
         await syncNotesWithFirebase(notes, templates);
         if (pendingIds.size > 0) {
           const updated = await markNotesSynced(pendingIds);
@@ -269,7 +276,13 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
           setNotes(updated);
         }
       } catch {
-        // network/auth failure — notes stay pending, next sync will retry
+        setNotes((current) => current.map((item) => {
+          if (!pendingIds.has(item.id)) return item;
+          return {
+            ...item,
+            syncStatus: (Platform.OS === 'web' && typeof navigator !== 'undefined' && navigator.onLine === false) ? 'offline' as const : 'failed' as const,
+          };
+        }));
       }
     }, 1500);
     return () => {
@@ -281,7 +294,7 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
     if (!user || Platform.OS !== 'web' || typeof window === 'undefined') return;
     const retryPendingSync = async () => {
       const pendingIds = new Set(
-        notes.filter((n) => n.syncStatus === 'pending').map((n) => n.id),
+        notes.filter((n) => n.syncStatus === 'pending' || n.syncStatus === 'retrying' || n.syncStatus === 'offline' || n.syncStatus === 'failed').map((n) => n.id),
       );
       if (pendingIds.size === 0) return;
       try {
@@ -423,6 +436,22 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
     return () => window.removeEventListener('focus', handleFocus);
   }, []);
 
+  // Reset pagination when filters change
+  useEffect(() => {
+    setNotesPage(1);
+  }, [searchText, filter, activeGroupId, dateFilter, officeEntityFilter, inboxView]);
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      const result = await ensureWorkNotesAndEmailTemplates();
+      setNotes(result.notes);
+      setTemplates(result.templates);
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   const filteredNotes = useMemo(() => {
     const q = String(searchText || '').trim().toLowerCase();
     let next = q ? notes.filter((n) => `${String(n.text || '')} ${(n.attachments || []).join(' ')} ${n.category}`.toLowerCase().includes(q)) : notes;
@@ -446,8 +475,18 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
       const officeNeedle = officeEntityFilter.toLowerCase();
       next = next.filter((n) => String(n.text || '').toLowerCase().includes(officeNeedle));
     }
+    if (inboxView !== 'all') {
+      next = next.filter((n) => {
+        if (inboxView === 'shopping') return n.smartType === 'shopping' || n.category === 'shopping';
+        if (inboxView === 'medication') return n.smartType === 'medication';
+        if (inboxView === 'work') return n.category === 'work';
+        if (inboxView === 'reminder') return n.smartType === 'reminder';
+        if (inboxView === 'image') return n.kind === 'image' || (n.attachments?.length || 0) > 0;
+        return true;
+      });
+    }
     return next;
-  }, [notes, searchText, filter, activeGroupId, dateFilter, officeEntityFilter]);
+  }, [notes, searchText, filter, activeGroupId, dateFilter, officeEntityFilter, inboxView]);
 
   const filteredTemplates = useMemo(() => {
     const q = String(templateSearch || '').trim().toLowerCase();
@@ -455,7 +494,37 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
     return templates.filter((t) => `${t.name} ${t.to || ''} ${t.subject} ${t.body}`.toLowerCase().includes(q));
   }, [templates, templateSearch]);
 
-  const noteRows = useMemo(() => chunk(filteredNotes, isDesktop ? desktopColumns : 1), [filteredNotes, isDesktop, desktopColumns]);
+  const PAGE_SIZE_NOTES = 25;
+  const pagedFilteredNotes = useMemo(() => filteredNotes.slice(0, notesPage * PAGE_SIZE_NOTES), [filteredNotes, notesPage]);
+  const notesHasMore = pagedFilteredNotes.length < filteredNotes.length;
+
+  const noteRows = useMemo(() => chunk(pagedFilteredNotes, isDesktop ? desktopColumns : 1), [pagedFilteredNotes, isDesktop, desktopColumns]);
+  const pendingSyncCount = useMemo(() => notes.filter((n) => n.syncStatus === 'pending' || n.syncStatus === 'retrying' || n.syncStatus === 'offline').length, [notes]);
+  const failedSyncCount = useMemo(() => notes.filter((n) => n.syncStatus === 'failed').length, [notes]);
+  const syncedCount = useMemo(() => notes.filter((n) => n.syncStatus === 'synced').length, [notes]);
+  const shoppingPending = useMemo(
+    () => notes.filter((n) => !n.archived && (n.smartType === 'shopping' || n.category === 'shopping')).length,
+    [notes],
+  );
+  const medicationActive = useMemo(
+    () => notes.filter((n) => !n.archived && n.smartType === 'medication' && n.workflowStatus !== 'completed' && n.workflowStatus !== 'dismissed').length,
+    [notes],
+  );
+  const remindersActive = dueReminders.length;
+  const recentCount = useMemo(() => notes.filter((n) => Date.now() - n.updatedAt < 24 * 60 * 60 * 1000).length, [notes]);
+  const inboxCounts = useMemo(() => ({
+    shopping: notes.filter((n) => n.smartType === 'shopping' || n.category === 'shopping').length,
+    medication: notes.filter((n) => n.smartType === 'medication').length,
+    work: notes.filter((n) => n.category === 'work').length,
+    reminder: notes.filter((n) => n.smartType === 'reminder').length,
+    image: notes.filter((n) => n.kind === 'image' || (n.attachments?.length || 0) > 0).length,
+  }), [notes]);
+  const todaySummary = useMemo(() => ([
+    { key: 'medication' as const, label: `Medications: ${medicationActive}`, color: '#4DA3FF' },
+    { key: 'shopping' as const, label: `Shopping pending: ${shoppingPending}`, color: '#22c55e' },
+    { key: 'reminder' as const, label: `Reminders due: ${remindersActive}`, color: '#f59e0b' },
+    { key: 'all' as const, label: `Recent (24h): ${recentCount}`, color: palette.muted },
+  ]), [medicationActive, shoppingPending, remindersActive, recentCount, palette.muted]);
 
   async function addImageToDraft() {
     const picked = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.9, base64: false });
@@ -743,12 +812,20 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
       ? `${draftTextValue}\n\n--- Extracted text ---\n${ocrText}`
       : ocrText;
     setDraftText(updatedText);
-    // Smart workflow detection will happen on the next text change or save
-    // since we've updated the draft text
+    const shoppingAnalysis = analyzeShoppingListCandidate(ocrText);
+    if (shoppingAnalysis.isCandidate && shoppingAnalysis.parsedItems.length >= 3) {
+      openShoppingWorkflowFromDraft(shoppingAnalysis);
+      showToast('OCR routed to shopping review');
+    }
   }
 
   async function handleOcrReplaceText(ocrText: string) {
     setDraftText(ocrText);
+    const shoppingAnalysis = analyzeShoppingListCandidate(ocrText);
+    if (shoppingAnalysis.isCandidate && shoppingAnalysis.parsedItems.length >= 3) {
+      openShoppingWorkflowFromDraft(shoppingAnalysis);
+      showToast('OCR routed to shopping review');
+    }
   }
 
   async function duplicateNote(note: NoteItem) {
@@ -992,6 +1069,14 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[styles.content, { alignItems: 'stretch' }]}
         keyboardShouldPersistTaps="handled"
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor={palette.accent}
+            colors={[palette.accent]}
+          />
+        }
       >
       <View style={[styles.workspace, { width: '100%', minWidth: 0, alignSelf: 'stretch' }]}>
 
@@ -1045,6 +1130,114 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
                 onOcrReplaceText={handleOcrReplaceText}
                 generating={false}
               />
+
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                <Pressable
+                  onPress={() => {
+                    setDraftText('');
+                    setManualCategory('general');
+                    draftInputRef.current?.focus();
+                  }}
+                  style={({ pressed }) => ({ paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: palette.border, backgroundColor: pressed ? `${palette.muted}14` : 'transparent' })}
+                >
+                  <Text style={{ color: palette.fg, fontSize: 12, fontWeight: '600' }}>Quick Add: Note</Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => {
+                    setWorkflowModalData({ items: [] });
+                    setWorkflowModalType('shopping');
+                  }}
+                  style={({ pressed }) => ({ paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: '#22c55e77', backgroundColor: pressed ? '#22c55e22' : '#22c55e12' })}
+                >
+                  <Text style={{ color: '#22c55e', fontSize: 12, fontWeight: '700' }}>Quick Add: Shopping</Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => {
+                    setWorkflowModalData({});
+                    setWorkflowModalType('medication');
+                  }}
+                  style={({ pressed }) => ({ paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: '#4DA3FF66', backgroundColor: pressed ? '#4DA3FF22' : '#4DA3FF12' })}
+                >
+                  <Text style={{ color: '#4DA3FF', fontSize: 12, fontWeight: '700' }}>Quick Add: Medication</Text>
+                </Pressable>
+              </View>
+
+              <View style={{ borderWidth: 1, borderColor: palette.border, borderRadius: 10, backgroundColor: palette.card, padding: 10, gap: 6 }}>
+                <Text style={{ color: palette.fg, fontSize: 12, fontWeight: '700' }}>Sync health</Text>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                  <Text style={{ color: pendingSyncCount > 0 ? '#f59e0b' : '#22c55e', fontSize: 12, fontWeight: '600' }}>
+                    {pendingSyncCount > 0 ? `Pending sync: ${pendingSyncCount}` : 'Synced'}
+                  </Text>
+                  {failedSyncCount > 0 ? (
+                    <Text style={{ color: '#ef4444', fontSize: 12, fontWeight: '600' }}>
+                      Sync failed: {failedSyncCount}
+                    </Text>
+                  ) : null}
+                  <Text style={{ color: palette.muted, fontSize: 12 }}>
+                    Synced notes: {syncedCount}
+                  </Text>
+                  {Platform.OS === 'web' && typeof navigator !== 'undefined' ? (
+                    <Text style={{ color: navigator.onLine ? '#22c55e' : '#f59e0b', fontSize: 12, fontWeight: '600' }}>
+                      {navigator.onLine ? 'Online' : 'Saved offline'}
+                    </Text>
+                  ) : null}
+                </View>
+              </View>
+
+              <View style={{ borderWidth: 1, borderColor: palette.border, borderRadius: 10, backgroundColor: palette.card, padding: 10, gap: 8 }}>
+                <Text style={{ color: palette.fg, fontSize: 12, fontWeight: '700' }}>Today</Text>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                  {todaySummary.map((chip) => (
+                    <Pressable
+                      key={chip.label}
+                      onPress={() => setInboxView(chip.key)}
+                      style={({ pressed }) => ({
+                        paddingHorizontal: 10,
+                        paddingVertical: 5,
+                        borderRadius: 999,
+                        borderWidth: 1,
+                        borderColor: `${chip.color}77`,
+                        backgroundColor: inboxView === chip.key ? `${chip.color}28` : (pressed ? `${chip.color}20` : `${chip.color}14`),
+                      })}
+                    >
+                      <Text style={{ color: chip.color, fontSize: 12, fontWeight: '600' }}>{chip.label}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </View>
+
+              <View style={{ borderWidth: 1, borderColor: palette.border, borderRadius: 10, backgroundColor: palette.card, padding: 10, gap: 8 }}>
+                <Text style={{ color: palette.fg, fontSize: 12, fontWeight: '700' }}>Inbox</Text>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                  {([
+                    { key: 'all', label: `All (${notes.length})`, color: palette.fg },
+                    { key: 'shopping', label: `Shopping (${inboxCounts.shopping})`, color: '#22c55e' },
+                    { key: 'medication', label: `Medication (${inboxCounts.medication})`, color: '#4DA3FF' },
+                    { key: 'work', label: `Work (${inboxCounts.work})`, color: '#f59e0b' },
+                    { key: 'reminder', label: `Reminders (${inboxCounts.reminder})`, color: '#f59e0b' },
+                    { key: 'image', label: `Images/OCR (${inboxCounts.image})`, color: '#A970FF' },
+                  ] as const).map((chip) => (
+                    <Pressable
+                      key={chip.key}
+                      onPress={() => {
+                        setInboxView(chip.key);
+                        setSearchText('');
+                        if (chip.key === 'work') setFilter('work'); else setFilter('all');
+                      }}
+                      style={({ pressed }) => ({
+                        paddingHorizontal: 10,
+                        paddingVertical: 5,
+                        borderRadius: 999,
+                        borderWidth: 1,
+                        borderColor: `${chip.color}77`,
+                        backgroundColor: inboxView === chip.key ? `${chip.color}28` : (pressed ? `${chip.color}22` : `${chip.color}14`),
+                      })}
+                    >
+                      <Text style={{ color: chip.color, fontSize: 11, fontWeight: '700' }}>{chip.label}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </View>
 
               {/* ── Auto-save status indicator ── */}
               {draftAutoSaveStatus !== 'idle' && (
@@ -1299,6 +1492,18 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
                   </View>
                 ))}
               </View>
+
+              {notesHasMore && (
+                <Pressable
+                  onPress={() => setNotesPage((p) => p + 1)}
+                  style={({ pressed }) => [
+                    mainAppStyles.btn,
+                    { backgroundColor: palette.accent, borderColor: palette.accent, opacity: pressed ? 0.85 : 1, alignSelf: 'stretch', marginTop: 16 },
+                  ]}
+                >
+                  <Text style={[mainAppStyles.btnText, { textAlign: 'center' }]}>Load more ({pagedFilteredNotes.length} / {filteredNotes.length})</Text>
+                </Pressable>
+              )}
             </View>
           </>
         ) : null}

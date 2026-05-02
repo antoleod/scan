@@ -1740,6 +1740,7 @@ function MainApp() {
               onOpenBarcode={openBarcodePreview}
               onOpenScanner={() => setActiveTab('scan')}
               visibleScanType={visibleScanType}
+              onRefresh={() => syncNow(false)}
             />
           ) : activeTab === 'notes' ? (
             <NotesTab palette={palette} settings={settings} />
