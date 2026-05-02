@@ -5,6 +5,7 @@ import { useCtrlEnterSave } from '../hooks/useCtrlEnterSave';
 import { NoteComposerOcrPreview } from './NoteComposerOcrPreview';
 import { QuickTemplatesModal } from './QuickTemplatesModal';
 import { formatShoppingList, isLikelyShoppingList, safeText } from '../utils/groceryDetection';
+import { ThemedActionIconButton } from './ThemedActionIconButton';
 
 type Palette = {
   bg: string;
@@ -235,56 +236,82 @@ export const ComposerSection = forwardRef<TextInput, {
           </View>
 
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            {actionItems.map((item) => {
-              const active = item.active;
-              const iconColor = item.key === 'save' ? '#7CFF6B' : active ? palette.accent : palette.textDim;
-              const borderColor = item.key === 'save' && !active ? '#2E7D32' : active ? palette.accent : palette.chipBorder;
-              return (
-                <View key={item.key} style={{ alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
-                  {hoveredAction === item.key ? (
-                    <View
-                      pointerEvents="none"
-                      style={{
-                        position: 'absolute',
-                        top: -30,
-                        left: '50%',
-                        transform: [{ translateX: -34 }],
-                        minWidth: 68,
-                        paddingHorizontal: 8,
-                        paddingVertical: 4,
-                        borderRadius: 8,
-                        backgroundColor: '#111111',
-                        borderWidth: 1,
-                        borderColor: palette.chipBorder,
-                        zIndex: 20,
-                      }}
-                    >
-                      <Text style={{ color: palette.textBody, fontSize: 11, fontWeight: '600', textAlign: 'center' }}>{item.label}</Text>
-                    </View>
-                  ) : null}
-                  <Pressable
-                    accessibilityLabel={item.label}
-                    onPress={item.action}
-                    hitSlop={6}
-                    onHoverIn={() => setHoveredAction(item.key)}
-                    onHoverOut={() => setHoveredAction((current) => (current === item.key ? null : current))}
-                    style={({ pressed }) => ({
-                      width: isCompact ? 36 : 38,
-                      height: isCompact ? 36 : 38,
-                      borderRadius: 10,
-                      backgroundColor: palette.surfaceAlt,
-                      borderWidth: 1,
-                      borderColor,
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      opacity: pressed ? 0.84 : 1,
-                    })}
-                  >
-                    <MaterialCommunityIcons name={item.icon} size={isCompact ? 17 : 18} color={iconColor} />
-                  </Pressable>
+            <View style={{ alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
+              {hoveredAction === 'media' && (
+                <View pointerEvents="none" style={{ position: 'absolute', top: -30, left: '50%', transform: [{ translateX: -34 }], minWidth: 68, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, backgroundColor: '#111111', borderWidth: 1, borderColor: palette.chipBorder, zIndex: 20 }}>
+                  <Text style={{ color: palette.textBody, fontSize: 11, fontWeight: '600', textAlign: 'center' }}>Photo</Text>
                 </View>
-              );
-            })}
+              )}
+              <Pressable onHoverIn={() => setHoveredAction('media')} onHoverOut={() => setHoveredAction((current) => (current === 'media' ? null : current))}>
+                <ThemedActionIconButton icon="camera-plus-outline" label="Photo" accentColor="#FF6B35" active={draftImages.length > 0} onPress={() => setMediaPickerVisible(true)} palette={palette} compact={isCompact} entranceDelay={0} />
+              </Pressable>
+            </View>
+
+            <View style={{ alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
+              {hoveredAction === 'paste' && (
+                <View pointerEvents="none" style={{ position: 'absolute', top: -30, left: '50%', transform: [{ translateX: -34 }], minWidth: 68, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, backgroundColor: '#111111', borderWidth: 1, borderColor: palette.chipBorder, zIndex: 20 }}>
+                  <Text style={{ color: palette.textBody, fontSize: 11, fontWeight: '600', textAlign: 'center' }}>Paste</Text>
+                </View>
+              )}
+              <Pressable onHoverIn={() => setHoveredAction('paste')} onHoverOut={() => setHoveredAction((current) => (current === 'paste' ? null : current))}>
+                <ThemedActionIconButton icon="clipboard-text-outline" label="Paste" accentColor="#F59E0B" onPress={onPasteImage} palette={palette} compact={isCompact} entranceDelay={40} />
+              </Pressable>
+            </View>
+
+            <View style={{ alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
+              {hoveredAction === 'dictation' && (
+                <View pointerEvents="none" style={{ position: 'absolute', top: -30, left: '50%', transform: [{ translateX: -34 }], minWidth: 68, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, backgroundColor: '#111111', borderWidth: 1, borderColor: palette.chipBorder, zIndex: 20 }}>
+                  <Text style={{ color: palette.textBody, fontSize: 11, fontWeight: '600', textAlign: 'center' }}>Dictate</Text>
+                </View>
+              )}
+              <Pressable onHoverIn={() => setHoveredAction('dictation')} onHoverOut={() => setHoveredAction((current) => (current === 'dictation' ? null : current))}>
+                <ThemedActionIconButton icon="microphone-outline" label="Dictate" accentColor="#00D4FF" onPress={startDictation} palette={palette} compact={isCompact} entranceDelay={80} />
+              </Pressable>
+            </View>
+
+            <View style={{ alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
+              {hoveredAction === 'ocr' && (
+                <View pointerEvents="none" style={{ position: 'absolute', top: -30, left: '50%', transform: [{ translateX: -34 }], minWidth: 68, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, backgroundColor: '#111111', borderWidth: 1, borderColor: palette.chipBorder, zIndex: 20 }}>
+                  <Text style={{ color: palette.textBody, fontSize: 11, fontWeight: '600', textAlign: 'center' }}>OCR</Text>
+                </View>
+              )}
+              <Pressable onHoverIn={() => setHoveredAction('ocr')} onHoverOut={() => setHoveredAction((current) => (current === 'ocr' ? null : current))}>
+                <ThemedActionIconButton icon="text-recognition" label="OCR" accentColor="#4DA3FF" onPress={onOcr ?? (() => {})} palette={palette} compact={isCompact} entranceDelay={120} />
+              </Pressable>
+            </View>
+
+            <View style={{ alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
+              {hoveredAction === 'templates' && (
+                <View pointerEvents="none" style={{ position: 'absolute', top: -30, left: '50%', transform: [{ translateX: -34 }], minWidth: 68, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, backgroundColor: '#111111', borderWidth: 1, borderColor: palette.chipBorder, zIndex: 20 }}>
+                  <Text style={{ color: palette.textBody, fontSize: 11, fontWeight: '600', textAlign: 'center' }}>Templates</Text>
+                </View>
+              )}
+              <Pressable onHoverIn={() => setHoveredAction('templates')} onHoverOut={() => setHoveredAction((current) => (current === 'templates' ? null : current))}>
+                <ThemedActionIconButton icon="layers-outline" label="Templates" accentColor="#A855F7" onPress={() => setTemplatesModalVisible(true)} palette={palette} compact={isCompact} entranceDelay={160} />
+              </Pressable>
+            </View>
+
+            <View style={{ alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
+              {hoveredAction === 'save' && (
+                <View pointerEvents="none" style={{ position: 'absolute', top: -30, left: '50%', transform: [{ translateX: -34 }], minWidth: 68, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, backgroundColor: '#111111', borderWidth: 1, borderColor: palette.chipBorder, zIndex: 20 }}>
+                  <Text style={{ color: palette.textBody, fontSize: 11, fontWeight: '600', textAlign: 'center' }}>Save</Text>
+                </View>
+              )}
+              <Pressable onHoverIn={() => setHoveredAction('save')} onHoverOut={() => setHoveredAction((current) => (current === 'save' ? null : current))}>
+                <ThemedActionIconButton icon="content-save-outline" label="Save" accentColor="#7CFF6B" onPress={onSave} palette={palette} compact={isCompact} entranceDelay={200} />
+              </Pressable>
+            </View>
+
+            <View style={{ alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
+              {hoveredAction === 'generate' && (
+                <View pointerEvents="none" style={{ position: 'absolute', top: -30, left: '50%', transform: [{ translateX: -34 }], minWidth: 68, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, backgroundColor: '#111111', borderWidth: 1, borderColor: palette.chipBorder, zIndex: 20 }}>
+                  <Text style={{ color: palette.textBody, fontSize: 11, fontWeight: '600', textAlign: 'center' }}>Generate</Text>
+                </View>
+              )}
+              <Pressable onHoverIn={() => setHoveredAction('generate')} onHoverOut={() => setHoveredAction((current) => (current === 'generate' ? null : current))}>
+                <ThemedActionIconButton icon="auto-fix" label="Generate" accentColor="#EC4899" active={Boolean(generating)} onPress={onGenerate} palette={palette} compact={isCompact} entranceDelay={240} />
+              </Pressable>
+            </View>
           </View>
         </View>
 

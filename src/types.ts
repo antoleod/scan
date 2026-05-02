@@ -1,5 +1,21 @@
 import type { BarcodeType } from 'expo-camera';
 
+// Navigation tab slugs
+export type Tab = 'scan' | 'history' | 'notes' | 'settings';
+
+export const TAB_SLUGS: Record<Tab, string> = {
+  scan:     'scan',
+  history:  'history',
+  notes:    'notes',
+  settings: 'settings',
+};
+
+export const VALID_TABS = new Set<string>(Object.values(TAB_SLUGS));
+
+export function isValidTab(slug: unknown): slug is Tab {
+  return typeof slug === 'string' && VALID_TABS.has(slug);
+}
+
 export type BootStatus = 'booting' | 'ready' | 'error';
 export type AuthStatus = 'unknown' | 'authenticated' | 'guest';
 export type PersistenceMode = 'local' | 'firebase';

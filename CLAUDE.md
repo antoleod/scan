@@ -452,6 +452,77 @@ Passes down as props to child components. Child component handlers call back to 
 
 **`useCtrlEnterSave(onSave)`** → Keyboard shortcut hook for web
 
+### 4. Navigation Slug System
+
+The app's bottom navigation uses a canonical **Tab** type defined in `src/types.ts`:
+
+```typescript
+export type Tab = 'scan' | 'history' | 'notes' | 'settings';
+
+export const TAB_SLUGS: Record<Tab, string> = {
+  scan:     'scan',
+  history:  'history',
+  notes:    'notes',
+  settings: 'settings',
+};
+
+export const VALID_TABS = new Set<string>(Object.values(TAB_SLUGS));
+
+export function isValidTab(slug: unknown): slug is Tab {
+  return typeof slug === 'string' && VALID_TABS.has(slug);
+}
+```
+
+**Usage**:
+- Import `Tab` from `src/types.ts` in tab-aware components (`BottomTabs.tsx`, `MainAppScreen.tsx`)
+- Use `isValidTab()` to validate untrusted input (e.g., from voice commands or deep links)
+- All internal navigation uses literal Tab values; never construct slugs from user input
+
+### 5. Themed Toolbar Icon Button
+
+**Location**: `src/components/ThemedActionIconButton.tsx`
+
+A reusable animated button component for the ComposerSection toolbar with semantic accent colors, press animations (scale 0.94), and staggered entrance effects.
+
+```typescript
+interface ThemedActionIconButtonProps {
+  icon: string;              // MaterialCommunityIcons icon name
+  label: string;             // accessibilityLabel + tooltip
+  accentColor: string;       // Hex color (e.g., '#FF6B35')
+  active?: boolean;          // Stronger border + bg tint if true
+  disabled?: boolean;        // Reduced opacity if true
+  onPress: () => void;
+  palette: Palette;          // For background tokens if needed
+  compact?: boolean;         // 36px vs 38px size
+  entranceDelay?: number;    // Stagger delay in ms
+}
+```
+
+**Accent Color Map** (ComposerSection):
+```typescript
+'media' (camera):    '#FF6B35' (warm orange)
+'paste' (clipboard): '#F59E0B' (amber)
+'dictation' (mic):   '#00D4FF' (cyan)
+'ocr':               '#4DA3FF' (soft blue)
+'templates' (layers):'#A855F7' (violet)
+'save':              '#7CFF6B' (green)
+'generate' (magic):  '#EC4899' (pink)
+```
+
+**Animations**:
+- **Press**: `Animated.spring` scale `1 → 0.94 → 1`, friction 4-5
+- **Entrance**: `Animated.timing` opacity `0→1` + translateY `8→0` over 200ms with configurable delay
+- Both use `useNativeDriver: false` for Expo web compatibility
+
+**Color Derivation** (from hex accentColor):
+```typescript
+bg:           `${accentColor}14`   // 8% opacity background
+border:       `${accentColor}55`   // 33% opacity border
+activeBg:     `${accentColor}28`   // 16% opacity when active
+activeBorder: `${accentColor}cc`   // 80% opacity when active
+icon:         accentColor           // Full color
+```
+
 ---
 
 ## Data Persistence Layer

@@ -2,6 +2,7 @@ import React from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
+import { Tab } from '../../types';
 
 type Palette = {
   accent: string;
@@ -9,8 +10,6 @@ type Palette = {
   bg: string;
   border: string;
 };
-
-type Tab = 'scan' | 'history' | 'notes' | 'settings';
 
 const tabs: { key: Tab; icon: keyof typeof Ionicons.glyphMap; label: string }[] = [
   { key: 'notes', icon: 'document-text-outline', label: 'Notes' },

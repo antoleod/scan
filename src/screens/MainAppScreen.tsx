@@ -28,7 +28,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 
-import { AppSettings, BootStatus, PersistenceMode, ScanRecord, ScanState, TemplateRule } from '../types';
+import { AppSettings, BootStatus, PersistenceMode, ScanRecord, ScanState, Tab, TemplateRule, isValidTab } from '../types';
 import { defaultSettings, loadSettings, saveSettings } from '../core/settings';
 import { addHistoryUnique, clearHistory, loadHistory, saveHistory, historyKey, normalizeHistoryType, createHistoryId } from '../core/history';
 import { loadTemplates, saveTemplate, saveTemplates } from '../core/templates';
@@ -78,7 +78,6 @@ import {
   purgeIndexedDBByKeyword,
 } from '../core/dataSync';
 
-type Tab = 'scan' | 'history' | 'notes' | 'settings';
 type DateFilter = 'ALL' | 'TODAY' | 'WEEK' | 'MONTH';
 type EntryDraftSnapshot = {
   mode: 'add' | 'edit';
@@ -213,7 +212,7 @@ function MainApp() {
       setActiveTab('notes');
       showToast(`Note ready: "${text}"`, 'success');
     },
-    onNavigate: (tab) => setActiveTab(tab),
+    onNavigate: (tab) => { if (isValidTab(tab)) setActiveTab(tab); },
     onBatchToggle: () => setBatchMode((v) => !v),
     onBatchSave: () => { if (batchItems.length > 0) saveBatchItems(); },
   });
