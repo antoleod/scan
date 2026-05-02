@@ -41,6 +41,7 @@ import {
   markMedicationTaken,
   snoozeMedication,
   dismissMedication,
+  reactivateMedication,
   type WorkflowStatus,
   type MedicationCycleEntry,
 } from '../../../core/notes';
@@ -681,6 +682,7 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
       if (typeof focus.nextSuggestedAt === 'number' && focus.nextSuggestedAt > Date.now()) {
         await scheduleReminder(
           createdNote.id,
+          0,
           focus.nextSuggestedAt,
           focus.name,
         ).catch(() => undefined);
@@ -694,7 +696,7 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
     const note = updated.find((n) => n.id === noteId);
     const focus = note?.workflowMetadata?.medications?.[medIndex];
     if (focus && typeof focus.nextSuggestedAt === 'number' && focus.nextSuggestedAt > Date.now()) {
-      await scheduleReminder(noteId, focus.nextSuggestedAt, focus.name).catch(() => undefined);
+      await scheduleReminder(noteId, medIndex, focus.nextSuggestedAt, focus.name).catch(() => undefined);
       showToast(`Cycle reset · next ${new Date(focus.nextSuggestedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`);
     } else {
       showToast('Marked taken · follow prescription');
@@ -707,9 +709,9 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
     const note = updated.find((n) => n.id === noteId);
     const focus = note?.workflowMetadata?.medications?.[medIndex];
     if (focus && typeof focus.nextSuggestedAt === 'number') {
-      await scheduleReminder(noteId, focus.nextSuggestedAt, focus.name).catch(() => undefined);
+      await scheduleReminder(noteId, medIndex, focus.nextSuggestedAt, focus.name).catch(() => undefined);
     } else {
-      await snoozeReminder(noteId, snoozeMs).catch(() => undefined);
+      await snoozeReminder(noteId, medIndex, snoozeMs).catch(() => undefined);
     }
     showToast('Snoozed');
   }
@@ -717,8 +719,19 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
   async function handleMedicationDismissCycle(noteId: string, medIndex: number) {
     const updated = await dismissMedication(noteId, medIndex);
     setNotes(updated);
-    await dismissReminder(noteId).catch(() => undefined);
+    await dismissReminder(noteId, medIndex).catch(() => undefined);
     showToast('Reminder dismissed');
+  }
+
+  async function handleMedicationReactivate(noteId: string, medIndex: number) {
+    const updated = await reactivateMedication(noteId, medIndex);
+    setNotes(updated);
+    const note = updated.find((n) => n.id === noteId);
+    const focus = note?.workflowMetadata?.medications?.[medIndex];
+    if (focus && typeof focus.nextSuggestedAt === 'number' && focus.nextSuggestedAt > Date.now()) {
+      await scheduleReminder(noteId, medIndex, focus.nextSuggestedAt, focus.name).catch(() => undefined);
+    }
+    showToast('Reminder reactivated');
   }
 
   function handleRemoveImage(index: number) {
@@ -1074,14 +1087,14 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
                   }}
                 >
                   {dueReminders.map((reminder) => (
-                    <View key={reminder.noteId} style={{ gap: 6 }}>
+                    <View key={`${reminder.noteId}:${reminder.medIndex}`} style={{ gap: 6 }}>
                       <Text style={{ color: '#4DA3FF', fontSize: 13, fontWeight: '700' }}>
                         💊 Check in: {reminder.medicationName}
                       </Text>
                       <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
                         <Pressable
                           onPress={() =>
-                            dismissReminder(reminder.noteId)
+                            dismissReminder(reminder.noteId, reminder.medIndex)
                               .then(() => checkDueReminders())
                               .then(setDueReminders)
                           }
@@ -1099,7 +1112,7 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
                         </Pressable>
                         <Pressable
                           onPress={() =>
-                            dismissReminder(reminder.noteId)
+                            dismissReminder(reminder.noteId, reminder.medIndex)
                               .then(() => checkDueReminders())
                               .then(setDueReminders)
                           }
@@ -1117,7 +1130,7 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
                         </Pressable>
                         <Pressable
                           onPress={() =>
-                            snoozeReminder(reminder.noteId, 3_600_000)
+                            snoozeReminder(reminder.noteId, reminder.medIndex, 3_600_000)
                               .then(() => checkDueReminders())
                               .then(setDueReminders)
                           }
@@ -1277,6 +1290,7 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
                             onMedicationTaken={(id, medIndex) => handleMedicationTaken(id, medIndex).catch(() => undefined)}
                             onMedicationSnooze={(id, medIndex, ms) => handleMedicationSnooze(id, medIndex, ms).catch(() => undefined)}
                             onMedicationDismissCycle={(id, medIndex) => handleMedicationDismissCycle(id, medIndex).catch(() => undefined)}
+                            onMedicationReactivate={(id, medIndex) => handleMedicationReactivate(id, medIndex).catch(() => undefined)}
                           />
                         </View>
                       );
@@ -1593,7 +1607,13 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
         initialItems={Array.isArray(workflowModalData.items) ? (workflowModalData.items as string[]) : []}
         onSave={(items) => {
           const groupId = activeGroupId === 'personal' ? undefined : activeGroupId;
-          const checklist = (items.checklistItems || []).map((entry) => String(entry.text || '').trim()).filter(Boolean);
+          const checklistEntries = (items.checklistItems || []).filter((entry) => String(entry.text || '').trim());
+          const checklist = checklistEntries.map((entry) => {
+            const text = String(entry.text || '').trim();
+            const quantity = String(entry.quantity || '').trim();
+            const unit = String(entry.unit || '').trim();
+            return quantity ? `${text}: ${quantity}${unit ? ` ${unit}` : ''}` : text;
+          });
           const shoppingNote = checklist.length > 0
             ? `Shopping List\n${checklist.map((item) => `- ${item}`).join('\n')}`
             : '';
@@ -1602,9 +1622,22 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
             setDetectedWorkflow(null);
             return;
           }
-          addRichNoteUnique(shoppingNote, 'shopping', [], groupId).then((result) => {
+          addRichNoteUnique(shoppingNote, 'shopping', [], groupId, false, false).then(async (result) => {
             setNotes(result.notes);
             if (result.inserted) {
+              const createdNote = result.notes[0];
+              const updatedNotes = await updateNoteSmartType(createdNote.id, 'shopping', 'active', {
+                checklistItems: checklistEntries.map((entry) => ({
+                  id: entry.id,
+                  text: String(entry.text || '').trim(),
+                  completed: Boolean(entry.completed),
+                  quantity: String(entry.quantity || '').trim() || undefined,
+                  unit: String(entry.unit || '').trim() || undefined,
+                  rawText: String(entry.rawText || entry.text || '').trim() || undefined,
+                })),
+                extractedFromText: true,
+              });
+              setNotes(updatedNotes);
               showToast('Shopping list created');
               setFilter('all');
               setDraftText('');

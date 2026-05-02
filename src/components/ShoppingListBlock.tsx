@@ -27,7 +27,7 @@ import {
 } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { Ionicons } from '@expo/vector-icons';
-import { ShoppingItem, ShoppingListModel, shoppingListToText } from '../core/shoppingList';
+import { ShoppingItem, ShoppingListModel, parseShoppingList, shoppingListToText } from '../core/shoppingList';
 
 type Palette = {
   bg: string;
@@ -425,7 +425,7 @@ export function ShoppingListBlock({
             style={{ flex: 1, minHeight: 36, borderRadius: 8, borderWidth: 1, borderColor: palette.border, alignItems: 'center', justifyContent: 'center' }}>
             <Text style={{ color: palette.textBody, fontSize: 12, fontWeight: '600' }}>Cancel</Text>
           </Pressable>
-          <Pressable onPress={() => { onRawTextChange(rawDraft); setShowRaw(false); }}
+          <Pressable onPress={() => { const reparsed = parseShoppingList(rawDraft, items); onRawTextChange(shoppingListToText(reparsed.items)); setShowRaw(false); }}
             style={{ flex: 1, minHeight: 36, borderRadius: 8, backgroundColor: CART, alignItems: 'center', justifyContent: 'center' }}>
             <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>Apply</Text>
           </Pressable>

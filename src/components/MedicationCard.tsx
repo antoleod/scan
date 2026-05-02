@@ -29,6 +29,7 @@ interface MedicationCardProps {
   onTaken?: (medIndex: number) => void;
   onSnooze?: (medIndex: number, snoozeMs: number) => void;
   onDismissCycle?: (medIndex: number) => void;
+  onReactivate?: (medIndex: number) => void;
 }
 
 type CountdownTone = 'safe' | 'warn' | 'danger' | 'due' | 'snoozed';
@@ -205,6 +206,19 @@ const SNOOZE_OPTIONS: { label: string; ms: number }[] = [
   { label: '+1h',  ms: 60 * 60_000 },
 ];
 
+function checkTakenTooSoon(med: MedicationCycleEntry): { tooSoon: boolean; minutesUntilSafe?: number } {
+  if (typeof med.lastTakenAt !== 'number' || typeof med.minimumIntervalHours !== 'number') {
+    return { tooSoon: false };
+  }
+  const minMs = med.minimumIntervalHours * 3_600_000;
+  const timeSince = Date.now() - med.lastTakenAt;
+  if (timeSince < minMs) {
+    const minutesUntilSafe = Math.ceil((minMs - timeSince) / 60_000);
+    return { tooSoon: true, minutesUntilSafe };
+  }
+  return { tooSoon: false };
+}
+
 // ─── Per-medication row ──────────────────────────────────────────────────
 interface MedRowProps {
   med: MedicationCycleEntry;
@@ -217,6 +231,7 @@ interface MedRowProps {
   onTaken?: (medIndex: number) => void;
   onSnooze?: (medIndex: number, snoozeMs: number) => void;
   onDismissCycle?: (medIndex: number) => void;
+  onReactivate?: (medIndex: number) => void;
 }
 
 function MedRow({
@@ -230,9 +245,11 @@ function MedRow({
   onTaken,
   onSnooze,
   onDismissCycle,
+  onReactivate,
 }: MedRowProps) {
   const [snoozeOpen, setSnoozeOpen] = useState(false);
   const [confirmDismiss, setConfirmDismiss] = useState(false);
+  const [confirmTooSoon, setConfirmTooSoon] = useState(false);
 
   const status = med.status || 'active';
   const isSnoozed = status === 'snoozed';
@@ -437,11 +454,64 @@ function MedRow({
         </View>
       ) : null}
 
+      {/* "Taken too soon" confirmation (inline) */}
+      {confirmTooSoon && canAct ? (() => {
+        const check = checkTakenTooSoon(med);
+        return (
+          <View style={{ gap: 6 }}>
+            <Text style={{ color: palette.textBody, fontSize: 12 }}>
+              <Text style={{ fontWeight: '700' }}>{med.name}</Text> was taken {check.minutesUntilSafe} minutes ago. Take again?
+            </Text>
+            <View style={{ flexDirection: 'row', gap: 6 }}>
+              <Pressable
+                onPress={() => { setConfirmTooSoon(false); onTaken?.(index); }}
+                accessibilityRole="button"
+                accessibilityLabel={`Confirm take ${med.name} now`}
+                style={({ pressed }) => ({
+                  flex: 1,
+                  minHeight: 36,
+                  borderRadius: 8,
+                  backgroundColor: pressed ? '#f59e0bcc' : '#f59e0b',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                })}
+              >
+                <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>Take Now</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => setConfirmTooSoon(false)}
+                accessibilityRole="button"
+                accessibilityLabel="Cancel"
+                style={({ pressed }) => ({
+                  flex: 1,
+                  minHeight: 36,
+                  borderRadius: 8,
+                  borderWidth: 1,
+                  borderColor: palette.border,
+                  backgroundColor: pressed ? `${palette.textDim}12` : 'transparent',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                })}
+              >
+                <Text style={{ color: palette.textDim, fontSize: 12, fontWeight: '700' }}>Cancel</Text>
+              </Pressable>
+            </View>
+          </View>
+        );
+      })() : null}
+
       {/* Per-medication action row */}
-      {!snoozeOpen && !confirmDismiss && canAct ? (
+      {!snoozeOpen && !confirmDismiss && !confirmTooSoon && canAct ? (
         <View style={{ flexDirection: 'row', gap: 6 }}>
           <Pressable
-            onPress={() => onTaken?.(index)}
+            onPress={() => {
+              const check = checkTakenTooSoon(med);
+              if (check.tooSoon) {
+                setConfirmTooSoon(true);
+              } else {
+                onTaken?.(index);
+              }
+            }}
             accessibilityRole="button"
             accessibilityLabel={`Mark ${med.name} taken now`}
             style={({ pressed }) => ({
@@ -500,6 +570,27 @@ function MedRow({
           </Pressable>
         </View>
       ) : null}
+
+      {/* Reactivate dismissed medication */}
+      {isDismissed ? (
+        <Pressable
+          onPress={() => onReactivate?.(index)}
+          accessibilityRole="button"
+          accessibilityLabel={`Reactivate ${med.name}`}
+          style={({ pressed }) => ({
+            minHeight: 38,
+            borderRadius: 8,
+            backgroundColor: pressed ? '#4DA3FF88' : '#4DA3FF',
+            alignItems: 'center',
+            justifyContent: 'center',
+          })}
+        >
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <Ionicons name="refresh" size={13} color="#fff" />
+            <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>Reactivate</Text>
+          </View>
+        </Pressable>
+      ) : null}
     </View>
   );
 }
@@ -516,6 +607,7 @@ export function MedicationCard({
   onTaken,
   onSnooze,
   onDismissCycle,
+  onReactivate,
 }: MedicationCardProps) {
   const { meds, takenAtFromText, reason } = useMemo(
     () => resolveMedications(safeStr(noteText), metadata),
@@ -651,6 +743,7 @@ export function MedicationCard({
           onTaken={onTaken}
           onSnooze={onSnooze}
           onDismissCycle={onDismissCycle}
+          onReactivate={onReactivate}
         />
       ))}
     </View>

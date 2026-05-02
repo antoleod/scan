@@ -9,6 +9,7 @@ const REMINDERS_KEY = '@mykit_med_reminders_v1';
 
 export interface MedicationReminder {
   noteId: string;
+  medIndex: number; // Per-medication index in medications[] array
   followUpAt: number; // Unix ms
   medicationName: string;
   dismissed: boolean;
@@ -34,33 +35,35 @@ export async function saveReminders(reminders: MedicationReminder[]): Promise<vo
 
 export async function scheduleReminder(
   noteId: string,
+  medIndex: number,
   followUpAt: number,
   medicationName: string,
 ): Promise<void> {
   const current = await loadReminders();
-  const filtered = current.filter((r) => r.noteId !== noteId);
+  const filtered = current.filter((r) => !(r.noteId === noteId && r.medIndex === medIndex));
   const next = [
     ...filtered,
-    { noteId, followUpAt, medicationName, dismissed: false },
+    { noteId, medIndex, followUpAt, medicationName, dismissed: false },
   ];
   await saveReminders(next);
 }
 
-export async function dismissReminder(noteId: string): Promise<void> {
+export async function dismissReminder(noteId: string, medIndex: number): Promise<void> {
   const current = await loadReminders();
   const next = current.map((r) =>
-    r.noteId === noteId ? { ...r, dismissed: true } : r,
+    r.noteId === noteId && r.medIndex === medIndex ? { ...r, dismissed: true } : r,
   );
   await saveReminders(next);
 }
 
 export async function snoozeReminder(
   noteId: string,
+  medIndex: number,
   snoozeMs: number,
 ): Promise<void> {
   const current = await loadReminders();
   const next = current.map((r) =>
-    r.noteId === noteId
+    r.noteId === noteId && r.medIndex === medIndex
       ? { ...r, followUpAt: Date.now() + snoozeMs, dismissed: false }
       : r,
   );

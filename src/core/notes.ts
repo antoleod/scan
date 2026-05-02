@@ -64,6 +64,9 @@ export interface WorkflowMetadata {
     id: string;
     text: string;
     completed: boolean;
+    quantity?: string;
+    unit?: string;
+    rawText?: string;
   }[];
   extractedFromText?: boolean;
 }
@@ -784,6 +787,50 @@ export async function dismissMedication(
       status: 'dismissed',
       nextSuggestedAt: undefined,
       snoozedUntil: undefined,
+      lastActionAt: now,
+    };
+    const nextMeds = meds.map((m, i) => i === idx ? updatedEntry : m);
+    const newMeta = syncMetadataFromMeds(item.workflowMetadata || {}, nextMeds);
+    return {
+      ...item,
+      workflowMetadata: newMeta,
+      workflowStatus: deriveNoteStatusFromMeds(nextMeds),
+      updatedAt: now,
+      syncStatus: 'pending' as const,
+    };
+  });
+}
+
+export async function reactivateMedication(
+  id: string,
+  medIndex: number = 0,
+): Promise<NoteItem[]> {
+  return persistNoteMutation(id, (item) => {
+    const meds = ensureMedicationsList(item.workflowMetadata);
+    const now = Date.now();
+    if (!meds.length) {
+      // Legacy note with no medications array — reactivate whole note.
+      return {
+        ...item,
+        workflowStatus: 'active',
+        updatedAt: now,
+        syncStatus: 'pending' as const,
+      };
+    }
+    const idx = clampMedIndex(meds, medIndex);
+    const entry = meds[idx];
+    if (entry.status !== 'dismissed') {
+      return item; // Not dismissed, no change needed.
+    }
+    // Restore to active status and recalculate next suggested time.
+    let nextSuggestedAt: number | undefined;
+    if (typeof entry.lastTakenAt === 'number' && typeof entry.recommendedIntervalHours === 'number') {
+      nextSuggestedAt = entry.lastTakenAt + entry.recommendedIntervalHours * 3_600_000;
+    }
+    const updatedEntry: MedicationCycleEntry = {
+      ...entry,
+      status: 'active',
+      nextSuggestedAt,
       lastActionAt: now,
     };
     const nextMeds = meds.map((m, i) => i === idx ? updatedEntry : m);

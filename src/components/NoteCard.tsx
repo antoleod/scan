@@ -72,7 +72,7 @@ type NoteItem = {
       status?: 'active' | 'snoozed' | 'dismissed';
       safetyNote?: string;
     }>;
-    checklistItems?: { id: string; text: string; completed: boolean }[];
+    checklistItems?: { id: string; text: string; completed: boolean; quantity?: string; unit?: string; rawText?: string }[];
   };
   groupId?: string;
 };
@@ -200,6 +200,7 @@ export function NoteCard({
   onMedicationTaken,
   onMedicationSnooze,
   onMedicationDismissCycle,
+  onMedicationReactivate,
   settings,
 }: {
   note: NoteItem;
@@ -232,6 +233,7 @@ export function NoteCard({
   onMedicationTaken?: (id: string, medIndex: number) => void;
   onMedicationSnooze?: (id: string, medIndex: number, snoozeMs: number) => void;
   onMedicationDismissCycle?: (id: string, medIndex: number) => void;
+  onMedicationReactivate?: (id: string, medIndex: number) => void;
   settings: AppSettings;
 }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -343,7 +345,17 @@ export function NoteCard({
   const model = useMemo(() => buildSmartNoteModel(noteText, smart), [noteText, smart]);
   const sfModel = useMemo(() => parseServiceNowFields(noteText), [noteText]);
   const isShopping = useMemo(() => note.smartType === 'shopping' || note.category === 'shopping' || isShoppingList(noteText), [note.category, note.smartType, noteText]);
-  const shoppingModel = useMemo(() => isShopping ? parseShoppingList(noteText) : null, [isShopping, noteText]);
+  const previousShoppingItems = useMemo(() => (
+    note.workflowMetadata?.checklistItems?.map((item) => ({
+      id: item.id,
+      label: item.text,
+      quantity: item.quantity || '',
+      unit: item.unit || '',
+      checked: item.completed,
+      rawLine: item.rawText || item.text,
+    })) || []
+  ), [note.workflowMetadata?.checklistItems]);
+  const shoppingModel = useMemo(() => isShopping ? parseShoppingList(noteText, previousShoppingItems) : null, [isShopping, noteText, previousShoppingItems]);
   const { hiddenKeys, toggleField } = useFieldVisibility();
   // Word / char count for the footer stat chip
   const wordCount = useMemo(() => {
@@ -583,6 +595,7 @@ export function NoteCard({
                 onMedicationTaken={onMedicationTaken ? (idx) => onMedicationTaken(note.id, idx) : undefined}
                 onMedicationSnooze={onMedicationSnooze ? (idx, ms) => onMedicationSnooze(note.id, idx, ms) : undefined}
                 onMedicationDismissCycle={onMedicationDismissCycle ? (idx) => onMedicationDismissCycle(note.id, idx) : undefined}
+                onMedicationReactivate={onMedicationReactivate ? (idx) => onMedicationReactivate(note.id, idx) : undefined}
               />
             )}
 

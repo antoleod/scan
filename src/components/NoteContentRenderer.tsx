@@ -62,7 +62,7 @@ type NoteItem = {
       status?: 'active' | 'snoozed' | 'dismissed';
       safetyNote?: string;
     }>;
-    checklistItems?: { id: string; text: string; completed: boolean }[];
+    checklistItems?: { id: string; text: string; completed: boolean; quantity?: string; unit?: string; rawText?: string }[];
   };
   groupId?: string;
 };
@@ -82,6 +82,7 @@ interface NoteContentRendererProps {
   onMedicationTaken?: (medIndex: number) => void;
   onMedicationSnooze?: (medIndex: number, snoozeMs: number) => void;
   onMedicationDismissCycle?: (medIndex: number) => void;
+  onMedicationReactivate?: (medIndex: number) => void;
 }
 
 /**
@@ -106,6 +107,7 @@ export function NoteContentRenderer({
   onMedicationTaken,
   onMedicationSnooze,
   onMedicationDismissCycle,
+  onMedicationReactivate,
 }: NoteContentRendererProps): React.ReactNode {
   // Priority 1: Medication notes
   if (note.smartType === 'medication') {
@@ -121,6 +123,7 @@ export function NoteContentRenderer({
         onTaken={onMedicationTaken}
         onSnooze={onMedicationSnooze}
         onDismissCycle={onMedicationDismissCycle}
+        onReactivate={onMedicationReactivate}
       />
     );
   }

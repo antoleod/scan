@@ -15,11 +15,15 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { useAppTheme } from '../constants/theme';
 import { WorkflowMetadata } from '../core/notes';
+import { parseShoppingList } from '../core/shoppingList';
 
 interface ChecklistItem {
   id: string;
   text: string;
   completed: boolean;
+  quantity?: string;
+  unit?: string;
+  rawText?: string;
 }
 
 interface ShoppingWorkflowModalProps {
@@ -36,12 +40,19 @@ export function ShoppingWorkflowModal({
   initialItems = [],
 }: ShoppingWorkflowModalProps) {
   const { theme } = useAppTheme();
-  const [items, setItems] = useState<ChecklistItem[]>(
-    initialItems.map((text, idx) => ({
+  const buildItem = (text: string, idx: number): ChecklistItem => {
+    const parsed = parseShoppingList(text).items[0];
+    return {
       id: `item_${idx}_${Date.now()}`,
-      text,
-      completed: false,
-    }))
+      text: parsed?.label || String(text || '').trim(),
+      quantity: parsed?.quantity || '',
+      unit: parsed?.unit || '',
+      rawText: text,
+      completed: Boolean(parsed?.checked),
+    };
+  };
+  const [items, setItems] = useState<ChecklistItem[]>(
+    initialItems.map(buildItem)
   );
   const [newItemText, setNewItemText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -49,11 +60,7 @@ export function ShoppingWorkflowModal({
   useEffect(() => {
     if (!visible) return;
     setItems(
-      initialItems.map((text, idx) => ({
-        id: `item_${idx}_${Date.now()}`,
-        text,
-        completed: false,
-      })),
+      initialItems.map(buildItem),
     );
     setNewItemText('');
   }, [initialItems, visible]);
@@ -65,6 +72,9 @@ export function ShoppingWorkflowModal({
       {
         id: `item_${Date.now()}_${Math.random()}`,
         text: newItemText.trim(),
+        quantity: '',
+        unit: '',
+        rawText: newItemText.trim(),
         completed: false,
       },
     ]);
@@ -81,6 +91,10 @@ export function ShoppingWorkflowModal({
         item.id === id ? { ...item, completed: !item.completed } : item
       )
     );
+  };
+
+  const handleUpdateItem = (id: string, patch: Partial<ChecklistItem>) => {
+    setItems(items.map(item => item.id === id ? { ...item, ...patch } : item));
   };
 
   const handleSave = async () => {
@@ -147,7 +161,9 @@ export function ShoppingWorkflowModal({
                     )}
                   </View>
                 </Pressable>
-                <Text
+                <TextInput
+                  value={item.text}
+                  onChangeText={(text) => handleUpdateItem(item.id, { text })}
                   style={[
                     styles.itemText,
                     {
@@ -155,9 +171,21 @@ export function ShoppingWorkflowModal({
                       textDecorationLine: item.completed ? 'line-through' : 'none',
                     },
                   ]}
-                >
-                  {item.text}
-                </Text>
+                />
+                <TextInput
+                  value={item.quantity || ''}
+                  onChangeText={(text) => handleUpdateItem(item.id, { quantity: text })}
+                  placeholder="qty"
+                  placeholderTextColor={theme.textSecondary}
+                  style={[styles.qtyInput, { color: theme.text, borderColor: theme.border, backgroundColor: theme.background }]}
+                />
+                <TextInput
+                  value={item.unit || ''}
+                  onChangeText={(text) => handleUpdateItem(item.id, { unit: text })}
+                  placeholder="unit"
+                  placeholderTextColor={theme.textSecondary}
+                  style={[styles.unitInput, { color: theme.text, borderColor: theme.border, backgroundColor: theme.background }]}
+                />
                 <Pressable onPress={() => handleRemoveItem(item.id)} style={styles.deleteButton}>
                   <Ionicons name="trash-outline" size={18} color={theme.error} />
                 </Pressable>
@@ -307,6 +335,25 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 14,
     lineHeight: 18,
+    minHeight: 36,
+    paddingVertical: 6,
+  },
+  qtyInput: {
+    width: 48,
+    minHeight: 36,
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    fontSize: 12,
+    textAlign: 'center',
+  },
+  unitInput: {
+    width: 58,
+    minHeight: 36,
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    fontSize: 12,
   },
   deleteButton: {
     padding: 8,
