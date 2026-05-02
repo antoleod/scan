@@ -12,6 +12,7 @@ import {
 import { diag } from './diagnostics';
 import { clearDeletedNoteKeys, loadDeletedNoteKeys, markDeletedNoteKey, noteStorageKey } from './noteDeletions';
 import { enqueueOperation } from './offlineQueue';
+import type { SmartWorkflowType } from './smartNoteWorkflows';
 
 const NOTES_KEY = '@barra_notes_v1';
 const TEMPLATES_KEY = '@barra_note_templates_v1';
@@ -19,6 +20,7 @@ const TEMPLATES_PURGED_KEY = '@barra_templates_purged_v1';
 
 export type NoteKind = 'text' | 'image';
 export type NoteCategory = 'general' | 'work' | 'health' | 'shopping';
+export type { SmartWorkflowType } from './smartNoteWorkflows';
 
 // Simple version format for backward compatibility with existing notes
 export type SimpleNoteVersion = {
@@ -28,7 +30,6 @@ export type SimpleNoteVersion = {
   createdAt: number;
 };
 
-export type SmartWorkflowType = 'none' | 'medication' | 'shopping' | 'reminder' | 'task';
 export type WorkflowStatus = 'draft' | 'active' | 'completed' | 'dismissed';
 
 export interface WorkflowMetadata {
@@ -267,6 +268,7 @@ export async function addRichNoteUnique(
   attachments: string[] = [],
   groupId?: string,
   draft?: boolean,
+  autoDetectSmartType: boolean = true,
 ): Promise<{ notes: NoteItem[]; inserted: boolean }> {
   const textStr = text && typeof text === 'string' ? text : '';
   const trimmed = textStr.trim();
@@ -274,6 +276,19 @@ export async function addRichNoteUnique(
   if (!trimmed && normalizedAttachments.length === 0) return { notes: await loadNotes(), inserted: false };
 
   const current = await loadNotes();
+
+  // Auto-detect smart type from content
+  let smartType: SmartWorkflowType | undefined;
+  if (autoDetectSmartType && trimmed) {
+    try {
+      const { detectSmartTypeFromContent } = require('../core/smartNoteWorkflows');
+      smartType = detectSmartTypeFromContent(trimmed);
+      if (smartType === 'none') smartType = undefined;
+    } catch {
+      // Silently fail detection, continue without smartType
+    }
+  }
+
   const candidate: NoteItem = {
     id: 'candidate',
     kind: 'text',
@@ -286,6 +301,7 @@ export async function addRichNoteUnique(
     pinned: false,
     createdAt: Date.now(),
     updatedAt: Date.now(),
+    smartType,
   };
   if (hasDuplicateNote(current, candidate)) {
     return { notes: current, inserted: false };
@@ -549,6 +565,43 @@ export async function updateWorkflowStatus(
     const synced = await pushNoteIfAuthenticated(updated);
     if (synced) {
       const syncedNext = next.map((item) => item.id === id ? { ...item, syncStatus: 'synced' as const } : item);
+      await saveNotes(syncedNext);
+      return normalizeNotes(syncedNext);
+    }
+  }
+  if (updated?.groupId) {
+    await upsertSharedGroupNote(updated.groupId, updated);
+  }
+  return normalizeNotes(next);
+}
+
+export async function updateNoteSmartType(
+  id: string,
+  smartType: SmartWorkflowType,
+  workflowStatus?: WorkflowStatus,
+  workflowMetadata?: WorkflowMetadata,
+): Promise<NoteItem[]> {
+  const current = await loadNotes();
+  const next = current.map((item) =>
+    item.id === id
+      ? {
+          ...item,
+          smartType,
+          workflowStatus: workflowStatus || item.workflowStatus,
+          workflowMetadata: workflowMetadata || item.workflowMetadata,
+          updatedAt: Date.now(),
+          syncStatus: 'pending' as const,
+        }
+      : item,
+  );
+  await saveNotes(next);
+  const updated = next.find((item) => item.id === id);
+  if (updated) {
+    const synced = await pushNoteIfAuthenticated(updated);
+    if (synced) {
+      const syncedNext = next.map((item) =>
+        item.id === id ? { ...item, syncStatus: 'synced' as const } : item,
+      );
       await saveNotes(syncedNext);
       return normalizeNotes(syncedNext);
     }

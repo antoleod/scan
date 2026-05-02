@@ -36,6 +36,7 @@ import {
   updateNoteTitle,
   buildAppointmentIcs,
   updateWorkflowStatus,
+  updateNoteSmartType,
   markNotesSynced,
   type WorkflowStatus,
 } from '../../../core/notes';
@@ -549,6 +550,19 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
   }
 
   async function createMedicationFollowUpNote(metadata: WorkflowMetadata) {
+    // Validate medication name is provided
+    const medicationName = String(metadata.medicationName || '').trim();
+    if (!medicationName) {
+      showToast('Medication name is required');
+      return;
+    }
+
+    // Validate follow-up time is in the future if provided
+    if (metadata.followUpAt && metadata.followUpAt <= Date.now()) {
+      showToast('Follow-up time must be in the future');
+      return;
+    }
+
     const groupId = activeGroupId === 'personal' ? undefined : activeGroupId;
     const meds = Array.isArray((metadata as WorkflowMetadata & { medications?: Array<{ name?: string; dose?: string; nextSuggestedAt?: string; followPrescription?: boolean }> }).medications)
       ? ((metadata as WorkflowMetadata & { medications?: Array<{ name?: string; dose?: string; nextSuggestedAt?: string; followPrescription?: boolean }> }).medications || [])
@@ -565,7 +579,7 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
           : 'Follow prescription';
         return `${name}${dose ? ` · ${dose}` : ''} · ${nextText}`;
       }).filter(Boolean)
-      : [String(metadata.medicationName || '').trim()].filter(Boolean);
+      : [medicationName].filter(Boolean);
     if (!medLines.length) return;
     const header = medLines.length > 1 ? `Medication Follow-up · ${medLines.length} meds` : 'Medication Follow-up';
     const lines = [
@@ -580,10 +594,29 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
     setNotes(result.notes);
     if (result.inserted) {
       setFilter('all');
+      const createdNote = result.notes[0];
+
+      // Set smartType and workflow metadata on the created note
+      const workflowMeta: WorkflowMetadata = {
+        medicationName: String(metadata.medicationName || ''),
+        doseText: meds.map((m) => String(m.dose || '')).filter(Boolean).join(', ') || undefined,
+        takenAtText: takenAt || undefined,
+        reason: reason || undefined,
+        followUpAt: metadata.followUpAt,
+        followUpLabel: metadata.followUpLabel || undefined,
+      };
+      const updatedNotes = await updateNoteSmartType(
+        createdNote.id,
+        'medication',
+        'active',
+        workflowMeta,
+      );
+      setNotes(updatedNotes);
+
       // Schedule reminder if follow-up time is set
       if (metadata.followUpAt && metadata.medicationName) {
         await scheduleReminder(
-          result.notes[0].id,
+          createdNote.id,
           metadata.followUpAt,
           String(metadata.medicationName),
         ).catch(() => undefined);

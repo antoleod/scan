@@ -7,6 +7,9 @@ import { extractFields } from "../src/core/extract";
 import { historyKey } from "../src/core/history";
 import { defaultSettings, piLogic } from "../src/core/settings";
 import { detectGroceryItem, formatShoppingList, isLikelyShoppingList, searchGroceryCatalog } from "../src/utils/groceryDetection";
+import { isShoppingList } from "../src/core/shoppingList";
+import { detectSmartTypeFromContent } from "../src/core/smartNoteWorkflows";
+import { createTrieFromWords } from "../src/utils/trie";
 
 let passed = 0;
 let failed = 0;
@@ -209,6 +212,58 @@ run("shopping formatter preserves accents and user quantities", () => {
   assert.match(formatted, /Pommes de terre — 1 kg/);
   assert.match(formatted, /- 3 poires/);
   assert.match(formatted, /Crème liquide verte/);
+});
+
+run("health keywords prevent shopping list misclassification", () => {
+  const medicationNote = "Took ibuprofen 400mg for headache, doctor recommended rest";
+  assert.equal(isShoppingList(medicationNote), false);
+});
+
+run("health keywords in Spanish prevent shopping list misclassification", () => {
+  const medicationNote = "Tomé ibuprofeno para el dolor de cabeza. Médico recomendó descanso.";
+  assert.equal(isShoppingList(medicationNote), false);
+});
+
+run("health keywords in French prevent shopping list misclassification", () => {
+  const medicationNote = "J'ai pris de l'ibuprofène pour la migraine. Mon docteur recommande le repos.";
+  assert.equal(isShoppingList(medicationNote), false);
+});
+
+run("time formats like 08:40 are excluded from quantity parsing", () => {
+  const timeNote = "Meeting at 08:40, reminder set for 10:30 AM";
+  assert.equal(isShoppingList(timeNote), false);
+});
+
+run("trie keyword matching detects medication keywords efficiently", () => {
+  const trie = createTrieFromWords(["medication", "pill", "tablet", "took"]);
+  assert.equal(trie.contains("medication"), true);
+  assert.equal(trie.contains("pill"), true);
+  assert.equal(trie.contains("unknown"), false);
+});
+
+run("trie hasKeyword detects substrings and word boundaries", () => {
+  const trie = createTrieFromWords(["ibuprofen", "paracetamol", "aspirin"]);
+  assert.equal(trie.hasKeyword("Taking ibuprofen for pain"), true);
+  assert.equal(trie.hasKeyword("Need paracetamol urgently"), true);
+  assert.equal(trie.hasKeyword("shopping for ingredients"), false);
+});
+
+run("smart type detection identifies medication notes", () => {
+  const medicationText = "Tomé ibuprofeno 400mg a las 8:00 por dolor de cabeza";
+  const smartType = detectSmartTypeFromContent(medicationText);
+  assert.equal(smartType, "medication");
+});
+
+run("smart type detection identifies shopping lists", () => {
+  const shoppingText = "Manzanas, plátanos, leche, pan, huevos, queso";
+  const smartType = detectSmartTypeFromContent(shoppingText);
+  assert.equal(smartType, "shopping");
+});
+
+run("smart type detection returns 'none' for generic text", () => {
+  const genericText = "This is just a random note with no special meaning";
+  const smartType = detectSmartTypeFromContent(genericText);
+  assert.equal(smartType, "none");
 });
 
 console.log("\n-------------------");

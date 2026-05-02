@@ -3,6 +3,7 @@
  * Deterministic shopping-list detection and parsing.
  * Reused by note rendering and automatic note creation.
  */
+import { createTrieFromSet } from '../utils/trie';
 
 export type ShoppingItem = {
   id: string;
@@ -56,6 +57,37 @@ const VERB_WORDS = [
   'aller', 'vais', 'veux', 'dois', 'faire', 'prendre', 'acheterai', 'achèterai', 'pensar', 'quiero', 'necesito', 'hacer', 'compraré',
   'will', 'want', 'need', 'should', 'remember', 'call', 'send', 'meet', 'finish', 'fix', 'update',
 ];
+
+// Health keywords that block shopping list detection (English + Spanish + French)
+const HEALTH_KEYWORD_BLOCKERS = new Set([
+  // English
+  'medication', 'medicine', 'medicament', 'drug', 'pill', 'tablet',
+  'ibuprofen', 'paracetamol', 'acetaminophen', 'aspirin', 'vitamin',
+  'dose', 'dosage', 'prescription', 'pharmacist', 'pharmacy',
+  'doctor', 'medical', 'health', 'treatment', 'therapy',
+  'leaflet', 'instruction', 'side effect', 'allergy', 'allergic',
+  'hospital', 'clinic', 'emergency', 'followup', 'follow-up',
+  'physician', 'surgeon', 'nurse', 'dentist', 'therapist',
+  // Spanish
+  'medicamento', 'medicación', 'medicina', 'fármaco', 'pastilla', 'tableta',
+  'ibuprofeno', 'paracetamol', 'aspirina', 'vitamina',
+  'dosis', 'receta', 'farmacéutico', 'farmacia',
+  'doctor', 'médico', 'sanitario', 'salud', 'tratamiento', 'terapia',
+  'prospecto', 'efecto secundario', 'alergia', 'alérgico',
+  'hospital', 'clínica', 'emergencia', 'seguimiento', 'médica',
+  'cirujano', 'enfermera', 'dentista', 'terapeuta',
+  // French
+  'médicament', 'médication', 'médecine', 'drogue', 'pilule', 'comprimé',
+  'ibuprofène', 'paracétamol', 'aspirine', 'vitamine',
+  'dose', 'ordonnance', 'pharmacien', 'pharmacie',
+  'docteur', 'médecin', 'santé', 'traitement', 'thérapie',
+  'notice', 'instruction', 'effet secondaire', 'allergie', 'allergique',
+  'hôpital', 'clinique', 'urgence', 'suivi', 'médical',
+  'chirurgien', 'infirmière', 'dentiste', 'thérapeute',
+]);
+
+// Create Trie for efficient health keyword matching
+const HEALTH_KEYWORD_TRIE = createTrieFromSet(HEALTH_KEYWORD_BLOCKERS);
 
 let idCounter = 0;
 function nextId(): string {
@@ -158,6 +190,12 @@ function parseLine(line: string): ParsedLine {
   const rawLine = normalizeText(line);
   const checkedInfo = extractChecked(rawLine);
   const lineText = checkedInfo.text;
+
+  // BLOCKER: Skip lines that look like time values (HH:MM or HH:MM AM/PM)
+  if (/\d{1,2}:\d{2}\s*(?:AM|PM|am|pm|am\s*pm)?/i.test(lineText)) {
+    return { label: cleanProductName(lineText), quantity: '', unit: '', rawLine, checked: checkedInfo.checked };
+  }
+
   const colonIdx = lineText.lastIndexOf(':');
 
   if (colonIdx !== -1) {
@@ -211,6 +249,9 @@ function parseLine(line: string): ParsedLine {
 function getShoppingConfidence(rawText: string): number {
   const text = normalizeText(rawText);
   if (!text) return 0;
+
+  // BLOCKER: If text contains health keywords, it's not a shopping list
+  if (HEALTH_KEYWORD_TRIE.hasKeyword(text)) return 0;
 
   const chunks = splitShoppingCandidates(text);
   if (chunks.length < 4) return 0;

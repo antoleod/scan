@@ -1147,6 +1147,83 @@ Footer text
 - Bidirectional sync on login/logout
 - Group notes can be shared: `/sharedGroups/{groupId}/notes/{id}`
 
+### Smart Type Detection (`smartNoteWorkflows.ts` + `smartNotes.ts`)
+
+Automatically classifies notes into smart workflow types: `medication`, `shopping`, `reminder`, `task`, or `none`.
+
+**Auto-Detection on Creation**:
+```typescript
+const { notes, inserted } = await addRichNoteUnique(
+  text,
+  'health',
+  [],
+  undefined,
+  true  // autoDetectSmartType: detects smartType from content
+);
+```
+
+**Detection Algorithm**:
+1. **Medication** (≥ 0.65 confidence):
+   - Detects direct medication names from EU medication database
+   - Multilingual keywords: `took`, `tomé`, `pris`, plus dose/time patterns
+   - Blocks false positives from health contexts (doctor, pharmacy, hospital)
+   - Generates `WorkflowMetadata` with dose, time, reason, follow-up
+
+2. **Shopping** (≥ 0.65 confidence):
+   - Uses grocery catalog for item detection
+   - Health keywords block classification (prevents medication notes from being shopping lists)
+   - Time patterns (HH:MM, HH:MM AM/PM) exclude quantity detection
+   - Multilingual support: English, Spanish, French
+
+3. **Reminder** (≥ 0.65 confidence):
+   - Keywords: `remind`, `recordar`, `rappel`
+   - Boosts on future references: `tomorrow`, `mañana`, `demain`
+
+4. **Task** (≥ 0.65 confidence):
+   - Keywords: `task`, `tarea`, `tâche`
+   - Detects `todo` style items
+
+**Detection Optimization**:
+- Uses Trie data structure for O(1) keyword matching (vs. O(n) linear search)
+- Confidence scoring: Base + keyword matches + pattern matches
+- Caching via `useMemo` in NoteCard for render optimization
+
+**Example**: Medication Note with Follow-up
+```typescript
+const result = await addRichNoteUnique(
+  'Tomé ibuprofeno 400mg a las 8:00 por dolor de cabeza',
+  'health'
+);
+// Automatically detects: smartType='medication'
+// Metadata: { medicationName: 'ibuprofen', doseText: '400mg', takenAtText: '8:00', reason: 'headache' }
+```
+
+**Updating Smart Type Post-Creation**:
+```typescript
+export async function updateNoteSmartType(
+  id: string,
+  smartType: SmartWorkflowType,
+  workflowStatus?: WorkflowStatus,
+  workflowMetadata?: WorkflowMetadata
+): Promise<NoteItem[]>
+```
+- Sets `smartType`, `workflowStatus`, `workflowMetadata` on existing note
+- Syncs to Firestore if authenticated
+- Used by medication follow-up flow to set metadata after note creation
+
+**Content Rendering** (`NoteContentRenderer.tsx`):
+Centralized component that renders notes based on smartType:
+1. Medication → `MedicationCard` (with complete/dismiss actions)
+2. Shopping → `ShoppingListBlock` (with editable items)
+3. List-like → `NoteListBlock` (checkboxes, bullets, numbered)
+4. Default → Plain text
+
+**Health Keyword Blockers**:
+Prevents medication/doctor/health notes from being misclassified as shopping lists:
+- **English**: `health`, `doctor`, `pharmacy`, `medication`, `ibuprofen`, `aspirin`, etc. (60+ keywords)
+- **Spanish**: `salud`, `médico`, `farmacia`, `medicamento`, `ibuprofeno`, `aspirina`, etc.
+- **French**: `santé`, `docteur`, `pharmacie`, `médicament`, `ibuprofène`, etc.
+
 ---
 
 ## 3. CLIPBOARD SYSTEM (Continuous Monitoring + Dedup)

@@ -293,3 +293,12 @@ export function detectSmartWorkflow(text: string): SmartWorkflowDetection {
     reason: '',
   };
 }
+
+/**
+ * Detect smart type from note content (simplified version for auto-classification)
+ * Returns the detected type with high confidence (>= 0.65) or 'none'
+ */
+export function detectSmartTypeFromContent(text: string): SmartWorkflowType {
+  const detection = detectSmartWorkflow(text);
+  return detection.type;
+}

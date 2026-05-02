@@ -14,6 +14,8 @@ import { detectNoteEntities, buildSmartNoteModel, segmentNoteText, parseServiceN
 import { isShoppingList, parseShoppingList } from '../core/shoppingList';
 import { ShoppingListBlock } from './ShoppingListBlock';
 import { MedicationCard } from './MedicationCard';
+import { NoteListBlock } from './NoteListBlock';
+import { NoteContentRenderer } from './NoteContentRenderer';
 import { AppSettings } from '../types';
 import type { WorkflowStatus } from '../core/notes';
 import { useFieldVisibility } from '../hooks/useFieldVisibility';
@@ -545,31 +547,20 @@ export function NoteCard({
                 onPressOffice={onPressOffice}
                 onCopyValue={onCopyValue}
               />
-            ) : note.smartType === 'medication' ? (
-              <MedicationCard
-                metadata={note.workflowMetadata}
-                workflowStatus={note.workflowStatus}
-                palette={palette}
-                onComplete={() => onUpdateWorkflowStatus?.(note.id, 'completed')}
-                onDismiss={() => onUpdateWorkflowStatus?.(note.id, 'dismissed')}
-              />
-            ) : isShopping && shoppingModel ? (
-              <ShoppingListBlock
-                model={shoppingModel}
-                palette={palette}
-                expanded={expanded}
-                onRawTextChange={onChangeEditingText}
-                isShared={Boolean(note.groupId)}
-              />
-            ) : model.isList ? (
-              <NoteListBlock model={model} palette={palette} expanded={expanded} />
             ) : (
-              <Text
-                style={{ color: palette.textBody, fontSize: 14, lineHeight: 21 }}
-                numberOfLines={expanded ? 0 : 3}
-              >
-                {preview}
-              </Text>
+              <NoteContentRenderer
+                note={note}
+                expanded={expanded}
+                smartNoteModel={model}
+                shoppingModel={shoppingModel}
+                preview={preview}
+                palette={palette}
+                onRawTextChange={onChangeEditingText}
+                onPressOffice={onPressOffice}
+                onCopyValue={onCopyValue}
+                onMedicationComplete={() => onUpdateWorkflowStatus?.(note.id, 'completed')}
+                onMedicationDismiss={() => onUpdateWorkflowStatus?.(note.id, 'dismissed')}
+              />
             )}
 
             {/* ── Color picker (editing mode only) ── */}
@@ -1222,53 +1213,3 @@ function SmartEntityBlock({
   );
 }
 
-// ─── NoteListBlock ──────────────────────────────────────────────────────────────
-
-function NoteListBlock({
-  model,
-  palette,
-  expanded,
-}: {
-  model: SmartNoteModel;
-  palette: Palette;
-  expanded: boolean;
-}) {
-  const visibleItems = expanded ? model.items : model.items.slice(0, 6);
-  const hidden = model.items.length - visibleItems.length;
-
-  return (
-    <View style={{ gap: 5 }}>
-      {visibleItems.map((item) => (
-        <View key={item.index} style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8 }}>
-          {item.kind === 'checkbox' ? (
-            <View style={{
-              width: 16, height: 16, borderRadius: 4, borderWidth: 1.5,
-              borderColor: item.checked ? palette.accent : palette.textDim,
-              backgroundColor: item.checked ? palette.accent : 'transparent',
-              alignItems: 'center', justifyContent: 'center',
-              marginTop: 2, flexShrink: 0,
-            }}>
-              {item.checked ? <Ionicons name="checkmark" size={10} color="#000" /> : null}
-            </View>
-          ) : item.kind === 'numbered' ? (
-            <Text style={{ color: palette.textDim, fontSize: 12, fontWeight: '600', width: 20, textAlign: 'right', flexShrink: 0, marginTop: 1 }}>
-              {item.index + 1}.
-            </Text>
-          ) : (
-            <View style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: palette.accent, marginTop: 7, flexShrink: 0 }} />
-          )}
-          <Text style={{
-            color: item.checked ? palette.textMuted : palette.textBody,
-            fontSize: 13, lineHeight: 20, flex: 1,
-            textDecorationLine: item.checked ? 'line-through' : 'none',
-          }}>
-            {item.text}
-          </Text>
-        </View>
-      ))}
-      {hidden > 0 ? (
-        <Text style={{ color: palette.textMuted, fontSize: 11 }}>+{hidden} more items</Text>
-      ) : null}
-    </View>
-  );
-}
