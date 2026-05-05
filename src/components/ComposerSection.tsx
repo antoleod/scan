@@ -53,6 +53,8 @@ export const ComposerSection = forwardRef<TextInput, {
   onOcrAppendText?: (text: string) => void;
   onOcrReplaceText?: (text: string) => void;
   generating?: boolean;
+  isSecret?: boolean;
+  onToggleSecret?: () => void;
 }>(
   function ComposerSection(
     {
@@ -79,6 +81,8 @@ export const ComposerSection = forwardRef<TextInput, {
       onOcrAppendText,
       onOcrReplaceText,
       generating,
+      isSecret,
+      onToggleSecret,
     },
     ref
   ) {
@@ -308,6 +312,28 @@ export const ComposerSection = forwardRef<TextInput, {
                 <ThemedActionIconButton icon="layers-outline" label="Templates" accentColor="#A855F7" onPress={() => setTemplatesModalVisible(true)} palette={palette} compact={isCompact} entranceDelay={160} />
               </Pressable>
             </View>
+
+            {onToggleSecret && (
+              <View style={{ alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
+                {hoveredAction === 'secret' && (
+                  <View pointerEvents="none" style={{ position: 'absolute', top: -30, left: '50%', transform: [{ translateX: -34 }], minWidth: 68, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, backgroundColor: '#111111', borderWidth: 1, borderColor: palette.chipBorder, zIndex: 20 }}>
+                    <Text style={{ color: palette.textBody, fontSize: 11, fontWeight: '600', textAlign: 'center' }}>{isSecret ? 'Secret' : 'Lock'}</Text>
+                  </View>
+                )}
+                <Pressable onHoverIn={() => setHoveredAction('secret')} onHoverOut={() => setHoveredAction((current) => (current === 'secret' ? null : current))}>
+                  <ThemedActionIconButton
+                    icon={isSecret ? 'lock' : 'lock-open-outline'}
+                    label={isSecret ? 'Secret' : 'Lock'}
+                    accentColor="#F59E0B"
+                    active={!!isSecret}
+                    onPress={onToggleSecret}
+                    palette={palette}
+                    compact={isCompact}
+                    entranceDelay={180}
+                  />
+                </Pressable>
+              </View>
+            )}
 
             <View style={{ alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
               {hoveredAction === 'save' && (

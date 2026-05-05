@@ -526,6 +526,7 @@ export function HistoryTab({
       <Modal animationType="fade" transparent visible={moreVisible} onRequestClose={() => setMoreVisible(false)} statusBarTranslucent>
         <Pressable style={mainAppStyles.moreSheetBackdrop} onPress={() => setMoreVisible(false)}>
           <Pressable style={[mainAppStyles.moreSheet, { backgroundColor: palette.card, borderColor: palette.border }]} onPress={() => null}>
+            <View style={mainAppStyles.modalHandle} />
             <View style={mainAppStyles.moreSheetHeader}>
               <Text style={[mainAppStyles.sectionTitle, { color: palette.fg }]}>More filters</Text>
               <Pressable style={[mainAppStyles.modalCloseBtn, { borderColor: palette.border }]} onPress={() => setMoreVisible(false)}>
@@ -564,6 +565,7 @@ export function HistoryTab({
             style={[mainAppStyles.modalForm, { backgroundColor: palette.card, borderColor: palette.border, maxWidth: 520 }]}
             onPress={() => null}
           >
+            <View style={mainAppStyles.modalHandle} />
             <View style={mainAppStyles.modalHeader}>
               <Text style={[mainAppStyles.sectionTitle, { color: palette.fg }]}>Delete item</Text>
               <Pressable style={[mainAppStyles.modalCloseBtn, { borderColor: palette.border }]} onPress={() => setDeleteTarget(null)}>

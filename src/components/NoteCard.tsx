@@ -339,7 +339,12 @@ export function NoteCard({
     return `${d.toLocaleDateString()} · ${d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
   }, [note.updatedAt]);
 
-  const borderLeftColor = noteColorHex(note.color, palette.border);
+  const smartTypeColor = note.smartType === 'medication' ? '#4DA3FF'
+    : note.smartType === 'shopping' ? '#22c55e'
+    : note.smartType === 'reminder' ? '#F59E0B'
+    : note.category === 'work' ? '#A855F7'
+    : undefined;
+  const borderLeftColor = smartTypeColor || noteColorHex(note.color, palette.border);
   const smart = useMemo(() => detectNoteEntities(noteText, settings), [noteText, settings]);
   const isSmart = smart.type !== 'general';
   const model = useMemo(() => buildSmartNoteModel(noteText, smart), [noteText, smart]);
@@ -430,7 +435,7 @@ export function NoteCard({
               minWidth: 0,
               borderWidth: selected ? 2 : 1,
               borderColor: selected ? palette.accent : palette.border,
-              borderLeftWidth: selected ? 2 : 4,
+              borderLeftWidth: selected ? 2 : smartTypeColor ? 4 : 1,
               borderLeftColor: selected ? palette.accent : borderLeftColor,
               borderRadius: 14,
               backgroundColor: selected ? `${palette.accent}12` : palette.surface,

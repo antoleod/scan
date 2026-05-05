@@ -30,6 +30,7 @@ import {
   removeNote,
   removeTemplate,
   setNoteColor,
+  setNoteSecret,
   togglePinned,
   toggleArchived,
   updateNoteText,
@@ -45,6 +46,8 @@ import {
   type WorkflowStatus,
   type MedicationCycleEntry,
 } from '../../../core/notes';
+import { hasPin } from '../../../core/secretPin';
+import { SecretPinModal } from '../../SecretPinModal';
 import { detectSmartWorkflow, type SmartWorkflowDetection, type SmartWorkflowType } from '../../../core/smartNoteWorkflows';
 import { findMedication } from '../../../core/euMedicationDatabase';
 import { checkDueReminders, dismissReminder, snoozeReminder, scheduleReminder, type MedicationReminder } from '../../../core/medicationReminders';
@@ -256,6 +259,10 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
   const [inboxView, setInboxView] = useState<InboxView>('all');
   const [refreshing, setRefreshing] = useState(false);
   const [notesPage, setNotesPage] = useState(1);
+  const [draftIsSecret, setDraftIsSecret] = useState(false);
+  const [pinUnlocked, setPinUnlocked] = useState(false);
+  const [pinModalMode, setPinModalMode] = useState<'setup' | 'unlock' | null>(null);
+  const pendingSecretActionRef = useRef<(() => void) | null>(null);
   const draftInputRef = useRef<React.ElementRef<typeof TextInput> | null>(null);
   const templateInputRef = useRef<React.ElementRef<typeof TextInput> | null>(null);
 
@@ -503,6 +510,15 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
     setNotesPage(1);
   }, [searchText, filter, activeGroupId, dateFilter, officeEntityFilter, inboxView]);
 
+  // Auto-lock secret notes when leaving the notes tab or unmounting
+  useEffect(() => {
+    return () => {
+      setPinUnlocked(false);
+    };
+  }, []);
+
+  const secretCount = useMemo(() => notes.filter((n) => n.isSecret && !n.deletedAt).length, [notes]);
+
   const handleRefresh = async () => {
     setRefreshing(true);
     try {
@@ -660,8 +676,14 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
     const result = await addRichNoteUnique(draftTextValue, activeCategory, draftImages, groupId, true, false);
     setNotes(result.notes);
     if (result.inserted) {
-      showToast('Note saved');
+      showToast(draftIsSecret ? 'Secret note saved' : 'Note saved');
       setFilter('all');
+
+      if (draftIsSecret && result.notes[0]) {
+        const updated = await setNoteSecret(result.notes[0].id, true);
+        setNotes(updated);
+        setDraftIsSecret(false);
+      }
 
       // Detect smart workflows (medication, shopping, reminder, task)
       if (draftTextValue.trim().length > 0) {
@@ -1162,6 +1184,21 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
                 draftText={draftTextValue}
                 draftImages={draftImages}
                 activeCategory={activeCategory}
+                isSecret={draftIsSecret}
+                onToggleSecret={async () => {
+                  if (draftIsSecret) {
+                    setDraftIsSecret(false);
+                    return;
+                  }
+                  const exists = await hasPin();
+                  if (!exists) {
+                    pendingSecretActionRef.current = () => setDraftIsSecret(true);
+                    setPinModalMode('setup');
+                  } else {
+                    setDraftIsSecret(true);
+                    showToast('Note will be saved as secret');
+                  }
+                }}
                 onChangeGroup={setActiveGroupId}
                 onChangeText={handleDraftTextChange}
                 onGenerate={() => setGeneratorVisible(true)}
@@ -1451,6 +1488,45 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
                 onChangeDateFilter={setDateFilter}
               />
 
+              {secretCount > 0 ? (
+                <Pressable
+                  onPress={() => {
+                    if (pinUnlocked) {
+                      setPinUnlocked(false);
+                      showToast('Secret notes locked');
+                    } else {
+                      setPinModalMode('unlock');
+                    }
+                  }}
+                  style={({ pressed }) => ({
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 10,
+                    paddingHorizontal: 14,
+                    paddingVertical: 10,
+                    borderRadius: 12,
+                    borderWidth: 1,
+                    borderColor: pinUnlocked ? '#22c55e55' : '#F59E0B55',
+                    backgroundColor: pinUnlocked ? 'rgba(34,197,94,0.08)' : 'rgba(245,158,11,0.08)',
+                    opacity: pressed ? 0.85 : 1,
+                  })}
+                >
+                  <Ionicons
+                    name={pinUnlocked ? 'lock-open' : 'lock-closed'}
+                    size={16}
+                    color={pinUnlocked ? '#22c55e' : '#F59E0B'}
+                  />
+                  <Text style={{ color: uiPalette.textBody, fontSize: 13, fontWeight: '700', flex: 1 }}>
+                    {pinUnlocked
+                      ? `${secretCount} secret note${secretCount === 1 ? '' : 's'} unlocked`
+                      : `${secretCount} secret note${secretCount === 1 ? '' : 's'} — Tap to unlock`}
+                  </Text>
+                  <Text style={{ color: pinUnlocked ? '#22c55e' : '#F59E0B', fontSize: 12, fontWeight: '700' }}>
+                    {pinUnlocked ? 'Lock' : 'Unlock'}
+                  </Text>
+                </Pressable>
+              ) : null}
+
               {filteredNotes.length === 0 ? (
                 <View style={{ width: '100%', borderWidth: 1, borderColor: palette.border, borderRadius: 12, backgroundColor: uiPalette.surface, alignItems: 'center', gap: 8, padding: 12, alignSelf: 'stretch' }}>
                   <Ionicons name={notes.length === 0 ? 'document-text-outline' : 'search-outline'} size={28} color={palette.accent} />
@@ -1482,6 +1558,42 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
                     {row.map((note) => {
                       const expanded = expandedNoteId === note.id;
                       const editing = editingNoteId === note.id;
+                      if (note.isSecret && !pinUnlocked) {
+                        return (
+                          <View key={note.id} style={{ flex: 1, minWidth: 0 }}>
+                            <Pressable
+                              onPress={() => setPinModalMode('unlock')}
+                              onLongPress={() => {
+                                Alert.alert('Secret note', 'Unlock secret notes to view, edit or remove this entry.', [
+                                  { text: 'Cancel', style: 'cancel' },
+                                  { text: 'Unlock', onPress: () => setPinModalMode('unlock') },
+                                  { text: 'Make non-secret', style: 'destructive', onPress: () => setPinModalMode('unlock') },
+                                ]);
+                              }}
+                              style={({ pressed }) => ({
+                                borderWidth: 1,
+                                borderColor: uiPalette.chipBorder,
+                                borderLeftWidth: 4,
+                                borderLeftColor: '#F59E0B',
+                                borderRadius: 14,
+                                backgroundColor: uiPalette.surface,
+                                padding: 16,
+                                gap: 6,
+                                opacity: pressed ? 0.85 : 1,
+                              })}
+                            >
+                              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                                <Ionicons name="lock-closed" size={16} color="#F59E0B" />
+                                <Text style={{ color: uiPalette.textBody, fontSize: 13, fontWeight: '700', flex: 1 }}>Secret note</Text>
+                                <Text style={{ color: uiPalette.textDim, fontSize: 10 }}>
+                                  {new Date(note.updatedAt).toLocaleDateString()}
+                                </Text>
+                              </View>
+                              <Text style={{ color: uiPalette.textDim, fontSize: 11 }}>Tap to unlock</Text>
+                            </Pressable>
+                          </View>
+                        );
+                      }
                       return (
                         <View key={note.id} style={{ flex: 1, minWidth: 0 }}>
                           <NoteCard
@@ -1796,6 +1908,30 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
       </Modal>
 
       {/* ── Smart Note Generator ── */}
+      <SecretPinModal
+        visible={pinModalMode !== null}
+        mode={pinModalMode || 'unlock'}
+        palette={{ bg: palette.bg, fg: palette.fg, accent: palette.accent, muted: palette.muted, card: palette.card, border: palette.border }}
+        onCancel={() => {
+          setPinModalMode(null);
+          pendingSecretActionRef.current = null;
+        }}
+        onSuccess={() => {
+          const wasSetup = pinModalMode === 'setup';
+          setPinModalMode(null);
+          if (wasSetup) {
+            const pending = pendingSecretActionRef.current;
+            pendingSecretActionRef.current = null;
+            if (pending) pending();
+            setPinUnlocked(true);
+            showToast('PIN saved · Secret notes enabled');
+          } else {
+            setPinUnlocked(true);
+            showToast('Secret notes unlocked');
+          }
+        }}
+      />
+
       <SmartNoteGeneratorModal
         visible={generatorVisible}
         palette={uiPalette}

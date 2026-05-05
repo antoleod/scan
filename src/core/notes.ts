@@ -95,6 +95,7 @@ export interface NoteItem {
   workflowStatus?: WorkflowStatus;
   workflowMetadata?: WorkflowMetadata;
   syncStatus?: 'pending' | 'retrying' | 'failed' | 'offline' | 'synced';
+  isSecret?: boolean;
 }
 
 export type TemplateKind = 'email' | 'appointment';
@@ -539,6 +540,27 @@ export async function toggleArchived(id: string): Promise<NoteItem[]> {
   const current = await loadNotes();
   const next = current.map((item) =>
     item.id === id ? { ...item, archived: !item.archived, updatedAt: Date.now(), syncStatus: 'pending' as const } : item,
+  );
+  await saveNotes(next);
+  const updated = next.find((item) => item.id === id);
+  if (updated) {
+    const synced = await pushNoteIfAuthenticated(updated);
+    if (synced) {
+      const syncedNext = next.map((item) => item.id === id ? { ...item, syncStatus: 'synced' as const } : item);
+      await saveNotes(syncedNext);
+      return normalizeNotes(syncedNext);
+    }
+  }
+  if (updated?.groupId) {
+    await upsertSharedGroupNote(updated.groupId, updated);
+  }
+  return normalizeNotes(next);
+}
+
+export async function setNoteSecret(id: string, isSecret: boolean): Promise<NoteItem[]> {
+  const current = await loadNotes();
+  const next = current.map((item) =>
+    item.id === id ? { ...item, isSecret, updatedAt: Date.now(), syncStatus: 'pending' as const } : item,
   );
   await saveNotes(next);
   const updated = next.find((item) => item.id === id);

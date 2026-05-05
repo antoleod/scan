@@ -40,8 +40,8 @@ export function BottomTabs({
   };
 
   return (
-    <View style={{ width: '100%', minWidth: 0, flexShrink: 0, height: 60, paddingTop: 8, borderTopWidth: 1, borderTopColor: palette.border, backgroundColor: palette.bg, paddingHorizontal: 8 }}>
-      <View style={{ flex: 1, flexDirection: 'row', alignItems: 'stretch', justifyContent: 'space-between' }}>
+    <View style={{ width: '100%', minWidth: 0, flexShrink: 0, paddingTop: 8, borderTopWidth: 1, borderTopColor: palette.border, backgroundColor: palette.bg, paddingHorizontal: 8 }}>
+      <View style={{ flex: 1, flexDirection: 'row', alignItems: 'stretch', justifyContent: 'space-between', minHeight: 56 }}>
         {tabs.map((tab, idx) => {
           const active = activeTab === tab.key;
           return (
@@ -53,12 +53,13 @@ export function BottomTabs({
                   flex: 1,
                   alignItems: 'center',
                   justifyContent: 'center',
-                  opacity: pressed ? 0.7 : 1,
-                  paddingTop: active ? 0 : 4,
-                  transform: [{ scale: pressed ? 0.95 : 1 }],
+                  opacity: pressed ? 0.6 : 1,
+                  transform: [{ scale: pressed ? 0.92 : active ? 1.05 : 1 }],
+                  borderTopWidth: active ? 2 : 0,
+                  borderTopColor: active ? palette.accent : 'transparent',
                 })}
               >
-                <Ionicons name={active ? tab.icon.replace('-outline', '') as keyof typeof Ionicons.glyphMap : tab.icon} size={22} color={active ? palette.accent : palette.muted} />
+                <Ionicons name={active ? tab.icon.replace('-outline', '') as keyof typeof Ionicons.glyphMap : tab.icon} size={24} color={active ? palette.accent : palette.muted} />
                 <Text style={{ marginTop: 2, color: active ? palette.accent : palette.muted, fontSize: 10, fontWeight: active ? '700' : '500' }}>
                   {tab.label}
                 </Text>
