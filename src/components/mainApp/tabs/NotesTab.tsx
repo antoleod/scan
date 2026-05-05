@@ -1193,6 +1193,7 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
                 draftImages={draftImages}
                 activeCategory={activeCategory}
                 isSecret={draftIsSecret}
+                autoSaveStatus={draftAutoSaveStatus}
                 onToggleSecret={async () => {
                   // Tap = save current draft as secret note immediately (auto-save + lock)
                   const hasContent = draftTextValue.trim().length > 0 || draftImages.length > 0;
@@ -1399,7 +1400,35 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
                 ) : null}
               </View>
 
-              {null /* secret banner replaced by Vault flow (long-press lock) */}
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, paddingVertical: 2 }}>
+                {([
+                  { key: 'all' as const, label: 'All' },
+                  { key: 'work' as const, label: 'Work' },
+                  { key: 'pinned' as const, label: 'Pinned' },
+                  { key: 'draft' as const, label: 'Draft' },
+                  { key: 'archived' as const, label: 'Archived' },
+                ]).map((chip) => {
+                  const active = filter === chip.key;
+                  return (
+                    <Pressable
+                      key={chip.key}
+                      onPress={() => setFilter(chip.key)}
+                      style={({ pressed }) => ({
+                        paddingHorizontal: 12,
+                        paddingVertical: 6,
+                        borderRadius: 999,
+                        borderWidth: 1,
+                        borderColor: active ? palette.accent : uiPalette.chipBorder,
+                        backgroundColor: active ? `${palette.accent}22` : (pressed ? `${uiPalette.textDim}10` : 'transparent'),
+                      })}
+                    >
+                      <Text style={{ color: active ? palette.accent : uiPalette.textDim, fontSize: 12, fontWeight: active ? '700' : '500' }}>
+                        {chip.label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
 
               {filteredNotes.length === 0 ? (
                 <View style={{ width: '100%', borderWidth: 1, borderColor: palette.border, borderRadius: 12, backgroundColor: uiPalette.surface, alignItems: 'center', gap: 8, padding: 12, alignSelf: 'stretch' }}>
