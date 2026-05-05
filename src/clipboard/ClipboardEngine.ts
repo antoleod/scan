@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Platform } from 'react-native';
+import { AppState, type AppStateStatus, Platform } from 'react-native';
 
 import type { ClipCategory, ClipEntry, ClipKind, ClipSource, PermState } from '../core/clipboard.types';
 import {
@@ -244,6 +244,9 @@ class ClipboardEngine {
   private firebaseHealthCheckTimer: ReturnType<typeof setInterval> | null = null;
   private lastFirebaseSyncMs = 0;
   private isFirebaseHealthy = true;
+  private nativePollTimer: ReturnType<typeof setInterval> | null = null;
+  private appStateSub: { remove: () => void } | null = null;
+  private lastNativeText = '';
 
   async ensureReady() {
     if (!this.loadPromise) {
@@ -251,11 +254,65 @@ class ClipboardEngine {
         this.permState = await getClipboardPermission();
         this.syncListeners();
         this.syncPolling();
+        this.syncNativeCapture();
         // Merge remote entries on startup and start real-time listener
         void this.startFirebaseSync();
       });
     }
     await this.loadPromise;
+  }
+
+  private syncNativeCapture() {
+    // Native (iOS/Android) clipboard capture: polls expo-clipboard while
+    // the app is in the foreground and re-checks on AppState 'active'.
+    if (Platform.OS === 'web') return;
+
+    if (this.appStateSub) {
+      this.appStateSub.remove();
+      this.appStateSub = null;
+    }
+    const handleAppState = (state: AppStateStatus) => {
+      if (state === 'active') {
+        void this.captureFromNative('focus');
+        this.startNativePolling();
+      } else {
+        this.stopNativePolling();
+      }
+    };
+    this.appStateSub = AppState.addEventListener('change', handleAppState);
+    if (AppState.currentState === 'active') {
+      this.startNativePolling();
+      void this.captureFromNative('focus');
+    }
+  }
+
+  private startNativePolling() {
+    if (Platform.OS === 'web') return;
+    if (this.nativePollTimer) return;
+    this.nativePollTimer = setInterval(() => {
+      void this.captureFromNative('poll');
+    }, 2000);
+  }
+
+  private stopNativePolling() {
+    if (this.nativePollTimer) {
+      clearInterval(this.nativePollTimer);
+      this.nativePollTimer = null;
+    }
+  }
+
+  private async captureFromNative(source: ClipSource) {
+    try {
+      const raw = await readClipboardText();
+      const text = normalizeText(raw);
+      if (!text) return;
+      if (text === this.lastNativeText) return;
+      this.lastNativeText = text;
+      await this.ingestText(text, source);
+    } catch {
+      // Silently fail — clipboard read can throw on some Android devices when
+      // the app is restricted or the OS denies access. We retry on next tick.
+    }
   }
 
   getSnapshot() {
@@ -421,6 +478,8 @@ class ClipboardEngine {
       window.removeEventListener('focus', this.onFocusRefresh);
     }
     this.revokePolling();
+    this.stopNativePolling();
+    if (this.appStateSub) { this.appStateSub.remove(); this.appStateSub = null; }
     if (this.firesyncTimer) { clearTimeout(this.firesyncTimer); this.firesyncTimer = null; }
     if (this.firebaseRetryTimer) { clearTimeout(this.firebaseRetryTimer); this.firebaseRetryTimer = null; }
     if (this.firebaseHealthCheckTimer) { clearInterval(this.firebaseHealthCheckTimer); this.firebaseHealthCheckTimer = null; }
