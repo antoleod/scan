@@ -1153,6 +1153,19 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
 
   return (
     <View style={{ flex: 1 }}>
+      {!vaultMode ? (
+        <TabBar
+          activeTab={workspaceTab}
+          palette={uiPalette}
+          onChangeTab={(tab) => { setWorkspaceTab(tab); setSelectedNoteIds(new Set()); }}
+          tabs={[
+            { key: 'notes', label: 'Notes' },
+            { key: 'templates', label: 'Templates' },
+            { key: 'clipboard', label: 'Clipboard' },
+          ]}
+        />
+      ) : null}
+
       {vaultMode ? (
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: uiPalette.chipBorder, backgroundColor: uiPalette.surface }}>
           <Pressable onPress={() => { setVaultMode(false); setPinUnlocked(false); }} hitSlop={8}>
