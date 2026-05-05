@@ -252,6 +252,7 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
 
   const draftAutoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const draftAutoSaveClearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const draftNoteIdRef = useRef<string | null>(null);
   const [searchText, setSearchText] = useState('');
   const [selectedNoteIds, setSelectedNoteIds] = useState<Set<string>>(new Set());
   const [dateFilter, setDateFilter] = useState<string | null>(null);
@@ -435,13 +436,27 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
     draftAutoSaveTimerRef.current = setTimeout(async () => {
       setDraftAutoSaveStatus('saving');
       try {
+        // 1) Local snapshot for crash recovery
         await AsyncStorage.setItem(
           DRAFT_KEY,
           JSON.stringify({ text: draftTextValue, images: draftImages, category: manualCategory, updatedAt: Date.now() })
         );
-        setDraftAutoSaveStatus('saved');
 
-        // Clear "saved" status after 2 seconds
+        // 2) Persist as a real Note with draft:true so it appears in the Draft filter
+        const groupId = activeGroupId === 'personal' ? undefined : activeGroupId;
+        if (draftNoteIdRef.current) {
+          // Update text on existing draft note
+          const updatedNotes = await updateNoteText(draftNoteIdRef.current, draftTextValue);
+          setNotes(updatedNotes);
+        } else if (draftTextValue.trim().length > 0 || draftImages.length > 0) {
+          const result = await addRichNoteUnique(draftTextValue, activeCategory, draftImages, groupId, true, false);
+          if (result.inserted && result.notes[0]) {
+            draftNoteIdRef.current = result.notes[0].id;
+            setNotes(result.notes);
+          }
+        }
+
+        setDraftAutoSaveStatus('saved');
         draftAutoSaveClearTimerRef.current = setTimeout(() => {
           setDraftAutoSaveStatus('idle');
         }, 2000);
@@ -682,7 +697,37 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
 
   async function saveDraftAsNote() {
     const groupId = activeGroupId === 'personal' ? undefined : activeGroupId;
-    const result = await addRichNoteUnique(draftTextValue, activeCategory, draftImages, groupId, true, false);
+
+    // If there is already a draft note (created by auto-save), promote it
+    // by syncing its latest text + clearing the draft flag — instead of
+    // creating a brand-new duplicate note.
+    if (draftNoteIdRef.current) {
+      const existingId = draftNoteIdRef.current;
+      const synced = await updateNoteText(existingId, draftTextValue);
+      setNotes(synced);
+      const promoted = await clearDraftFlag(existingId);
+      setNotes(promoted);
+      showToast(draftIsSecret ? 'Secret note saved' : 'Note saved');
+      setFilter('all');
+      if (draftIsSecret) {
+        const secret = await setNoteSecret(existingId, true);
+        setNotes(secret);
+        setDraftIsSecret(false);
+      }
+      draftNoteIdRef.current = null;
+      if (draftAutoSaveTimerRef.current) {
+        clearTimeout(draftAutoSaveTimerRef.current);
+        draftAutoSaveTimerRef.current = null;
+      }
+      await AsyncStorage.removeItem(DRAFT_KEY);
+      setDraftText('');
+      setDraftImages([]);
+      setManualCategory(null);
+      setDraftAutoSaveStatus('idle');
+      return;
+    }
+
+    const result = await addRichNoteUnique(draftTextValue, activeCategory, draftImages, groupId, false, true);
     setNotes(result.notes);
     if (result.inserted) {
       showToast(draftIsSecret ? 'Secret note saved' : 'Note saved');
@@ -1129,9 +1174,18 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
     );
   }
 
-  const notesEmptyTitle = notes.length === 0 ? 'Create your first note' : 'No results';
+  const notesEmptyTitle = notes.length === 0
+    ? 'Create your first note'
+    : filter === 'archived' ? 'No archived notes'
+    : filter === 'draft' ? 'No drafts'
+    : filter === 'pinned' ? 'Nothing pinned yet'
+    : filter === 'work' ? 'No work notes'
+    : 'No results';
   const notesEmptyText = notes.length === 0
     ? 'Write something in the editor, then save it to get started.'
+    : filter === 'archived' ? 'Notes you archive will appear here. Your other notes are still safe under "All".'
+    : filter === 'draft' ? 'Notes auto-save as drafts while you type. They show up here until you tap Save.'
+    : filter === 'pinned' ? 'Pin a note from its menu and it will live here.'
     : 'Clear the search or change the filter to see notes.';
   const templatesEmptyTitle = templates.length === 0 ? 'Create your first template' : 'No results';
   const templatesEmptyText = templates.length === 0
