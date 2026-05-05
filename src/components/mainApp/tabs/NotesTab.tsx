@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Image, Linking, Modal, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View, Alert } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -262,7 +262,10 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
   const [draftIsSecret, setDraftIsSecret] = useState(false);
   const [pinUnlocked, setPinUnlocked] = useState(false);
   const [pinModalMode, setPinModalMode] = useState<'setup' | 'unlock' | null>(null);
+  const [vaultMode, setVaultMode] = useState(false);
+  const [fabMenuOpen, setFabMenuOpen] = useState(false);
   const pendingSecretActionRef = useRef<(() => void) | null>(null);
+  const pendingVaultRef = useRef(false);
   const draftInputRef = useRef<React.ElementRef<typeof TextInput> | null>(null);
   const templateInputRef = useRef<React.ElementRef<typeof TextInput> | null>(null);
 
@@ -534,14 +537,20 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
     const qRaw = String(searchText || '').trim();
     const q = qRaw.toLowerCase();
     const searchKind = detectSearchKind(qRaw);
-    let next = q ? notes.filter((n) => {
+    let baseNotes = notes;
+    if (vaultMode) {
+      baseNotes = baseNotes.filter((n) => n.isSecret);
+    } else {
+      baseNotes = baseNotes.filter((n) => !n.isSecret);
+    }
+    let next = q ? baseNotes.filter((n) => {
       const text = String(n.text || '');
       const hay = `${text} ${(n.attachments || []).join(' ')} ${n.category}`.toLowerCase();
       if (searchKind === 'text' || searchKind === 'empty') return hay.includes(q);
       const compact = hay.replace(/[^a-z0-9]/gi, '').toLowerCase();
       const compactNeedle = q.replace(/[^a-z0-9]/gi, '');
       return compact.includes(compactNeedle);
-    }) : notes;
+    }) : baseNotes;
     if (activeGroupId === 'personal') {
       next = next.filter((n) => !n.groupId);
     } else {
@@ -573,7 +582,7 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
       });
     }
     return next;
-  }, [notes, searchText, filter, activeGroupId, dateFilter, officeEntityFilter, inboxView]);
+  }, [notes, searchText, filter, activeGroupId, dateFilter, officeEntityFilter, inboxView, vaultMode]);
 
   const filteredTemplates = useMemo(() => {
     const q = String(templateSearch || '').trim().toLowerCase();
@@ -1144,17 +1153,16 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
 
   return (
     <View style={{ flex: 1 }}>
-      {/* ── Tab bar fijo ── */}
-      <TabBar
-        activeTab={workspaceTab}
-        palette={uiPalette}
-        onChangeTab={(tab) => { setWorkspaceTab(tab); setSelectedNoteIds(new Set()); }}
-        tabs={[
-          { key: 'notes', label: 'Notes' },
-          { key: 'templates', label: 'Templates' },
-          { key: 'clipboard', label: 'Clipboard' },
-        ]}
-      />
+      {vaultMode ? (
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: uiPalette.chipBorder, backgroundColor: uiPalette.surface }}>
+          <Pressable onPress={() => { setVaultMode(false); setPinUnlocked(false); }} hitSlop={8}>
+            <Ionicons name="chevron-back" size={22} color={uiPalette.textBody} />
+          </Pressable>
+          <Ionicons name="lock-closed" size={16} color="#F59E0B" />
+          <Text style={{ color: uiPalette.textBody, fontSize: 16, fontWeight: '700', flex: 1 }}>Vault</Text>
+          <Text style={{ color: uiPalette.textDim, fontSize: 11 }}>{secretCount}</Text>
+        </View>
+      ) : null}
 
       <ScrollView
         style={[mainAppStyles.screen, Platform.OS === 'web' ? ({ scrollbarWidth: 'none', msOverflowStyle: 'none' } as any) : null]}
@@ -1186,18 +1194,34 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
                 activeCategory={activeCategory}
                 isSecret={draftIsSecret}
                 onToggleSecret={async () => {
-                  if (draftIsSecret) {
-                    setDraftIsSecret(false);
+                  // Tap = save current draft as secret note immediately (auto-save + lock)
+                  const hasContent = draftTextValue.trim().length > 0 || draftImages.length > 0;
+                  if (!hasContent) {
+                    showToast('Write something first');
                     return;
                   }
                   const exists = await hasPin();
                   if (!exists) {
-                    pendingSecretActionRef.current = () => setDraftIsSecret(true);
+                    pendingSecretActionRef.current = async () => {
+                      setDraftIsSecret(true);
+                      await saveDraftAsNote();
+                    };
                     setPinModalMode('setup');
-                  } else {
-                    setDraftIsSecret(true);
-                    showToast('Note will be saved as secret');
+                    return;
                   }
+                  setDraftIsSecret(true);
+                  await saveDraftAsNote();
+                }}
+                onLongPressSecret={async () => {
+                  // Long press = open Vault
+                  const exists = await hasPin();
+                  if (!exists) {
+                    pendingVaultRef.current = true;
+                    setPinModalMode('setup');
+                    return;
+                  }
+                  pendingVaultRef.current = true;
+                  setPinModalMode('unlock');
                 }}
                 onChangeGroup={setActiveGroupId}
                 onChangeText={handleDraftTextChange}
@@ -1238,114 +1262,6 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
                 onOcrReplaceText={handleOcrReplaceText}
                 generating={false}
               />
-
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-                <Pressable
-                  onPress={() => {
-                    setDraftText('');
-                    setManualCategory('general');
-                    draftInputRef.current?.focus();
-                  }}
-                  style={({ pressed }) => ({ paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: palette.border, backgroundColor: pressed ? `${palette.muted}14` : 'transparent' })}
-                >
-                  <Text style={{ color: palette.fg, fontSize: 12, fontWeight: '600' }}>{t.quickNote}</Text>
-                </Pressable>
-                <Pressable
-                  onPress={() => {
-                    setWorkflowModalData({ items: [] });
-                    setWorkflowModalType('shopping');
-                  }}
-                  style={({ pressed }) => ({ paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: '#22c55e77', backgroundColor: pressed ? '#22c55e22' : '#22c55e12' })}
-                >
-                  <Text style={{ color: '#22c55e', fontSize: 12, fontWeight: '700' }}>{t.quickShopping}</Text>
-                </Pressable>
-                <Pressable
-                  onPress={() => {
-                    setWorkflowModalData({});
-                    setWorkflowModalType('medication');
-                  }}
-                  style={({ pressed }) => ({ paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: '#4DA3FF66', backgroundColor: pressed ? '#4DA3FF22' : '#4DA3FF12' })}
-                >
-                  <Text style={{ color: '#4DA3FF', fontSize: 12, fontWeight: '700' }}>{t.quickMedication}</Text>
-                </Pressable>
-              </View>
-
-              <View style={{ borderWidth: 1, borderColor: palette.border, borderRadius: 10, backgroundColor: palette.card, padding: 10, gap: 6 }}>
-                <Text style={{ color: palette.fg, fontSize: 12, fontWeight: '700' }}>{t.syncHealth}</Text>
-                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-                  <Text style={{ color: pendingSyncCount > 0 ? '#f59e0b' : '#22c55e', fontSize: 12, fontWeight: '600' }}>
-                    {pendingSyncCount > 0 ? `${t.pendingSync}: ${pendingSyncCount}` : t.synced}
-                  </Text>
-                  {failedSyncCount > 0 ? (
-                    <Text style={{ color: '#ef4444', fontSize: 12, fontWeight: '600' }}>
-                      {t.syncFailed}: {failedSyncCount}
-                    </Text>
-                  ) : null}
-                  <Text style={{ color: palette.muted, fontSize: 12 }}>
-                    {t.syncedNotes}: {syncedCount}
-                  </Text>
-                  {Platform.OS === 'web' && typeof navigator !== 'undefined' ? (
-                    <Text style={{ color: navigator.onLine ? '#22c55e' : '#f59e0b', fontSize: 12, fontWeight: '600' }}>
-                      {navigator.onLine ? t.online : t.savedOffline}
-                    </Text>
-                  ) : null}
-                </View>
-              </View>
-
-              <View style={{ borderWidth: 1, borderColor: palette.border, borderRadius: 10, backgroundColor: palette.card, padding: 10, gap: 8 }}>
-                <Text style={{ color: palette.fg, fontSize: 12, fontWeight: '700' }}>{t.today}</Text>
-                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-                  {todaySummary.map((chip) => (
-                    <Pressable
-                      key={chip.label}
-                      onPress={() => setInboxView(chip.key)}
-                      style={({ pressed }) => ({
-                        paddingHorizontal: 10,
-                        paddingVertical: 5,
-                        borderRadius: 999,
-                        borderWidth: 1,
-                        borderColor: `${chip.color}77`,
-                        backgroundColor: inboxView === chip.key ? `${chip.color}28` : (pressed ? `${chip.color}20` : `${chip.color}14`),
-                      })}
-                    >
-                      <Text style={{ color: chip.color, fontSize: 12, fontWeight: '600' }}>{chip.label}</Text>
-                    </Pressable>
-                  ))}
-                </View>
-              </View>
-
-              <View style={{ borderWidth: 1, borderColor: palette.border, borderRadius: 10, backgroundColor: palette.card, padding: 10, gap: 8 }}>
-                <Text style={{ color: palette.fg, fontSize: 12, fontWeight: '700' }}>{t.inbox}</Text>
-                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-                  {([
-                    { key: 'all', label: `All (${notes.length})`, color: palette.fg },
-                    { key: 'shopping', label: `Shopping (${inboxCounts.shopping})`, color: '#22c55e' },
-                    { key: 'medication', label: `Medication (${inboxCounts.medication})`, color: '#4DA3FF' },
-                    { key: 'work', label: `Work (${inboxCounts.work})`, color: '#f59e0b' },
-                    { key: 'reminder', label: `Reminders (${inboxCounts.reminder})`, color: '#f59e0b' },
-                    { key: 'image', label: `Images/OCR (${inboxCounts.image})`, color: '#A970FF' },
-                  ] as const).map((chip) => (
-                    <Pressable
-                      key={chip.key}
-                      onPress={() => {
-                        setInboxView(chip.key);
-                        setSearchText('');
-                        if (chip.key === 'work') setFilter('work'); else setFilter('all');
-                      }}
-                      style={({ pressed }) => ({
-                        paddingHorizontal: 10,
-                        paddingVertical: 5,
-                        borderRadius: 999,
-                        borderWidth: 1,
-                        borderColor: `${chip.color}77`,
-                        backgroundColor: inboxView === chip.key ? `${chip.color}28` : (pressed ? `${chip.color}22` : `${chip.color}14`),
-                      })}
-                    >
-                      <Text style={{ color: chip.color, fontSize: 11, fontWeight: '700' }}>{chip.label}</Text>
-                    </Pressable>
-                  ))}
-                </View>
-              </View>
 
               {/* ── Auto-save status indicator ── */}
               {draftAutoSaveStatus !== 'idle' && (
@@ -1467,65 +1383,23 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
                 />
               )}
 
-              <SearchFilterBar
-                palette={{
-                  bg: palette.bg,
-                  accent: palette.accent,
-                  border: palette.border,
-                  surface: uiPalette.surface,
-                  surfaceAlt: uiPalette.surfaceAlt,
-                  textBody: uiPalette.textBody,
-                  textDim: uiPalette.textDim,
-                  textMuted: uiPalette.textMuted,
-                  chipBorder: uiPalette.chipBorder,
-                }}
-                value={searchText}
-                count={filteredNotes.length}
-                filter={filter}
-                dateFilter={dateFilter}
-                onChange={setSearchText}
-                onChangeFilter={setFilter}
-                onChangeDateFilter={setDateFilter}
-              />
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12, borderWidth: 1, borderColor: uiPalette.chipBorder, backgroundColor: uiPalette.surfaceAlt }}>
+                <Ionicons name="search" size={16} color={uiPalette.textDim} />
+                <TextInput
+                  value={searchText}
+                  onChangeText={setSearchText}
+                  placeholder="Search"
+                  placeholderTextColor={uiPalette.textDim}
+                  style={{ flex: 1, color: uiPalette.textBody, fontSize: 14, paddingVertical: 4, marginTop: 0 }}
+                />
+                {searchText.length > 0 ? (
+                  <Pressable onPress={() => setSearchText('')} hitSlop={8}>
+                    <Ionicons name="close-circle" size={16} color={uiPalette.textDim} />
+                  </Pressable>
+                ) : null}
+              </View>
 
-              {secretCount > 0 ? (
-                <Pressable
-                  onPress={() => {
-                    if (pinUnlocked) {
-                      setPinUnlocked(false);
-                      showToast('Secret notes locked');
-                    } else {
-                      setPinModalMode('unlock');
-                    }
-                  }}
-                  style={({ pressed }) => ({
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    gap: 10,
-                    paddingHorizontal: 14,
-                    paddingVertical: 10,
-                    borderRadius: 12,
-                    borderWidth: 1,
-                    borderColor: pinUnlocked ? '#22c55e55' : '#F59E0B55',
-                    backgroundColor: pinUnlocked ? 'rgba(34,197,94,0.08)' : 'rgba(245,158,11,0.08)',
-                    opacity: pressed ? 0.85 : 1,
-                  })}
-                >
-                  <Ionicons
-                    name={pinUnlocked ? 'lock-open' : 'lock-closed'}
-                    size={16}
-                    color={pinUnlocked ? '#22c55e' : '#F59E0B'}
-                  />
-                  <Text style={{ color: uiPalette.textBody, fontSize: 13, fontWeight: '700', flex: 1 }}>
-                    {pinUnlocked
-                      ? `${secretCount} secret note${secretCount === 1 ? '' : 's'} unlocked`
-                      : `${secretCount} secret note${secretCount === 1 ? '' : 's'} — Tap to unlock`}
-                  </Text>
-                  <Text style={{ color: pinUnlocked ? '#22c55e' : '#F59E0B', fontSize: 12, fontWeight: '700' }}>
-                    {pinUnlocked ? 'Lock' : 'Unlock'}
-                  </Text>
-                </Pressable>
-              ) : null}
+              {null /* secret banner replaced by Vault flow (long-press lock) */}
 
               {filteredNotes.length === 0 ? (
                 <View style={{ width: '100%', borderWidth: 1, borderColor: palette.border, borderRadius: 12, backgroundColor: uiPalette.surface, alignItems: 'center', gap: 8, padding: 12, alignSelf: 'stretch' }}>
@@ -1915,19 +1789,19 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
         onCancel={() => {
           setPinModalMode(null);
           pendingSecretActionRef.current = null;
+          pendingVaultRef.current = false;
         }}
         onSuccess={() => {
-          const wasSetup = pinModalMode === 'setup';
           setPinModalMode(null);
-          if (wasSetup) {
-            const pending = pendingSecretActionRef.current;
-            pendingSecretActionRef.current = null;
-            if (pending) pending();
-            setPinUnlocked(true);
-            showToast('PIN saved · Secret notes enabled');
-          } else {
-            setPinUnlocked(true);
-            showToast('Secret notes unlocked');
+          setPinUnlocked(true);
+          const pending = pendingSecretActionRef.current;
+          pendingSecretActionRef.current = null;
+          if (pending) {
+            void pending();
+          }
+          if (pendingVaultRef.current) {
+            pendingVaultRef.current = false;
+            setVaultMode(true);
           }
         }}
       />
@@ -1946,6 +1820,71 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
         onCreateTemplate={({ text, category }) => createTemplateFromSuggestion(text, category)}
       />
       </ScrollView>
+
+      {/* ── Floating action button (smart compose menu) ── */}
+      {!vaultMode ? (
+        <View pointerEvents="box-none" style={{ position: 'absolute', right: 16, bottom: 84, alignItems: 'flex-end', gap: 10 }}>
+          {fabMenuOpen ? (
+            <View style={{ gap: 8 }}>
+              {([
+                { icon: 'camera-outline', label: 'Camera', color: '#FF6B35', action: () => takePhotoToDraft().catch(() => undefined) },
+                { icon: 'text-recognition', label: 'OCR', color: '#4DA3FF', action: () => setOcrVisible(true), iconLib: 'mci' as const },
+                { icon: 'mic-outline', label: 'Audio', color: '#00D4FF', action: () => showToast('Hold the mic in the editor to dictate') },
+                { icon: 'checkbox-outline', label: 'Checklist', color: '#22c55e', action: () => { setDraftText((t) => `${t}${t ? '\n' : ''}- [ ] `); draftInputRef.current?.focus(); } },
+                { icon: 'color-wand-outline', label: 'Highlight', color: '#A855F7', action: () => setGeneratorVisible(true) },
+              ]).map((item) => (
+                <Pressable
+                  key={item.label}
+                  onPress={() => { item.action(); setFabMenuOpen(false); }}
+                  style={({ pressed }) => ({
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 10,
+                    paddingHorizontal: 14,
+                    paddingVertical: 10,
+                    borderRadius: 999,
+                    backgroundColor: uiPalette.surface,
+                    borderWidth: 1,
+                    borderColor: uiPalette.chipBorder,
+                    opacity: pressed ? 0.85 : 1,
+                    shadowColor: '#000',
+                    shadowOffset: { width: 0, height: 2 },
+                    shadowOpacity: 0.18,
+                    shadowRadius: 6,
+                    elevation: 4,
+                  })}
+                >
+                  {item.iconLib === 'mci'
+                    ? <MaterialCommunityIcons name={item.icon as any} size={18} color={item.color} />
+                    : <Ionicons name={item.icon as any} size={18} color={item.color} />}
+                  <Text style={{ color: uiPalette.textBody, fontSize: 13, fontWeight: '600' }}>{item.label}</Text>
+                </Pressable>
+              ))}
+            </View>
+          ) : null}
+
+          <Pressable
+            onPress={() => setFabMenuOpen((v) => !v)}
+            style={({ pressed }) => ({
+              width: 56,
+              height: 56,
+              borderRadius: 28,
+              backgroundColor: palette.accent,
+              alignItems: 'center',
+              justifyContent: 'center',
+              opacity: pressed ? 0.9 : 1,
+              transform: [{ rotate: fabMenuOpen ? '45deg' : '0deg' }, { scale: pressed ? 0.92 : 1 }],
+              shadowColor: palette.accent,
+              shadowOffset: { width: 0, height: 4 },
+              shadowOpacity: 0.4,
+              shadowRadius: 8,
+              elevation: 8,
+            })}
+          >
+            <Ionicons name="add" size={28} color="#fff" />
+          </Pressable>
+        </View>
+      ) : null}
 
       {/* ── OCR: image → note ── */}
       <NoteOcrModal

@@ -55,6 +55,7 @@ export const ComposerSection = forwardRef<TextInput, {
   generating?: boolean;
   isSecret?: boolean;
   onToggleSecret?: () => void;
+  onLongPressSecret?: () => void;
 }>(
   function ComposerSection(
     {
@@ -83,6 +84,7 @@ export const ComposerSection = forwardRef<TextInput, {
       generating,
       isSecret,
       onToggleSecret,
+      onLongPressSecret,
     },
     ref
   ) {
@@ -320,7 +322,12 @@ export const ComposerSection = forwardRef<TextInput, {
                     <Text style={{ color: palette.textBody, fontSize: 11, fontWeight: '600', textAlign: 'center' }}>{isSecret ? 'Secret' : 'Lock'}</Text>
                   </View>
                 )}
-                <Pressable onHoverIn={() => setHoveredAction('secret')} onHoverOut={() => setHoveredAction((current) => (current === 'secret' ? null : current))}>
+                <Pressable
+                  onHoverIn={() => setHoveredAction('secret')}
+                  onHoverOut={() => setHoveredAction((current) => (current === 'secret' ? null : current))}
+                  onLongPress={onLongPressSecret}
+                  delayLongPress={3000}
+                >
                   <ThemedActionIconButton
                     icon={isSecret ? 'lock' : 'lock-open-outline'}
                     label={isSecret ? 'Secret' : 'Lock'}
