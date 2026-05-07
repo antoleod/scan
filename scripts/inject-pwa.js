@@ -161,6 +161,17 @@ injectIfMissing(`<meta name="msapplication-tap-highlight" content="no">`,       
 // ── 8. Android / Chrome ───────────────────────────────────────────────────────
 injectIfMissing(`<meta name="mobile-web-app-capable" content="yes">`,                   'mobile-web-app-capable');
 
+// ── 8b. Content Security Policy ────────────────────────────────────────────────
+//    Mitigates XSS, clickjacking, and other injection attacks.
+//    - script-src 'wasm-unsafe-eval' required for tesseract.js (WebAssembly)
+//    - style-src 'unsafe-inline' for Expo-generated dynamic styles
+//    - blob: for camera/canvas blob URLs and Reanimated worklets
+//    - wss: for Firestore real-time listeners (WebSocket Secure)
+//    - frame-ancestors 'none' prevents clickjacking via iframe
+replaceOrInject('http-equiv="Content-Security-Policy"',
+  `<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https: blob:; font-src 'self' data:; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://*.firebase.google.com wss://*.firebaseio.com; worker-src 'self' blob:; frame-ancestors 'none';">`
+);
+
 // ── 9. Service worker registration ───────────────────────────────────────────
 //    Uses 'load' event so it doesn't block first paint.
 //    updateViaCache: 'none' forces the browser to always fetch a fresh SW,
