@@ -11,6 +11,9 @@ import { analyzeShoppingListCandidate, isShoppingList, parseShoppingList } from 
 import { findProductAlias, getAllShoppingDictionaries, isConnector, isKnownUnit, isNarrativeBlocker } from "../src/core/shoppingDictionary";
 import { detectSmartTypeFromContent } from "../src/core/smartNoteWorkflows";
 import { createTrieFromWords } from "../src/utils/trie";
+import { AppError, AuthError, SyncError, ValidationError, toAppError, isRetryable } from "../src/core/errors";
+import { sanitizeScanInput, sanitizeNoteText, sanitizeTemplatePattern } from "../src/core/validation";
+import { computeNotesChecksum } from "../src/core/syncChecksum";
 
 let passed = 0;
 let failed = 0;
@@ -366,6 +369,187 @@ run("smart type detection returns 'none' for generic text", () => {
   const genericText = "This is just a random note with no special meaning";
   const smartType = detectSmartTypeFromContent(genericText);
   assert.equal(smartType, "none");
+});
+
+// ─── Error handling tests (Phase 1) ────────────────────────────────────────────
+
+run("AppError has correct structure with code/severity/retryable/id", () => {
+  const err = new AppError("TEST_ERROR", "warn", false, "Test message", { context: "data" });
+  assert.equal(err.code, "TEST_ERROR");
+  assert.equal(err.severity, "warn");
+  assert.equal(err.isRetryable, false);
+  assert.equal(err.message, "Test message");
+  assert.equal(typeof err.id, "string");
+  assert.equal(err.id.startsWith("TEST_ERROR_"), true);
+  assert.deepEqual(err.context, { context: "data" });
+});
+
+run("AuthError marks non-recoverable codes as not retryable", () => {
+  const invalidCred = new AuthError("INVALID_CREDENTIAL", "Invalid credentials");
+  assert.equal(invalidCred.code, "AUTH_INVALID_CREDENTIAL");
+  assert.equal(invalidCred.isRetryable, false);
+
+  const networkError = new AuthError("NETWORK_ERROR", "Network failed");
+  assert.equal(networkError.code, "AUTH_NETWORK_ERROR");
+  assert.equal(networkError.isRetryable, true);
+});
+
+run("SyncError is retryable by default", () => {
+  const err = new SyncError("NETWORK", "Connection failed");
+  assert.equal(err.code, "SYNC_NETWORK");
+  assert.equal(err.severity, "warn");
+  assert.equal(err.isRetryable, true);
+});
+
+run("ValidationError is not retryable", () => {
+  const err = new ValidationError("email", "Invalid email format");
+  assert.equal(err.code, "VALIDATION_EMAIL");
+  assert.equal(err.isRetryable, false);
+  assert.equal(err.severity, "warn");
+});
+
+run("toAppError wraps unknown into AppError safely", () => {
+  const appErr = new AppError("CUSTOM", "error", false, "custom message");
+  const wrapped = toAppError(appErr);
+  assert.equal(wrapped, appErr);
+
+  const stdErr = new Error("Standard error");
+  const wrappedStd = toAppError(stdErr);
+  assert.equal(wrappedStd.code, "UNKNOWN_ERROR");
+  assert.equal(wrappedStd.message, "Standard error");
+
+  const unknown = { foo: "bar" };
+  const wrappedUnknown = toAppError(unknown);
+  assert.equal(wrappedUnknown.code, "UNKNOWN_ERROR");
+  assert.equal(wrappedUnknown.isRetryable, false);
+});
+
+run("isRetryable checks error retryability", () => {
+  assert.equal(isRetryable(new SyncError("NETWORK", "failed")), true);
+  assert.equal(isRetryable(new ValidationError("email", "invalid")), false);
+  assert.equal(isRetryable(new Error("plain error")), false);
+});
+
+// ─── Input validation tests (Phase 1) ──────────────────────────────────────────
+
+run("sanitizeScanInput strips control characters", () => {
+  const result = sanitizeScanInput("hello\x00\x1Fworld");
+  assert.equal(result.ok, true);
+  assert.equal(result.value, "helloworld");
+});
+
+run("sanitizeScanInput enforces 500 character limit", () => {
+  const longInput = "x".repeat(501);
+  const result = sanitizeScanInput(longInput);
+  assert.equal(result.ok, false);
+  assert.equal(result.error?.includes("500"), true);
+});
+
+run("sanitizeScanInput returns error when empty after sanitization", () => {
+  const result = sanitizeScanInput("   \x00\x1F   ");
+  assert.equal(result.ok, false);
+  assert.equal(result.error?.includes("empty"), true);
+});
+
+run("sanitizeScanInput accepts valid short input", () => {
+  const result = sanitizeScanInput("  RITM0012345  ");
+  assert.equal(result.ok, true);
+  assert.equal(result.value, "RITM0012345");
+});
+
+run("sanitizeNoteText preserves newlines and tabs", () => {
+  const result = sanitizeNoteText("Line 1\nLine 2\n\tIndented");
+  assert.equal(result.ok, true);
+  assert.match(result.value!, /Line 1\nLine 2/);
+});
+
+run("sanitizeNoteText strips dangerous control characters", () => {
+  const result = sanitizeNoteText("Hello\x00\x08World");
+  assert.equal(result.ok, true);
+  assert.equal(result.value, "HelloWorld");
+});
+
+run("sanitizeNoteText enforces 10000 character limit", () => {
+  const longInput = "x".repeat(10001);
+  const result = sanitizeNoteText(longInput);
+  assert.equal(result.ok, false);
+  assert.equal(result.error?.includes("10000"), true);
+});
+
+run("sanitizeNoteText accepts valid note", () => {
+  const result = sanitizeNoteText("This is\na valid\nmulti-line note");
+  assert.equal(result.ok, true);
+  assert.equal(result.value?.length, 31);
+});
+
+run("sanitizeTemplatePattern rejects invalid regex", () => {
+  const result = sanitizeTemplatePattern("(unclosed");
+  assert.equal(result.ok, false);
+  assert.equal(result.error?.includes("Invalid"), true);
+});
+
+run("sanitizeTemplatePattern accepts valid regex", () => {
+  const result = sanitizeTemplatePattern("^[A-Z]+\\d+$");
+  assert.equal(result.ok, true);
+  assert.equal(result.value, "^[A-Z]+\\d+$");
+});
+
+run("sanitizeTemplatePattern enforces 2000 character limit", () => {
+  const longPattern = "x".repeat(2001);
+  const result = sanitizeTemplatePattern(longPattern);
+  assert.equal(result.ok, false);
+  assert.equal(result.error?.includes("2000"), true);
+});
+
+run("sanitizeTemplatePattern handles complex but valid regex", () => {
+  const pattern = "(prefix_)?\\w{3,10}(suffix)?";
+  const result = sanitizeTemplatePattern(pattern);
+  assert.equal(result.ok, true);
+});
+
+// ─── Sync checksum tests (Phase 1) ─────────────────────────────────────────────
+
+run("computeChecksum produces stable hash for same input", () => {
+  const items = [
+    { id: "a", updatedAt: 1000, deletedAt: undefined },
+    { id: "b", updatedAt: 2000, deletedAt: undefined },
+  ];
+  const hash1 = computeNotesChecksum(items as any);
+  const hash2 = computeNotesChecksum(items as any);
+  assert.equal(hash1, hash2);
+});
+
+run("computeChecksum produces different hash for different content", () => {
+  const items1 = [{ id: "a", updatedAt: 1000, deletedAt: undefined }];
+  const items2 = [{ id: "a", updatedAt: 2000, deletedAt: undefined }];
+  const hash1 = computeNotesChecksum(items1 as any);
+  const hash2 = computeNotesChecksum(items2 as any);
+  assert.notEqual(hash1, hash2);
+});
+
+run("computeChecksum is order-independent", () => {
+  const items = [
+    { id: "z", updatedAt: 1000, deletedAt: undefined },
+    { id: "a", updatedAt: 2000, deletedAt: undefined },
+  ];
+  const reversed = [...items].reverse();
+  const hash1 = computeNotesChecksum(items as any);
+  const hash2 = computeNotesChecksum(reversed as any);
+  assert.equal(hash1, hash2);
+});
+
+run("computeChecksum handles empty array", () => {
+  const hash = computeNotesChecksum([]);
+  assert.equal(typeof hash, "string");
+  assert.equal(hash.length > 0, true);
+});
+
+run("computeChecksum includes deletedAt field", () => {
+  const items1 = [{ id: "a", updatedAt: 1000, deletedAt: undefined }];
+  const items2 = [{ id: "a", updatedAt: 1000, deletedAt: 5000 }];
+  const hash1 = computeNotesChecksum(items1 as any);
+  const hash2 = computeNotesChecksum(items2 as any);
+  assert.notEqual(hash1, hash2);
 });
 
 console.log("\n-------------------");
