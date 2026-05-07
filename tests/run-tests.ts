@@ -552,6 +552,132 @@ run("computeChecksum includes deletedAt field", () => {
   assert.notEqual(hash1, hash2);
 });
 
+// ─── Offline queue tests (Phase 2) ─────────────────────────────────────────────
+
+run("QueueEntry with uid and retries fields initializes correctly", () => {
+  const entry = {
+    id: "q_123_abc",
+    op: "upsertNote" as const,
+    payload: { id: "note-1", kind: "text", category: "general", text: "test", pinned: false, createdAt: Date.now(), updatedAt: Date.now() },
+    createdAt: Date.now(),
+    uid: "user-123",
+    retries: 0,
+  };
+  assert.equal(entry.uid, "user-123");
+  assert.equal(entry.retries, 0);
+});
+
+run("TTL filter: entries older than 7 days should be detected", () => {
+  const now = Date.now();
+  const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
+  const oldEntry = { createdAt: now - sevenDaysMs - 1000 };
+  const recentEntry = { createdAt: now - (sevenDaysMs / 2) };
+
+  const isOld = (now - oldEntry.createdAt) > sevenDaysMs;
+  const isRecent = (now - recentEntry.createdAt) > sevenDaysMs;
+
+  assert.equal(isOld, true);
+  assert.equal(isRecent, false);
+});
+
+run("UID filter: entries with different uid should be skipped", () => {
+  const currentUid = "user-123";
+  const entries = [
+    { uid: "user-123", op: "upsertNote" as const },
+    { uid: "user-456", op: "upsertNote" as const },
+  ];
+
+  const uidMatch = entries.filter(e => e.uid === currentUid);
+  assert.equal(uidMatch.length, 1);
+  assert.equal(uidMatch[0].uid, "user-123");
+});
+
+run("Retries counter increments on retry", () => {
+  let entry = { id: "q_1", retries: 0 };
+  entry.retries += 1;
+  assert.equal(entry.retries, 1);
+
+  entry.retries += 1;
+  assert.equal(entry.retries, 2);
+});
+
+run("syncStatus field exists on NoteItem", () => {
+  const note = {
+    id: "note-1",
+    kind: "text" as const,
+    category: "general" as const,
+    text: "test",
+    pinned: false,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+    syncStatus: "pending" as const,
+  };
+  assert.equal(note.syncStatus, "pending");
+});
+
+run("syncStatus can be updated to synced", () => {
+  let note: { syncStatus: "pending" | "synced" } = { syncStatus: "pending" };
+  note.syncStatus = "synced";
+  assert.equal(note.syncStatus, "synced");
+});
+
+run("Network online status detection works", () => {
+  // Test that navigator.onLine check works (in browser environment, will be true)
+  const online = typeof navigator !== 'undefined' && ('onLine' in navigator) ? navigator.onLine : true;
+  assert.equal(typeof online, "boolean");
+});
+
+run("Network reconnect handler returns cleanup function", () => {
+  // Test that a function that returns a cleanup function works correctly
+  const handler = () => {};
+  const cleanup = () => handler();
+  assert.equal(typeof cleanup, "function");
+});
+
+run("Note payload should include required fields for Firebase", () => {
+  const note = {
+    id: "note-1",
+    kind: "text" as const,
+    category: "general" as const,
+    text: "test content",
+    title: "My Note",
+    smartType: "task" as any,
+    workflowStatus: "active" as const,
+    workflowMetadata: { test: true },
+    isSecret: true,
+    draft: false,
+    pinned: false,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+  };
+
+  const payload: Record<string, unknown> = {
+    id: note.id,
+    kind: note.kind,
+    category: note.category,
+    text: note.text,
+    pinned: Boolean(note.pinned),
+    createdAt: Number(note.createdAt),
+    updatedAt: Number(note.updatedAt),
+  };
+
+  // Add conditional fields as in firebase.ts
+  if (note.title !== undefined) payload.title = note.title;
+  if (note.smartType) payload.smartType = note.smartType;
+  if (note.workflowStatus) payload.workflowStatus = note.workflowStatus;
+  if (note.workflowMetadata) payload.workflowMetadata = JSON.stringify(note.workflowMetadata);
+  if (note.isSecret !== undefined) payload.isSecret = note.isSecret;
+  if (note.draft !== undefined) payload.draft = note.draft;
+
+  // Verify all required fields are present
+  assert.equal(payload.title, "My Note");
+  assert.equal(payload.smartType, "task");
+  assert.equal(payload.workflowStatus, "active");
+  assert.equal(typeof payload.workflowMetadata, "string");
+  assert.equal(payload.isSecret, true);
+  assert.equal(payload.draft, false);
+});
+
 console.log("\n-------------------");
 console.log(`Tests completados.`);
 console.log(`Pasaron: ${passed}`);

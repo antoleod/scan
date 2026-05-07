@@ -4,8 +4,9 @@
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { upsertNoteInFirebase, deleteNoteFromFirebase } from './firebase';
+import { upsertNoteInFirebase, deleteNoteFromFirebase, getFirebaseRuntime } from './firebase';
 import { diag } from './diagnostics';
+import { onNetworkReconnect } from './network';
 import type { NoteItem } from './notes';
 
 const QUEUE_KEY = '@mykit_offline_queue_v1';
@@ -17,6 +18,8 @@ export interface QueueEntry {
   op: QueueOp;
   payload: NoteItem | string; // NoteItem for upsert, noteId string for delete
   createdAt: number;
+  uid: string;               // Owner user id
+  retries: number;           // Attempt counter for diagnostics
 }
 
 function makeId(prefix: string): string {
@@ -49,14 +52,19 @@ export async function saveQueue(entries: QueueEntry[]): Promise<void> {
 export async function enqueueOperation(
   op: QueueOp,
   payload: NoteItem | string,
+  uid?: string,
 ): Promise<void> {
   try {
+    if (!uid) return; // Don't queue if no user is authenticated
+
     const current = await loadQueue();
     const entry: QueueEntry = {
       id: makeId('q'),
       op,
       payload,
       createdAt: Date.now(),
+      uid,
+      retries: 0,
     };
     const next = [...current, entry];
     await saveQueue(next);
@@ -75,10 +83,33 @@ export async function flushQueue(): Promise<{ flushed: number; remaining: number
   let queue = await loadQueue();
   if (queue.length === 0) return { flushed: 0, remaining: 0 };
 
+  // Get current authenticated user
+  const rt = await getFirebaseRuntime();
+  const currentUid = rt?.auth?.currentUser?.uid;
+
+  const TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+  const now = Date.now();
+
   let flushed = 0;
   const nextQueue: QueueEntry[] = [];
 
   for (const entry of queue) {
+    // Skip entries from different users (cross-user safety)
+    if (currentUid && entry.uid !== currentUid) {
+      nextQueue.push(entry);
+      continue;
+    }
+
+    // Skip entries older than 7 days (TTL)
+    if (now - entry.createdAt > TTL_MS) {
+      await diag.warn('offlineQueue.ttl_expired', {
+        id: entry.id,
+        op: entry.op,
+        ageMs: now - entry.createdAt,
+      });
+      continue;
+    }
+
     try {
       if (entry.op === 'upsertNote' && isNoteItem(entry.payload)) {
         await upsertNoteInFirebase(entry.payload);
@@ -91,11 +122,13 @@ export async function flushQueue(): Promise<{ flushed: number; remaining: number
         nextQueue.push(entry);
       }
     } catch (error) {
-      // Keep failed entries for retry
+      // Keep failed entries for retry and increment counter
+      entry.retries += 1;
       nextQueue.push(entry);
       await diag.warn('offlineQueue.flush.error', {
         op: entry.op,
         id: entry.id,
+        retries: entry.retries,
         message: String(error),
       });
     }
@@ -108,3 +141,19 @@ export async function flushQueue(): Promise<{ flushed: number; remaining: number
 
   return { flushed, remaining: nextQueue.length };
 }
+
+export async function clearQueue(): Promise<void> {
+  try {
+    await AsyncStorage.removeItem(QUEUE_KEY);
+    await diag.info('offlineQueue.cleared', {});
+  } catch (error) {
+    await diag.warn('offlineQueue.clear.error', { message: String(error) });
+  }
+}
+
+// Subscribe to network reconnect and flush on reconnection
+onNetworkReconnect(() => {
+  void flushQueue().catch((error) => {
+    diag.warn('offlineQueue.reconnect_flush.error', { message: String(error) });
+  });
+});

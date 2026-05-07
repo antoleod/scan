@@ -8,6 +8,7 @@ import {
   upsertNoteInFirebase,
   upsertTemplateInFirebase,
   upsertSharedGroupNote,
+  getFirebaseRuntime,
 } from './firebase';
 import { diag } from './diagnostics';
 import { clearDeletedNoteKeys, loadDeletedNoteKeys, markDeletedNoteKey, noteStorageKey } from './noteDeletions';
@@ -192,13 +193,32 @@ export async function saveNotes(items: NoteItem[]): Promise<void> {
   await AsyncStorage.setItem(NOTES_KEY, JSON.stringify(normalizeNotes(items).slice(0, 3000)));
 }
 
+async function updateNoteSyncStatus(noteId: string, status: NoteItem['syncStatus']): Promise<void> {
+  try {
+    const notes = await loadNotes();
+    const updated = notes.map((n) => (n.id === noteId ? { ...n, syncStatus: status } : n));
+    await saveNotes(updated);
+  } catch (error) {
+    await diag.warn('notes.update.sync_status.error', { noteId, status, message: String(error) });
+  }
+}
+
 async function pushNoteIfAuthenticated(note: NoteItem): Promise<boolean> {
   try {
+    // Set pending status before attempting sync
+    await updateNoteSyncStatus(note.id, 'pending');
+
     await upsertNoteInFirebase(note);
+
+    // On success: set to synced (fire-and-forget)
+    updateNoteSyncStatus(note.id, 'synced').catch(() => undefined);
     return true;
   } catch (error) {
     await diag.warn('notes.push.note.error', { message: String(error), noteId: note.id });
-    await enqueueOperation('upsertNote', note).catch(() => undefined);
+    // Leave as 'pending' since we're enqueuing for retry
+    const rt = getFirebaseRuntime();
+    const uid = rt?.auth?.currentUser?.uid;
+    await enqueueOperation('upsertNote', note, uid).catch(() => undefined);
     return false;
   }
 }

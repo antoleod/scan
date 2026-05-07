@@ -7,6 +7,8 @@ import { diag } from '../core/diagnostics';
 import { onFirebaseAuthState } from '../core/firebase';
 import { loadSettings } from '../core/settings';
 import { getBiometricStatus, authenticateWithBiometrics, type BiometricStatus } from '../core/biometrics';
+import { clearQueue } from '../core/offlineQueue';
+import { clearNotesChecksum } from '../core/syncChecksum';
 
 import { getFirebaseGuardState, login, logout, register, sendPasswordReset, loginWithGoogle as loginWithGoogleService, sendMagicLink as sendMagicLinkService, verifyMagicLink as verifyMagicLinkService } from './authService';
 import type { LoginOptions, RegisterProfile } from './authTypes';
@@ -239,6 +241,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const logoutCurrentUser = async () => {
+    await clearQueue();
+    await clearNotesChecksum();
     await logout();
     await clearBiometricEmail();
     await saveBiometricEnabled(false);

@@ -221,6 +221,10 @@ export async function getFirebaseRuntimeSnapshot(): Promise<FirebaseRuntime> {
   return initFirebaseRuntime();
 }
 
+export function getFirebaseRuntime(): FirebaseRuntime | null {
+  return runtime;
+}
+
 export async function onFirebaseAuthState(cb: (user: User | null) => void) {
   const rt = await initFirebaseRuntime();
   if (!rt.enabled || !rt.auth) {
@@ -562,6 +566,12 @@ export async function upsertNoteInFirebase(note: NoteItem): Promise<void> {
   if (note.imageBase64 !== undefined) payload.imageBase64 = note.imageBase64;
   if (note.imageMimeType !== undefined) payload.imageMimeType = note.imageMimeType;
   if (note.attachments !== undefined) payload.attachments = note.attachments;
+  if (note.title !== undefined) payload.title = note.title;
+  if (note.smartType) payload.smartType = note.smartType;
+  if (note.workflowStatus) payload.workflowStatus = note.workflowStatus;
+  if (note.workflowMetadata) payload.workflowMetadata = JSON.stringify(note.workflowMetadata);
+  if (note.isSecret !== undefined) payload.isSecret = note.isSecret;
+  if (note.draft !== undefined) payload.draft = note.draft;
   await setDoc(
     doc(rt.db, 'users', user.uid, 'notes', note.id),
     payload,
