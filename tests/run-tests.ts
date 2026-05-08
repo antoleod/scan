@@ -14,6 +14,7 @@ import { createTrieFromWords } from "../src/utils/trie";
 import { AppError, AuthError, SyncError, ValidationError, toAppError, isRetryable } from "../src/core/errors";
 import { sanitizeScanInput, sanitizeNoteText, sanitizeTemplatePattern } from "../src/core/validation";
 import { computeNotesChecksum } from "../src/core/syncChecksum";
+import { getAuthRedirectPath, LOGIN_ROUTE, MAIN_APP_ROUTE } from "../src/core/routes";
 
 let passed = 0;
 let failed = 0;
@@ -77,6 +78,26 @@ run("extractFields fallback captures email and phone", () => {
 
   assert.equal(fields.email, "maria@example.com");
   assert.equal(fields.phoneNumber, "+34 600 111 222");
+});
+
+run("auth routing redirects anonymous root visits to login", () => {
+  assert.equal(getAuthRedirectPath("/", false), LOGIN_ROUTE);
+});
+
+run("auth routing renders login directly for anonymous users", () => {
+  assert.equal(getAuthRedirectPath(LOGIN_ROUTE, false), null);
+});
+
+run("auth routing redirects authenticated login visits to app", () => {
+  assert.equal(getAuthRedirectPath(LOGIN_ROUTE, true), MAIN_APP_ROUTE);
+});
+
+run("auth routing redirects authenticated root visits to app", () => {
+  assert.equal(getAuthRedirectPath("/", true), MAIN_APP_ROUTE);
+});
+
+run("auth routing leaves Firebase auth action links intact", () => {
+  assert.equal(getAuthRedirectPath("/__/auth/action", false), null);
 });
 
 run("backup export/import roundtrips settings templates and history", () => {

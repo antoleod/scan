@@ -9,11 +9,13 @@ import { useAppTheme } from './src/constants/theme';
 import { ThemeProvider } from './src/core/theme';
 import { loadSettings } from './src/core/settings';
 import { initPwaInstallBridge } from './src/core/pwa';
+import { getAuthRedirectPath } from './src/core/routes';
 import MainAppScreen from './src/screens/MainAppScreen';
 
 function AuthGate() {
   const { user, isGuest, isLoading } = useAuth();
   const { setThemeName } = useAppTheme();
+  const isAuthenticated = Boolean(user || isGuest);
 
   useEffect(() => {
     initPwaInstallBridge();
@@ -25,6 +27,16 @@ function AuthGate() {
       .catch(() => undefined);
   }, [setThemeName]);
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (isLoading) return;
+
+    const redirectPath = getAuthRedirectPath(window.location.pathname, isAuthenticated);
+    if (!redirectPath) return;
+
+    window.history.replaceState(window.history.state, '', `${redirectPath}${window.location.search}${window.location.hash}`);
+  }, [isAuthenticated, isLoading]);
+
   if (isLoading) {
     return (
       <View style={styles.centered}>
@@ -34,7 +46,7 @@ function AuthGate() {
     );
   }
 
-  if (user || isGuest) {
+  if (isAuthenticated) {
     return <MainAppScreen />;
   }
 
