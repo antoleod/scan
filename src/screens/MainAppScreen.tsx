@@ -738,6 +738,14 @@ function MainApp() {
       showFeedback('success', outcome.record.codeNormalized);
       await diag.info('scan.saved', { type: outcome.record.type, source: outcome.record.source });
       restartScannerSessionSoon(1100);
+    } catch (error) {
+      console.error('Error processing scan:', error);
+      await diag.error('scan.process.error', { message: String(error), source });
+      setScanState('error');
+      scanCooldownRef.current = Date.now() + SCAN_TUNING.cooldownAfterInvalidMs;
+      clearScanTimers();
+      restartScannerSessionSoon(1000);
+      showFeedback('error', 'Failed to process scan');
     } finally {
       scanBusyRef.current = false;
     }
