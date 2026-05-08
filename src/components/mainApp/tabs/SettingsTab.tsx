@@ -8,6 +8,7 @@ import { canInstallPwa, detectBrowserInstallSupport, getManualInstallInstruction
 import { createSharedNoteGroup, fetchSharedGroupsForCurrentUser, joinSharedNoteGroup, type SharedNoteGroup } from '../../../core/firebase';
 import { useAppTheme } from '../../../constants/theme';
 import { loadNotes, removeNote, type NoteItem } from '../../../core/notes';
+import { Toast, useToast } from '../../Toast';
 
 type Palette = { bg: string; fg: string; accent: string; muted: string; card: string; border: string };
 
@@ -151,6 +152,7 @@ export function SettingsTab({
   const { width } = useWindowDimensions();
   const isDesktop = width >= 1024;
   const { setThemeName } = useAppTheme();
+  const { show: showToast } = useToast();
   const [passPhrase, setPassPhrase] = useState('');
   const [passwordMode, setPasswordMode] = useState<'phrases' | 'seed'>('phrases');
   const [phraseCount, setPhraseCount] = useState(2);
@@ -166,6 +168,7 @@ export function SettingsTab({
   const [reviewGroupBy, setReviewGroupBy] = useState<'day' | 'week'>('day');
   const [reviewNotes, setReviewNotes] = useState<NoteItem[]>([]);
   const [reviewLoading, setReviewLoading] = useState(false);
+  const [reviewDeleting, setReviewDeleting] = useState(false);
   const [reviewSelected, setReviewSelected] = useState<Set<string>>(new Set());
 
 
@@ -186,13 +189,39 @@ export function SettingsTab({
   const deleteReviewSelected = useCallback(async () => {
     const ids = Array.from(reviewSelected);
     if (!ids.length) return;
-    let remaining = reviewNotes;
+
+    const countToDelete = ids.length;
+    let successCount = 0;
+
     for (const id of ids) {
-      try { remaining = await removeNote(id); } catch { /* continue */ }
+      try {
+        await removeNote(id);
+        successCount += 1;
+      } catch (error) {
+        console.error(`Failed to delete note ${id}:`, error);
+      }
     }
-    setReviewNotes(remaining.filter((n) => !n.deletedAt && !n.draft));
+
+    // Reload notes from storage to ensure consistency
+    try {
+      const updated = await loadNotes();
+      setReviewNotes(updated.filter((n) => !n.deletedAt && !n.draft));
+    } catch (error) {
+      console.error('Failed to reload notes after deletion:', error);
+      showToast('Failed to refresh notes list', 'error');
+      return;
+    }
+
     setReviewSelected(new Set());
-  }, [reviewSelected, reviewNotes]);
+
+    if (successCount === countToDelete) {
+      showToast(`Deleted ${countToDelete} note${countToDelete !== 1 ? 's' : ''}`, 'success');
+    } else if (successCount > 0) {
+      showToast(`Deleted ${successCount} of ${countToDelete} notes`, 'info');
+    } else {
+      showToast('Failed to delete notes', 'error');
+    }
+  }, [reviewSelected, showToast]);
 
   const reviewGroups = useMemo(() => {
     const map = new Map<string, NoteItem[]>();
@@ -807,14 +836,34 @@ export function SettingsTab({
                         <Text style={{ color: palette.muted, fontSize: 12, fontWeight: '600' }}>Deselect</Text>
                       </Pressable>
                       <Pressable
+                        disabled={reviewDeleting}
                         onPress={() => Alert.alert(
                           `Delete ${reviewSelected.size} note${reviewSelected.size !== 1 ? 's' : ''}?`,
                           'This cannot be undone.',
-                          [{ text: 'Cancel', style: 'cancel' }, { text: 'Delete', style: 'destructive', onPress: () => deleteReviewSelected().catch(() => undefined) }]
+                          [
+                            { text: 'Cancel', style: 'cancel' },
+                            {
+                              text: 'Delete',
+                              style: 'destructive',
+                              onPress: async () => {
+                                setReviewDeleting(true);
+                                try {
+                                  await deleteReviewSelected();
+                                } catch (error) {
+                                  console.error('Deletion error:', error);
+                                  showToast('Failed to delete notes', 'error');
+                                } finally {
+                                  setReviewDeleting(false);
+                                }
+                              },
+                            },
+                          ]
                         )}
-                        style={({ pressed }) => ({ paddingHorizontal: 14, paddingVertical: 7, borderRadius: 8, backgroundColor: '#ef4444', opacity: pressed ? 0.8 : 1 })}
+                        style={({ pressed }) => ({ paddingHorizontal: 14, paddingVertical: 7, borderRadius: 8, backgroundColor: '#ef4444', opacity: reviewDeleting ? 0.6 : pressed ? 0.8 : 1 })}
                       >
-                        <Text style={{ color: '#fff', fontSize: 12, fontWeight: '800' }}>Delete {reviewSelected.size}</Text>
+                        <Text style={{ color: '#fff', fontSize: 12, fontWeight: '800' }}>
+                          {reviewDeleting ? 'Deleting...' : `Delete ${reviewSelected.size}`}
+                        </Text>
                       </Pressable>
                     </>
                   ) : null}
