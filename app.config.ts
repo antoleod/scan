@@ -10,7 +10,7 @@ const config: ExpoConfig = {
   name: "MyKit Mobile",
   slug: "mykit-mobile",
   version: "1.0.0",
-  jsEngine: "jsc",
+  jsEngine: "hermes",
   orientation: "default",
   icon: "./assets/images/icon.png",
   userInterfaceStyle: "automatic",
@@ -48,7 +48,24 @@ const config: ExpoConfig = {
   experiments: {
     baseUrl,
   },
-  plugins: ["expo-sharing", "expo-font", "@react-native-community/datetimepicker", "expo-secure-store", "expo-web-browser"],
+  plugins: [
+    "expo-sharing",
+    "expo-font",
+    "@react-native-community/datetimepicker",
+    "expo-secure-store",
+    "expo-web-browser",
+    "expo-camera",
+    "expo-image-picker",
+    "expo-local-authentication",
+    [
+      "react-native-nfc-manager",
+      {
+        "nfcPermission": "Use NFC to read tags and scan codes",
+        "selectIdentifiers": [],
+        "systemCodes": []
+      }
+    ]
+  ],
   updates: {
     enabled: updatesEnabled,
     checkAutomatically: "ON_ERROR_RECOVERY",

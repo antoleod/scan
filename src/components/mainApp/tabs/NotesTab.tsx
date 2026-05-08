@@ -606,6 +606,7 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
     } else {
       next = next.filter((n) => n.groupId === activeGroupId);
     }
+    if (filter !== 'draft') next = next.filter((n) => !n.draft);
     if (filter === 'work') next = next.filter((n) => n.category === 'work');
     if (filter === 'pinned') next = next.filter((n) => n.pinned);
     if (filter === 'draft') next = next.filter((n) => n.draft);
@@ -672,10 +673,26 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
     { key: 'all' as const, label: `Recent (24h): ${recentCount}`, color: palette.muted },
   ]), [medicationActive, shoppingPending, remindersActive, recentCount, palette.muted]);
 
+  async function resolveImageUri(uri: string): Promise<string> {
+    if (Platform.OS !== 'web' || !uri.startsWith('blob:')) return uri;
+    try {
+      const res = await fetch(uri);
+      const blob = await res.blob();
+      return await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+    } catch {
+      return uri;
+    }
+  }
+
   async function addImageToDraft() {
     const picked = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.9, base64: false });
     if (picked.canceled || !picked.assets?.length) return;
-    const uri = picked.assets[0].uri;
+    const uri = await resolveImageUri(picked.assets[0].uri);
     setDraftImages((current) => Array.from(new Set([uri, ...current])).slice(0, 6));
   }
 
@@ -689,7 +706,7 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
       exif: false,
     });
     if (picked.canceled || !picked.assets?.length) return;
-    const uri = picked.assets[0].uri;
+    const uri = await resolveImageUri(picked.assets[0].uri);
     setDraftImages((current) => Array.from(new Set([uri, ...current])).slice(0, 6));
   }
 
@@ -2377,29 +2394,23 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
       ) : null}
 
       {workspaceTab === 'notes' && (draftTextValue.trim().length > 0 || draftImages.length > 0) && selectedNoteIds.size === 0 ? (
-        <Pressable
-          onPress={() => saveDraftAsNote().catch(() => undefined)}
-          style={({ pressed }) => ({
-            position: 'absolute',
-            bottom: 80,
-            right: 16,
-            paddingHorizontal: 18,
-            paddingVertical: 11,
-            borderRadius: 24,
-            backgroundColor: pressed ? `${palette.accent}cc` : palette.accent,
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: 7,
-            shadowColor: '#000',
-            shadowOffset: { width: 0, height: 3 },
-            shadowOpacity: 0.3,
-            shadowRadius: 6,
-            elevation: 6,
-          })}
-        >
-          <Ionicons name="checkmark" size={16} color="#000" />
-          <Text style={{ color: '#000', fontSize: 13, fontWeight: '800' }}>Save note</Text>
-        </Pressable>
+        <View style={{ paddingHorizontal: 12, paddingVertical: 8, borderTopWidth: 1, borderTopColor: palette.border, backgroundColor: palette.card }}>
+          <Pressable
+            onPress={() => saveDraftAsNote().catch(() => undefined)}
+            style={({ pressed }) => ({
+              paddingVertical: 12,
+              borderRadius: 12,
+              backgroundColor: pressed ? `${palette.accent}cc` : palette.accent,
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 7,
+            })}
+          >
+            <Ionicons name="checkmark" size={16} color="#000" />
+            <Text style={{ color: '#000', fontSize: 14, fontWeight: '800' }}>Save note</Text>
+          </Pressable>
+        </View>
       ) : null}
     </View>
   );

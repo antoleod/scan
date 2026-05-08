@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, Linking, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -7,6 +7,7 @@ import { BARCODE_FORMAT_OPTIONS, type BarcodeFormat } from '../../../core/barcod
 import { canInstallPwa, detectBrowserInstallSupport, getManualInstallInstructions, getPwaInstallDiagnostics, subscribePwaInstallAvailability, triggerPwaInstall } from '../../../core/pwa';
 import { createSharedNoteGroup, fetchSharedGroupsForCurrentUser, joinSharedNoteGroup, type SharedNoteGroup } from '../../../core/firebase';
 import { useAppTheme } from '../../../constants/theme';
+import { loadNotes, removeNote, type NoteItem } from '../../../core/notes';
 
 type Palette = { bg: string; fg: string; accent: string; muted: string; card: string; border: string };
 
@@ -107,6 +108,8 @@ export function SettingsTab({
   onHardDeleteNotes,
   onHardDeleteClipboard,
   onHardDeleteTemplates,
+  onClearArchivedNotes,
+  onClearUnpinnedNotes,
   onExportBackup,
   onOpenBackupImport,
   onRecheckFirebase,
@@ -129,6 +132,8 @@ export function SettingsTab({
   onHardDeleteNotes: () => void;
   onHardDeleteClipboard: () => void;
   onHardDeleteTemplates: () => void;
+  onClearArchivedNotes: () => void;
+  onClearUnpinnedNotes: () => void;
   onExportBackup: () => void;
   onOpenBackupImport: () => void;
   onRecheckFirebase: () => void;
@@ -157,6 +162,56 @@ export function SettingsTab({
   const [groupNameDraft, setGroupNameDraft] = useState('');
   const [inviteCodeDraft, setInviteCodeDraft] = useState('');
   const [officeDraft, setOfficeDraft] = useState('');
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const [reviewGroupBy, setReviewGroupBy] = useState<'day' | 'week'>('day');
+  const [reviewNotes, setReviewNotes] = useState<NoteItem[]>([]);
+  const [reviewLoading, setReviewLoading] = useState(false);
+  const [reviewSelected, setReviewSelected] = useState<Set<string>>(new Set());
+
+
+  const openReviewPanel = useCallback(async () => {
+    setReviewOpen(true);
+    setReviewLoading(true);
+    setReviewSelected(new Set());
+    try {
+      const all = await loadNotes();
+      setReviewNotes(all.filter((n) => !n.deletedAt));
+    } catch {
+      setReviewNotes([]);
+    } finally {
+      setReviewLoading(false);
+    }
+  }, []);
+
+  const deleteReviewSelected = useCallback(async () => {
+    const ids = Array.from(reviewSelected);
+    if (!ids.length) return;
+    let remaining = reviewNotes;
+    for (const id of ids) {
+      try { remaining = await removeNote(id); } catch { /* continue */ }
+    }
+    setReviewNotes(remaining.filter((n) => !n.deletedAt && !n.draft));
+    setReviewSelected(new Set());
+  }, [reviewSelected, reviewNotes]);
+
+  const reviewGroups = useMemo(() => {
+    const map = new Map<string, NoteItem[]>();
+    for (const note of reviewNotes) {
+      const d = new Date(note.updatedAt);
+      let key: string;
+      if (reviewGroupBy === 'day') {
+        key = d.toISOString().slice(0, 10);
+      } else {
+        const day = d.getDay();
+        const monday = new Date(d);
+        monday.setDate(d.getDate() - ((day + 6) % 7));
+        key = monday.toISOString().slice(0, 10);
+      }
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(note);
+    }
+    return Array.from(map.entries()).sort((a, b) => b[0].localeCompare(a[0]));
+  }, [reviewNotes, reviewGroupBy]);
 
   useEffect(() => subscribePwaInstallAvailability(setPwaInstallAvailable), []);
   useEffect(() => {
@@ -458,7 +513,7 @@ export function SettingsTab({
                 })}
                 style={[styles.modeChip, { borderColor: palette.border, backgroundColor: palette.card }]}
               >
-                <Text style={[styles.modeChipText, { color: palette.fg }]}>{office} ×</Text>
+                <Text style={[styles.modeChipText, { color: palette.fg }]}>{office} ï¿½</Text>
               </Pressable>
             ))}
           </View>
@@ -498,7 +553,7 @@ export function SettingsTab({
           </View>
           {groups.length ? groups.map((g) => (
             <Text key={g.id} style={[styles.helperLine, { color: palette.muted }]}>
-              {g.name} · code: {g.inviteCode} · members: {g.members?.length || 0}
+              {g.name} ï¿½ code: {g.inviteCode} ï¿½ members: {g.members?.length || 0}
             </Text>
           )) : <Text style={[styles.helperLine, { color: palette.muted }]}>No groups yet.</Text>}
         </SectionCard>
@@ -568,6 +623,205 @@ export function SettingsTab({
             })}
           </View>
           <Text style={[styles.helperLine, { color: palette.muted }]}>Active scan types: {visibleBarcodeTypes.join(', ') || 'none'}</Text>
+        </SectionCard>
+
+        <SectionCard title="Notes cleanup" subtitle="Auto-clear and bulk cleanup for notes." accent={palette.accent} subtitleColor={palette.muted} cardBackground={palette.card} cardBorder={palette.border}>
+          <View style={{ gap: 10 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+              <View style={{ flex: 1, minWidth: 160 }}>
+                <Text style={{ color: palette.fg, fontSize: 13, fontWeight: '600' }}>Auto-clear notes older than</Text>
+                <Text style={{ color: palette.muted, fontSize: 11, marginTop: 2 }}>Pinned notes are never deleted</Text>
+              </View>
+              <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+                {([0, 30, 90, 180, 365] as const).map((days) => {
+                  const active = (settings.notesAutoClearDays ?? 0) === days;
+                  const label = days === 0 ? 'Never' : days === 365 ? '1 year' : `${days}d`;
+                  return (
+                    <Pressable
+                      key={days}
+                      onPress={() => onPatchSettings({ notesAutoClearDays: days })}
+                      style={({ pressed }) => ({
+                        paddingHorizontal: 12,
+                        paddingVertical: 6,
+                        borderRadius: 8,
+                        borderWidth: 1,
+                        borderColor: active ? activeAccent : palette.border,
+                        backgroundColor: active ? activeAccent : palette.card,
+                        opacity: pressed ? 0.8 : 1,
+                      })}
+                    >
+                      <Text style={{ color: active ? '#111' : palette.muted, fontSize: 12, fontWeight: active ? '800' : '600' }}>{label}</Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+
+            <View style={[styles.bulkGrid, isDesktop ? styles.bulkGridDesktop : null]}>
+              <Pressable
+                onPress={() => Alert.alert('Clear archived notes', 'Delete all archived notes? Pinned notes are kept.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Clear', style: 'destructive', onPress: onClearArchivedNotes }])}
+                style={({ pressed }) => [styles.bulkButton, styles.bulkGridItem, isDesktop ? styles.bulkGridItemDesktop : styles.bulkGridItemMobile, { backgroundColor: '#b45309', opacity: pressed ? 0.8 : 1 }]}
+              >
+                <Text style={[styles.bulkButtonText, { color: '#fff' }]}>Clear archived</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => Alert.alert('Clear unpinned notes', 'Delete all notes that are not pinned?', [{ text: 'Cancel', style: 'cancel' }, { text: 'Clear', style: 'destructive', onPress: onClearUnpinnedNotes }])}
+                style={({ pressed }) => [styles.bulkButton, styles.bulkGridItem, isDesktop ? styles.bulkGridItemDesktop : styles.bulkGridItemMobile, { backgroundColor: '#92400e', opacity: pressed ? 0.8 : 1 }]}
+              >
+                <Text style={[styles.bulkButtonText, { color: '#fff' }]}>Clear unpinned</Text>
+              </Pressable>
+            </View>
+
+            {/* Review by date panel */}
+            <Pressable
+              onPress={() => reviewOpen ? setReviewOpen(false) : openReviewPanel()}
+              style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 10, paddingHorizontal: 12, borderRadius: 10, borderWidth: 1, borderColor: reviewOpen ? activeAccent : palette.border, backgroundColor: palette.card, opacity: pressed ? 0.8 : 1 })}
+            >
+              <Ionicons name="calendar-outline" size={16} color={activeAccent} />
+              <Text style={{ color: palette.fg, fontSize: 13, fontWeight: '600', flex: 1 }}>Review notes by date</Text>
+              <Ionicons name={reviewOpen ? 'chevron-up' : 'chevron-down'} size={14} color={palette.muted} />
+            </Pressable>
+
+            {reviewOpen ? (
+              <View style={{ borderWidth: 1, borderColor: palette.border, borderRadius: 10, overflow: 'hidden' }}>
+                {/* Toolbar: group-by + select-all */}
+                <View style={{ flexDirection: 'row', alignItems: 'center', borderBottomWidth: 1, borderBottomColor: palette.border, backgroundColor: palette.card }}>
+                  {(['day', 'week'] as const).map((g) => (
+                    <Pressable
+                      key={g}
+                      onPress={() => setReviewGroupBy(g)}
+                      style={{ paddingVertical: 9, paddingHorizontal: 18, borderRightWidth: 1, borderRightColor: palette.border, backgroundColor: reviewGroupBy === g ? activeAccent : 'transparent' }}
+                    >
+                      <Text style={{ color: reviewGroupBy === g ? '#111' : palette.muted, fontSize: 12, fontWeight: '700', textTransform: 'capitalize' }}>{g}</Text>
+                    </Pressable>
+                  ))}
+                  <View style={{ flex: 1 }} />
+                  {reviewNotes.length > 0 && (
+                    <Pressable
+                      onPress={() => {
+                        const allIds = reviewNotes.map((n) => n.id);
+                        const allChosen = allIds.every((id) => reviewSelected.has(id));
+                        setReviewSelected(allChosen ? new Set() : new Set(allIds));
+                      }}
+                      style={{ paddingHorizontal: 12, paddingVertical: 9 }}
+                    >
+                      <Text style={{ color: activeAccent, fontSize: 12, fontWeight: '700' }}>
+                        {reviewNotes.every((n) => reviewSelected.has(n.id)) ? 'Deselect all' : 'Select all'}
+                      </Text>
+                    </Pressable>
+                  )}
+                </View>
+
+                {reviewLoading ? (
+                  <View style={{ padding: 24, alignItems: 'center' }}>
+                    <Text style={{ color: palette.muted, fontSize: 13 }}>Loading notesâ€¦</Text>
+                  </View>
+                ) : reviewGroups.length === 0 ? (
+                  <View style={{ padding: 24, alignItems: 'center', gap: 6 }}>
+                    <Ionicons name="document-outline" size={28} color={palette.muted} />
+                    <Text style={{ color: palette.muted, fontSize: 13 }}>No notes found</Text>
+                  </View>
+                ) : (
+                  <View>
+                    {reviewGroups.map(([groupKey, groupNotes], groupIndex) => {
+                      const allSelected = groupNotes.every((n) => reviewSelected.has(n.id));
+                      const someSelected = groupNotes.some((n) => reviewSelected.has(n.id));
+                      const label = reviewGroupBy === 'day'
+                        ? new Date(groupKey + 'T12:00:00').toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })
+                        : `Week of ${new Date(groupKey + 'T12:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`;
+                      return (
+                        <View key={groupKey} style={{ borderBottomWidth: groupIndex < reviewGroups.length - 1 ? 1 : 0, borderBottomColor: palette.border }}>
+                          {/* Group header â€” always visible, tap to select all in group */}
+                          <Pressable
+                            onPress={() => setReviewSelected((prev) => {
+                              const next = new Set(prev);
+                              groupNotes.forEach((n) => allSelected ? next.delete(n.id) : next.add(n.id));
+                              return next;
+                            })}
+                            style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 8, gap: 8, backgroundColor: someSelected ? `${activeAccent}10` : palette.card }}
+                          >
+                            <View style={{ width: 16, height: 16, borderRadius: 3, borderWidth: 1.5, borderColor: allSelected ? activeAccent : someSelected ? activeAccent : palette.border, backgroundColor: allSelected ? activeAccent : 'transparent', alignItems: 'center', justifyContent: 'center' }}>
+                              {allSelected ? <Ionicons name="checkmark" size={10} color="#111" /> : someSelected ? <View style={{ width: 8, height: 2, backgroundColor: activeAccent }} /> : null}
+                            </View>
+                            <Text style={{ flex: 1, color: palette.fg, fontSize: 12, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 }}>{label}</Text>
+                            <Text style={{ color: palette.muted, fontSize: 11 }}>{groupNotes.length} note{groupNotes.length !== 1 ? 's' : ''}</Text>
+                          </Pressable>
+
+                          {/* Notes â€” always visible */}
+                          {groupNotes.map((note, noteIndex) => {
+                            const selected = reviewSelected.has(note.id);
+                            const preview = String(note.title || note.text || '').replace(/\n+/g, ' ').trim().slice(0, 100);
+                            return (
+                              <Pressable
+                                key={note.id}
+                                onPress={() => setReviewSelected((prev) => {
+                                  const next = new Set(prev);
+                                  selected ? next.delete(note.id) : next.add(note.id);
+                                  return next;
+                                })}
+                                style={({ pressed }) => ({
+                                  flexDirection: 'row',
+                                  alignItems: 'flex-start',
+                                  paddingHorizontal: 14,
+                                  paddingVertical: 10,
+                                  gap: 10,
+                                  borderTopWidth: 1,
+                                  borderTopColor: palette.border,
+                                  backgroundColor: selected ? `${activeAccent}18` : pressed ? `${palette.border}44` : 'transparent',
+                                })}
+                              >
+                                <View style={{ marginTop: 2, width: 16, height: 16, borderRadius: 3, borderWidth: 1.5, borderColor: selected ? activeAccent : palette.border, backgroundColor: selected ? activeAccent : 'transparent', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                  {selected ? <Ionicons name="checkmark" size={10} color="#111" /> : null}
+                                </View>
+                                <View style={{ flex: 1, minWidth: 0 }}>
+                                  <Text style={{ color: selected ? palette.fg : palette.fg, fontSize: 13, fontWeight: '500', lineHeight: 18 }} numberOfLines={3}>
+                                    {preview || '(empty note)'}
+                                  </Text>
+                                  <View style={{ flexDirection: 'row', gap: 6, marginTop: 3, flexWrap: 'wrap' }}>
+                                    <Text style={{ color: palette.muted, fontSize: 10 }}>
+                                      {new Date(note.updatedAt).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}
+                                    </Text>
+                                    {note.pinned ? <Text style={{ color: '#f59e0b', fontSize: 10, fontWeight: '700' }}>pinned</Text> : null}
+                                    {note.draft ? <Text style={{ color: '#60a5fa', fontSize: 10, fontWeight: '700' }}>draft</Text> : null}
+                                    {note.category !== 'general' ? <Text style={{ color: palette.muted, fontSize: 10 }}>{note.category}</Text> : null}
+                                    {note.archived ? <Text style={{ color: palette.muted, fontSize: 10 }}>archived</Text> : null}
+                                  </View>
+                                </View>
+                              </Pressable>
+                            );
+                          })}
+                        </View>
+                      );
+                    })}
+                  </View>
+                )}
+
+                {/* Action bar */}
+                <View style={{ flexDirection: 'row', alignItems: 'center', padding: 10, gap: 8, borderTopWidth: 1, borderTopColor: palette.border, backgroundColor: palette.card }}>
+                  <Text style={{ flex: 1, color: palette.muted, fontSize: 12 }}>
+                    {reviewSelected.size > 0 ? `${reviewSelected.size} selected` : `${reviewNotes.length} total`}
+                  </Text>
+                  {reviewSelected.size > 0 ? (
+                    <>
+                      <Pressable onPress={() => setReviewSelected(new Set())} style={({ pressed }) => ({ paddingHorizontal: 12, paddingVertical: 7, borderRadius: 8, borderWidth: 1, borderColor: palette.border, opacity: pressed ? 0.7 : 1 })}>
+                        <Text style={{ color: palette.muted, fontSize: 12, fontWeight: '600' }}>Deselect</Text>
+                      </Pressable>
+                      <Pressable
+                        onPress={() => Alert.alert(
+                          `Delete ${reviewSelected.size} note${reviewSelected.size !== 1 ? 's' : ''}?`,
+                          'This cannot be undone.',
+                          [{ text: 'Cancel', style: 'cancel' }, { text: 'Delete', style: 'destructive', onPress: () => deleteReviewSelected().catch(() => undefined) }]
+                        )}
+                        style={({ pressed }) => ({ paddingHorizontal: 14, paddingVertical: 7, borderRadius: 8, backgroundColor: '#ef4444', opacity: pressed ? 0.8 : 1 })}
+                      >
+                        <Text style={{ color: '#fff', fontSize: 12, fontWeight: '800' }}>Delete {reviewSelected.size}</Text>
+                      </Pressable>
+                    </>
+                  ) : null}
+                </View>
+              </View>
+            ) : null}
+          </View>
         </SectionCard>
 
         <SectionCard title="Data + Sync" subtitle="Backup and synchronization." accent={palette.accent} subtitleColor={palette.muted} cardBackground={palette.card} cardBorder={palette.border}>

@@ -952,6 +952,35 @@ export async function clearNotes(): Promise<void> {
   }
 }
 
+export async function clearArchivedNotes(): Promise<NoteItem[]> {
+  const current = await loadNotes();
+  const archived = current.filter((n) => n.archived && !n.deletedAt);
+  for (const n of archived) await markDeletedNoteKey(n.id);
+  const kept = current.filter((n) => !n.archived);
+  await saveNotes(kept);
+  return normalizeNotes(kept);
+}
+
+export async function clearUnpinnedNotes(): Promise<NoteItem[]> {
+  const current = await loadNotes();
+  const unpinned = current.filter((n) => !n.pinned && !n.deletedAt);
+  for (const n of unpinned) await markDeletedNoteKey(n.id);
+  const kept = current.filter((n) => n.pinned);
+  await saveNotes(kept);
+  return normalizeNotes(kept);
+}
+
+export async function clearNotesOlderThan(days: number): Promise<NoteItem[]> {
+  if (days <= 0) return loadNotes();
+  const cutoff = Date.now() - days * 86_400_000;
+  const current = await loadNotes();
+  const old = current.filter((n) => !n.pinned && !n.deletedAt && n.updatedAt < cutoff);
+  for (const n of old) await markDeletedNoteKey(n.id);
+  const kept = current.filter((n) => n.pinned || n.updatedAt >= cutoff);
+  await saveNotes(kept);
+  return normalizeNotes(kept);
+}
+
 export async function hardDeleteAllNotes(): Promise<void> {
   await AsyncStorage.setItem(NOTES_KEY, JSON.stringify([]));
   await clearDeletedNoteKeys();

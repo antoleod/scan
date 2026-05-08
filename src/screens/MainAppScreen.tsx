@@ -65,7 +65,7 @@ import { QrModal } from '../components/mainApp/QrModal';
 import { ScanTab } from '../components/mainApp/tabs/ScanTab';
 import { SelectionFooter } from '../components/mainApp/SelectionFooter';
 import { SettingsTab } from '../components/mainApp/tabs/SettingsTab';
-import { hardDeleteAllNotes, hardDeleteAllTemplates, saveNotes as saveWorkNotes, saveTemplates as saveNoteTemplates } from '../core/notes';
+import { hardDeleteAllNotes, hardDeleteAllTemplates, clearArchivedNotes, clearUnpinnedNotes, clearNotesOlderThan, saveNotes as saveWorkNotes, saveTemplates as saveNoteTemplates } from '../core/notes';
 import { clearClipboardEntries, reinitClipboardFirebaseSync } from '../core/clipboard';
 import { Toast, useToast } from '../components/Toast';
 import { BatchSessionModal } from '../components/mainApp/BatchSessionModal';
@@ -330,6 +330,11 @@ function MainApp() {
             await saveHistory(finalHistory);
             await diag.info('history.autoclear', { removed: finalHistory.length - newHistory.length, kept: newHistory.length });
           }
+        }
+
+        const notesClearDays = loadedSettings.notesAutoClearDays ?? 0;
+        if (notesClearDays > 0) {
+          await clearNotesOlderThan(notesClearDays);
         }
 
         setSettings(loadedSettings);
@@ -1273,6 +1278,16 @@ function MainApp() {
     );
   }
 
+  async function clearArchivedNotesNow() {
+    await clearArchivedNotes();
+    showToast('Archived notes cleared', 'success');
+  }
+
+  async function clearUnpinnedNotesNow() {
+    await clearUnpinnedNotes();
+    showToast('Unpinned notes cleared', 'success');
+  }
+
   async function hardDeleteNotesNow() {
     // Do NOT call syncNow after this — syncNow calls fetchNotesFromFirebase which can
     // serve stale in-memory SDK cache and restore notes we just deleted.
@@ -1770,6 +1785,8 @@ function MainApp() {
               onHardDeleteNotes={hardDeleteNotesNow}
               onHardDeleteClipboard={hardDeleteClipboardNow}
               onHardDeleteTemplates={hardDeleteTemplatesNow}
+              onClearArchivedNotes={clearArchivedNotesNow}
+              onClearUnpinnedNotes={clearUnpinnedNotesNow}
               syncBusy={syncBusy}
               userEmail={user?.email || null}
               userUidPrefix={user ? user.uid.substring(0, 8) : null}

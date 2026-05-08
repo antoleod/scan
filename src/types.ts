@@ -44,6 +44,7 @@ export interface AppSettings {
   barcodeTypes: BarcodeType[];
   laserSpeed: 'slow' | 'normal' | 'fast';
   historyAutoClearDays: number;
+  notesAutoClearDays: number;
   staySignedIn: boolean;
   /** When true, web uses longer-lived Firebase auth persistence (no password stored locally). */
   savePasswordEncrypted: boolean;
