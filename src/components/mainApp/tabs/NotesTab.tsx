@@ -1781,11 +1781,18 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
                                 updateNoteText(note.id, nextText).then(setNotes).catch(() => undefined);
                               }
                             }}
-                            onSaveEdit={() => updateNoteText(note.id, editingText).then((next) => {
-                              clearDraftFlag(note.id).then(setNotes);
-                              setEditingNoteId(null);
-                              setEditingText('');
-                            })}
+                            onSaveEdit={() => {
+                              updateNoteText(note.id, editingText).then((next) => {
+                                setNotes(next);
+                                clearDraftFlag(note.id).then(setNotes);
+                                setEditingNoteId(null);
+                                setEditingText('');
+                                showToast('Note saved', 'success');
+                              }).catch((error) => {
+                                console.error('Failed to save note:', error);
+                                showToast('Failed to save note', 'error');
+                              });
+                            }}
                             onCancelEdit={() => {
                               setEditingNoteId(null);
                               setEditingText('');
@@ -2147,19 +2154,24 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
         }}
         onSave={(metadata) => {
           createMedicationFollowUpNote(metadata).then(() => {
-            showToast('Medication follow-up created');
-          }).catch(() => undefined);
-          setDraftText((current) => {
-            const quickText = Array.isArray(workflowModalData.medicationNames)
-              ? (workflowModalData.medicationNames as string[]).join(', ')
-              : String(workflowModalData.medicationName || '');
-            const safeCurrent = String(current || '');
-            if (!quickText.trim()) return safeCurrent;
-            return safeCurrent.replace(quickText, '').replace(/\n{3,}/g, '\n\n').trim();
+            showToast('Medication follow-up created', 'success');
+            setDraftText((current) => {
+              const quickText = Array.isArray(workflowModalData.medicationNames)
+                ? (workflowModalData.medicationNames as string[]).join(', ')
+                : String(workflowModalData.medicationName || '');
+              const safeCurrent = String(current || '');
+              if (!quickText.trim()) return safeCurrent;
+              return safeCurrent.replace(quickText, '').replace(/\n{3,}/g, '\n\n').trim();
+            });
+            setWorkflowModalType(null);
+            setWorkflowModalData({});
+            setDetectedWorkflow(null);
+          }).catch((error) => {
+            console.error('Error creating medication note:', error);
+            showToast('Failed to create medication follow-up', 'error');
+            setWorkflowModalType(null);
+            setWorkflowModalData({});
           });
-          setWorkflowModalType(null);
-          setWorkflowModalData({});
-          setDetectedWorkflow(null);
         }}
       />
 
@@ -2181,44 +2193,61 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
             ? `Shopping List\n${checklist.map((item) => `- ${item}`).join('\n')}`
             : '';
           if (!shoppingNote) {
+            showToast('Empty shopping list', 'error');
             setWorkflowModalType(null);
             setDetectedWorkflow(null);
             return;
           }
           addRichNoteUnique(shoppingNote, 'shopping', [], groupId, false, false).then(async (result) => {
-            setNotes(result.notes);
-            if (result.inserted) {
-              const createdNote = result.notes[0];
-              const updatedNotes = await updateNoteSmartType(createdNote.id, 'shopping', 'active', {
-                checklistItems: checklistEntries.map((entry) => ({
-                  id: entry.id,
-                  text: String(entry.text || '').trim(),
-                  completed: Boolean(entry.completed),
-                  quantity: String(entry.quantity || '').trim() || undefined,
-                  unit: String(entry.unit || '').trim() || undefined,
-                  rawText: String(entry.rawText || entry.text || '').trim() || undefined,
-                })),
-                extractedFromText: true,
-              });
-              setNotes(updatedNotes);
-              showToast('Shopping list created');
-              setFilter('all');
-              setDraftText('');
-              setDraftImages([]);
-              setManualCategory(null);
-              setDraftAutoSaveStatus('idle');
-              if (draftAutoSaveTimerRef.current) {
-                clearTimeout(draftAutoSaveTimerRef.current);
-                draftAutoSaveTimerRef.current = null;
+            try {
+              setNotes(result.notes);
+              if (result.inserted) {
+                const createdNote = result.notes[0];
+                if (!createdNote) {
+                  showToast('Failed to create shopping list', 'error');
+                  return;
+                }
+                const updatedNotes = await updateNoteSmartType(createdNote.id, 'shopping', 'active', {
+                  checklistItems: checklistEntries.map((entry) => ({
+                    id: entry.id,
+                    text: String(entry.text || '').trim(),
+                    completed: Boolean(entry.completed),
+                    quantity: String(entry.quantity || '').trim() || undefined,
+                    unit: String(entry.unit || '').trim() || undefined,
+                    rawText: String(entry.rawText || entry.text || '').trim() || undefined,
+                  })),
+                  extractedFromText: true,
+                });
+                setNotes(updatedNotes);
+                showToast('Shopping list created', 'success');
+                setFilter('all');
+                setDraftText('');
+                setDraftImages([]);
+                setManualCategory(null);
+                setDraftAutoSaveStatus('idle');
+                if (draftAutoSaveTimerRef.current) {
+                  clearTimeout(draftAutoSaveTimerRef.current);
+                  draftAutoSaveTimerRef.current = null;
+                }
+                AsyncStorage.removeItem(DRAFT_KEY).catch(() => undefined);
+              } else {
+                showToast('Shopping list already exists', 'info');
               }
-              AsyncStorage.removeItem(DRAFT_KEY).catch(() => undefined);
-            } else {
-              showToast('Shopping list already exists');
+              setWorkflowModalType(null);
+              setWorkflowModalData({});
+              setDetectedWorkflow(null);
+            } catch (error) {
+              console.error('Failed to create shopping list:', error);
+              showToast('Failed to create shopping list', 'error');
+              setWorkflowModalType(null);
+              setWorkflowModalData({});
             }
+          }).catch((error) => {
+            console.error('Error adding shopping note:', error);
+            showToast('Failed to create shopping list', 'error');
             setWorkflowModalType(null);
             setWorkflowModalData({});
-            setDetectedWorkflow(null);
-          }).catch(() => undefined);
+          });
         }}
       />
 
