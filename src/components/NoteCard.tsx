@@ -75,6 +75,9 @@ type NoteItem = {
     checklistItems?: { id: string; text: string; completed: boolean; quantity?: string; unit?: string; rawText?: string }[];
   };
   groupId?: string;
+  imageRtdbPaths?: string[];
+  isSecret?: boolean;
+  draft?: boolean;
 };
 
 const colorSwatches: { key: NoteColor; hex: string; label: string }[] = [
@@ -255,6 +258,33 @@ export function NoteCard({
     return () => loop.stop();
   }, [heartPulse, note.attachments?.length]);
 
+  // Auto-download images uploaded to RTDB by another device
+  const [rtdbImages, setRtdbImages] = useState<string[]>([]);
+  useEffect(() => {
+    const paths = note.imageRtdbPaths;
+    if (!paths?.length) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { resolveRtdbImage } = await import('../core/imageSync');
+        const resolved: string[] = [];
+        for (const p of paths) {
+          const img = await resolveRtdbImage(p, true);
+          if (img) resolved.push(img);
+        }
+        if (!cancelled && resolved.length) setRtdbImages(resolved);
+      } catch { /* non-critical */ }
+    })();
+    return () => { cancelled = true; };
+  }, [note.imageRtdbPaths?.join(',')]);
+
+  // Merge local attachments with freshly-downloaded RTDB images
+  const mergedAttachments = useMemo(() => {
+    const local = (note.attachments || []).filter((a) => !a.startsWith('data:') || a.length > 0);
+    const all = [...local, ...rtdbImages.filter((img) => !local.includes(img))];
+    return all.length ? all : undefined;
+  }, [note.attachments, rtdbImages]);
+
   // swipeOpen as both ref (for PanResponder closures) and state (to re-render chevron)
   const [swipeOpen, setSwipeOpen] = useState(false);
   const swipeOpenRef   = useRef(false);
@@ -333,7 +363,7 @@ export function NoteCard({
     () => noteText.trim() || `Image attachment (${note.attachments?.length ?? 0})`,
     [note.attachments?.length, noteText],
   );
-  const firstAttachment = note.attachments?.[0];
+  const firstAttachment = mergedAttachments?.[0] ?? note.attachments?.[0];
   const updatedAt = useMemo(() => {
     const d = new Date(note.updatedAt);
     return `${d.toLocaleDateString()} · ${d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;

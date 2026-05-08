@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Animated, Pressable, Text, View } from 'react-native';
+import { ActivityIndicator, Animated, Platform, Pressable, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 import { mainAppStyles } from './styles';
@@ -20,8 +20,8 @@ function LogoMark({ accent, foreground }: { accent: string; foreground: string }
   useEffect(() => {
     Animated.loop(
       Animated.sequence([
-        Animated.timing(scaleAnim, { toValue: 1.05, duration: 1200, useNativeDriver: true }),
-        Animated.timing(scaleAnim, { toValue: 0.95, duration: 1200, useNativeDriver: true }),
+        Animated.timing(scaleAnim, { toValue: 1.05, duration: 1200, useNativeDriver: Platform.OS !== 'web' }),
+        Animated.timing(scaleAnim, { toValue: 0.95, duration: 1200, useNativeDriver: Platform.OS !== 'web' }),
       ])
     ).start();
   }, [scaleAnim]);

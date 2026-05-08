@@ -35,6 +35,7 @@ import {
   where,
 } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
+import { Database, getDatabase } from 'firebase/database';
 
 import { loadSettings } from './settings';
 
@@ -60,6 +61,7 @@ const OPTIONAL_FIREBASE_ENV = [
   'EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID',
   'EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID',
   'EXPO_PUBLIC_FIREBASE_FUNCTIONS_REGION',
+  'EXPO_PUBLIC_FIREBASE_DATABASE_URL',
 ] as const;
 
 export type FirebaseRequiredEnvKey = (typeof REQUIRED_FIREBASE_ENV)[number];
@@ -83,6 +85,7 @@ export interface FirebaseRuntime {
   app: FirebaseApp | null;
   auth: Auth | null;
   db: Firestore | null;
+  rtdb: Database | null;
   source: 'env' | 'none';
   missingRequiredEnv: FirebaseRequiredEnvKey[];
   missingOptionalEnv: FirebaseOptionalEnvKey[];
@@ -100,6 +103,7 @@ function env(name: string): string {
     EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
     EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID: process.env.EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID,
     EXPO_PUBLIC_FIREBASE_FUNCTIONS_REGION: process.env.EXPO_PUBLIC_FIREBASE_FUNCTIONS_REGION,
+    EXPO_PUBLIC_FIREBASE_DATABASE_URL: process.env.EXPO_PUBLIC_FIREBASE_DATABASE_URL,
   };
   return String(vars[name] || '').trim();
 }
@@ -129,6 +133,7 @@ function resolveFirebaseConfig() {
     };
   }
 
+  const databaseURL = env('EXPO_PUBLIC_FIREBASE_DATABASE_URL');
   return {
     config: {
       apiKey,
@@ -138,6 +143,7 @@ function resolveFirebaseConfig() {
       storageBucket: storageBucket || undefined,
       messagingSenderId: messagingSenderId || undefined,
       measurementId: measurementId || undefined,
+      databaseURL: databaseURL || undefined,
     },
     missingRequiredEnv,
     missingOptionalEnv,
@@ -177,6 +183,7 @@ export async function initFirebaseRuntime(): Promise<FirebaseRuntime> {
       app: null,
       auth: null,
       db: null,
+      rtdb: null,
       source: 'none',
       missingRequiredEnv,
       missingOptionalEnv,
@@ -193,12 +200,17 @@ export async function initFirebaseRuntime(): Promise<FirebaseRuntime> {
   const app = getApps().length ? getApp() : initializeApp(config);
   const auth = createAuthInstance(app);
   const db = getFirestore(app);
+  let rtdb: Database | null = null;
+  if (config.databaseURL) {
+    try { rtdb = getDatabase(app); } catch { rtdb = null; }
+  }
 
   runtime = {
     enabled: true,
     app,
     auth,
     db,
+    rtdb,
     source: 'env',
     missingRequiredEnv,
     missingOptionalEnv,
@@ -541,13 +553,10 @@ export async function subscribeToNotes(
   return () => { teardownFirestore(); authUnsub(); };
 }
 
-export async function upsertNoteInFirebase(note: NoteItem): Promise<void> {
-  const rt = await initFirebaseRuntime();
-  if (!rt.enabled || !rt.auth || !rt.db) {
-    throw new Error(buildFirebaseDisabledErrorMessage(rt));
-  }
-  const user = rt.auth.currentUser;
-  if (!user) throw new Error('No authenticated session to save note.');
+// Strip base64 blobs from a note before writing to Firestore.
+// Firestore documents are limited to 1MB — a single photo exceeds this easily.
+// We store a hasLocalImage flag so the record knows the image lives on-device.
+function sanitizeNoteForFirestore(note: NoteItem): Record<string, unknown> {
   const payload: Record<string, unknown> = {
     id: note.id,
     kind: note.kind,
@@ -556,26 +565,68 @@ export async function upsertNoteInFirebase(note: NoteItem): Promise<void> {
     pinned: Boolean(note.pinned),
     createdAt: Number(note.createdAt || Date.now()),
     updatedAt: Number(note.updatedAt || Date.now()),
-    uid: user.uid,
-    updatedAtServer: serverTimestamp(),
   };
   if (note.deletedAt !== undefined) payload.deletedAt = Number(note.deletedAt);
   if (note.groupId !== undefined) payload.groupId = note.groupId;
   if (note.color !== undefined) payload.color = note.color;
   if (note.archived !== undefined) payload.archived = note.archived;
-  if (note.imageBase64 !== undefined) payload.imageBase64 = note.imageBase64;
-  if (note.imageMimeType !== undefined) payload.imageMimeType = note.imageMimeType;
-  if (note.attachments !== undefined) payload.attachments = note.attachments;
+  // imageBase64 is too large for Firestore (1MB limit). Mark presence instead.
+  if (note.imageBase64) {
+    payload.hasLocalImage = true;
+    if (note.imageMimeType !== undefined) payload.imageMimeType = note.imageMimeType;
+  }
+  // Filter out data URIs from attachments — only sync real URLs.
+  const safeAttachments = (note.attachments || []).filter(
+    (a) => typeof a === 'string' && a.trim() && !a.startsWith('data:'),
+  );
+  if (safeAttachments.length > 0) payload.attachments = safeAttachments;
+  if (safeAttachments.length === 0 && (note.attachments?.length ?? 0) > 0) {
+    payload.hasLocalAttachments = true;
+  }
+  if (note.imageRtdbPaths?.length) payload.imageRtdbPaths = note.imageRtdbPaths;
   if (note.title !== undefined) payload.title = note.title;
   if (note.smartType) payload.smartType = note.smartType;
   if (note.workflowStatus) payload.workflowStatus = note.workflowStatus;
   if (note.workflowMetadata) payload.workflowMetadata = JSON.stringify(note.workflowMetadata);
   if (note.isSecret !== undefined) payload.isSecret = note.isSecret;
   if (note.draft !== undefined) payload.draft = note.draft;
+  return payload;
+}
+
+export async function upsertNoteInFirebase(note: NoteItem): Promise<void> {
+  const rt = await initFirebaseRuntime();
+  if (!rt.enabled || !rt.auth || !rt.db) {
+    throw new Error(buildFirebaseDisabledErrorMessage(rt));
+  }
+  const user = rt.auth.currentUser;
+  if (!user) throw new Error('No authenticated session to save note.');
+
+  const payload = sanitizeNoteForFirestore(note);
+
+  // Upload data-URI attachments to RTDB so other devices can download them.
+  // Only runs if RTDB is configured (DATABASE_URL set).
+  if (rt.rtdb && note.attachments?.length) {
+    const { uploadImageToRTDB } = await import('./imageSync');
+    const dataUriAttachments = (note.attachments || []).filter(
+      (a) => typeof a === 'string' && a.startsWith('data:'),
+    );
+    if (dataUriAttachments.length > 0) {
+      const rtdbPaths: string[] = [];
+      for (let i = 0; i < dataUriAttachments.length; i++) {
+        const path = await uploadImageToRTDB(
+          dataUriAttachments[i],
+          `${note.id}_${i}`,
+        ).catch(() => null);
+        if (path) rtdbPaths.push(path);
+      }
+      if (rtdbPaths.length > 0) payload.imageRtdbPaths = rtdbPaths;
+    }
+  }
+
   await setDoc(
     doc(rt.db, 'users', user.uid, 'notes', note.id),
-    payload,
-    { merge: true }
+    { ...payload, uid: user.uid, updatedAtServer: serverTimestamp() },
+    { merge: true },
   );
 }
 
@@ -644,7 +695,8 @@ export async function syncNotesWithFirebase(localNotes: NoteItem[], localTemplat
     }
     const serverNote = serverNotesMap.get(note.id);
     if (!serverNote || note.updatedAt >= serverNote.updatedAt) {
-      await setDoc(doc(notesRef, note.id), { ...note, uid, updatedAtServer: serverTimestamp() }, { merge: true });
+      const payload = { ...sanitizeNoteForFirestore(note), uid, updatedAtServer: serverTimestamp() };
+      await setDoc(doc(notesRef, note.id), payload, { merge: true });
       pushedNotes += 1;
     }
   }

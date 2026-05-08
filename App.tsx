@@ -70,19 +70,16 @@ function SplashScreen() {
     <Animated.View style={[splashStyles.container, { backgroundColor: theme.background }, containerStyle]}>
       {/* Ambient orb top-left */}
       <View
-        style={[splashStyles.orb, { backgroundColor: theme.secondary + '18' }]}
-        pointerEvents="none"
+        style={[splashStyles.orb, { backgroundColor: theme.secondary + '18', pointerEvents: 'none' }]}
       />
       {/* Ambient orb bottom-right */}
       <View
-        style={[splashStyles.orbBr, { backgroundColor: theme.primary + '12' }]}
-        pointerEvents="none"
+        style={[splashStyles.orbBr, { backgroundColor: theme.primary + '12', pointerEvents: 'none' }]}
       />
 
       {/* Pulsing glow ring behind logo */}
       <Animated.View
-        style={[splashStyles.glowRing, { borderColor: theme.secondary }, glowRingStyle]}
-        pointerEvents="none"
+        style={[splashStyles.glowRing, { borderColor: theme.secondary, pointerEvents: 'none' }, glowRingStyle]}
       />
 
       <AnimatedLogo size={56} color={theme.text} accentColor={theme.secondary} />
@@ -96,8 +93,7 @@ function SplashScreen() {
       <View style={[splashStyles.trackOuter, { backgroundColor: theme.border }]}>
         <View style={[splashStyles.trackFill, { backgroundColor: theme.secondary + '40' }]} />
         <Animated.View
-          style={[splashStyles.trackShimmer, { backgroundColor: theme.secondary }, shimmerStyle]}
-          pointerEvents="none"
+          style={[splashStyles.trackShimmer, { backgroundColor: theme.secondary, pointerEvents: 'none' }, shimmerStyle]}
         />
       </View>
 

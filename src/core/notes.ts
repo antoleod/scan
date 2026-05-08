@@ -97,6 +97,7 @@ export interface NoteItem {
   workflowMetadata?: WorkflowMetadata;
   syncStatus?: 'pending' | 'retrying' | 'failed' | 'offline' | 'synced';
   isSecret?: boolean;
+  imageRtdbPaths?: string[];   // RTDB relay paths for images pending download on other devices
 }
 
 export type TemplateKind = 'email' | 'appointment';

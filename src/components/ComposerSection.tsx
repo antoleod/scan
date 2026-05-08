@@ -1,8 +1,7 @@
 import React, { forwardRef, useEffect, useMemo, useRef, useState } from 'react';
-import { Modal, Platform, Pressable, Text, TextInput, useWindowDimensions, View } from 'react-native';
+import { Image, Modal, Platform, Pressable, ScrollView, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useCtrlEnterSave } from '../hooks/useCtrlEnterSave';
-import { NoteComposerOcrPreview } from './NoteComposerOcrPreview';
 import { QuickTemplatesModal } from './QuickTemplatesModal';
 import { safeText } from '../utils/groceryDetection';
 import { analyzeShoppingListCandidate, type ShoppingListCandidateAnalysis } from '../core/shoppingList';
@@ -100,8 +99,10 @@ export const ComposerSection = forwardRef<TextInput, {
     const localInputRef = useRef<TextInput | null>(null);
     const [shoppingAnalysis, setShoppingAnalysis] = useState<ShoppingListCandidateAnalysis | null>(null);
     const [dismissedShoppingSignature, setDismissedShoppingSignature] = useState<string | null>(null);
-    const { width } = useWindowDimensions();
+    const [viewingImage, setViewingImage] = useState<string | null>(null);
+    const { width, height: windowHeight } = useWindowDimensions();
     const isCompact = width < 520;
+    const maxInputHeight = Math.min(Math.max(160, Math.floor(windowHeight * 0.35)), 420);
     const shoppingSignature = useMemo(() => safeText(draftTextValue).toLowerCase().replace(/\s+/g, ' ').trim(), [draftTextValue]);
     const showShoppingSuggestion = Boolean(
       shoppingAnalysis?.isCandidate
@@ -439,14 +440,14 @@ export const ComposerSection = forwardRef<TextInput, {
           placeholder="Type here. Auto-save is always on."
           placeholderTextColor={palette.textMuted}
           onContentSizeChange={(event) => {
-            const nextHeight = Math.max(68, Math.min(160, event.nativeEvent.contentSize.height + 20));
+            const nextHeight = Math.max(68, Math.min(maxInputHeight, event.nativeEvent.contentSize.height + 20));
             setInputHeight(nextHeight);
           }}
           style={{
             marginTop: 8,
             minHeight: 68,
             height: inputHeight,
-            maxHeight: 160,
+            maxHeight: maxInputHeight,
             borderRadius: 10,
             borderWidth: 1,
             borderColor: palette.border,
@@ -459,6 +460,18 @@ export const ComposerSection = forwardRef<TextInput, {
             textAlignVertical: 'top',
           }}
         />
+
+        {draftTextValue.length > 0 ? (
+          <View style={{ flexDirection: 'row', justifyContent: 'flex-end', paddingHorizontal: 2, marginTop: 2 }}>
+            <Text style={{ fontSize: 11, color: draftTextValue.length > 800 ? palette.accent : palette.textMuted }}>
+              {draftTextValue.length < 1000
+                ? `${draftTextValue.length} chars`
+                : `${(draftTextValue.length / 1000).toFixed(1)}k chars`}
+              {' · '}
+              {draftTextValue.trim().split(/\n/).length} {draftTextValue.trim().split(/\n/).length === 1 ? 'line' : 'lines'}
+            </Text>
+          </View>
+        ) : null}
 
         {showShoppingSuggestion ? (
           <View style={{ marginTop: 8, padding: 10, borderRadius: 10, borderWidth: 1, borderColor: `${palette.accent}66`, backgroundColor: `${palette.accent}12`, flexDirection: 'row', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
@@ -542,21 +555,106 @@ export const ComposerSection = forwardRef<TextInput, {
           </Pressable>
         </Modal>
 
-        {draftImages.length > 0 && draftImages[0] && (
-          <NoteComposerOcrPreview
-            imageUri={draftImages[0]}
-            noteText={draftTextValue}
-            onAppendText={(text) => {
-              onOcrAppendText?.(text);
-              onRemoveImage?.(0);
-            }}
-            onReplaceText={(text) => {
-              onOcrReplaceText?.(text);
-              onRemoveImage?.(0);
-            }}
-            onDismiss={() => onRemoveImage?.(0)}
-          />
+        {draftImages.length > 0 && (
+          <View style={{ marginTop: 8, gap: 4 }}>
+            <Text style={{ fontSize: 11, color: palette.textMuted, fontWeight: '600', marginBottom: 2 }}>
+              {draftImages.length} attachment{draftImages.length !== 1 ? 's' : ''}
+            </Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0 }}>
+              <View style={{ flexDirection: 'row', gap: 8 }}>
+                {draftImages.map((uri, index) => (
+                  <View
+                    key={index}
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: 8,
+                      borderWidth: 1,
+                      borderColor: palette.border,
+                      borderRadius: 10,
+                      backgroundColor: palette.surface,
+                      padding: 6,
+                    }}
+                  >
+                    <Pressable onPress={() => setViewingImage(uri)} hitSlop={4}>
+                      <Image
+                        source={{ uri }}
+                        style={{ width: 44, height: 44, borderRadius: 6 }}
+                        resizeMode="cover"
+                      />
+                    </Pressable>
+                    <View style={{ gap: 4 }}>
+                      <Pressable
+                        onPress={() => setViewingImage(uri)}
+                        style={({ pressed }) => ({
+                          paddingHorizontal: 10,
+                          paddingVertical: 5,
+                          borderRadius: 6,
+                          backgroundColor: `${palette.accent}22`,
+                          opacity: pressed ? 0.75 : 1,
+                        })}
+                      >
+                        <Text style={{ color: palette.accent, fontSize: 11, fontWeight: '700' }}>View image</Text>
+                      </Pressable>
+                      <Pressable
+                        onPress={() => onRemoveImage?.(index)}
+                        style={({ pressed }) => ({
+                          paddingHorizontal: 10,
+                          paddingVertical: 5,
+                          borderRadius: 6,
+                          borderWidth: 1,
+                          borderColor: palette.border,
+                          opacity: pressed ? 0.75 : 1,
+                        })}
+                      >
+                        <Text style={{ color: palette.textMuted, fontSize: 11, fontWeight: '600' }}>Remove</Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            </ScrollView>
+          </View>
         )}
+
+        <Modal
+          visible={Boolean(viewingImage)}
+          transparent
+          animationType="fade"
+          statusBarTranslucent
+          onRequestClose={() => setViewingImage(null)}
+        >
+          <Pressable
+            onPress={() => setViewingImage(null)}
+            style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.92)', justifyContent: 'center', alignItems: 'center' }}
+          >
+            <Pressable onPress={() => undefined} style={{ width: '100%', maxWidth: 680, padding: 16 }}>
+              {viewingImage ? (
+                <Image
+                  source={{ uri: viewingImage }}
+                  style={{ width: '100%', aspectRatio: 1, borderRadius: 12, maxHeight: 520 }}
+                  resizeMode="contain"
+                />
+              ) : null}
+              <Pressable
+                onPress={() => setViewingImage(null)}
+                style={({ pressed }) => ({
+                  marginTop: 16,
+                  alignSelf: 'center',
+                  paddingHorizontal: 24,
+                  paddingVertical: 10,
+                  borderRadius: 10,
+                  backgroundColor: palette.surface,
+                  borderWidth: 1,
+                  borderColor: palette.border,
+                  opacity: pressed ? 0.8 : 1,
+                })}
+              >
+                <Text style={{ color: palette.textBody, fontSize: 13, fontWeight: '700' }}>Close</Text>
+              </Pressable>
+            </Pressable>
+          </Pressable>
+        </Modal>
 
         {/* Quick Templates Modal */}
         <QuickTemplatesModal

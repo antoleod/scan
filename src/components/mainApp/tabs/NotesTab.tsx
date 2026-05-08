@@ -248,6 +248,7 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
   const [workflowModalType, setWorkflowModalType] = useState<SmartWorkflowType | null>(null);
   const [workflowModalData, setWorkflowModalData] = useState<Record<string, unknown>>({});
   const [draftAutoSaveStatus, setDraftAutoSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
+  const [pendingDraft, setPendingDraft] = useState<{ text: string; images: string[]; category: NoteCategory | null; updatedAt?: number } | null>(null);
   const { toast, show: showToast, hide: hideToast } = useToast();
 
   const draftAutoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -402,9 +403,14 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
     AsyncStorage.getItem(DRAFT_KEY).then((raw) => {
       if (!raw) return;
       const parsed = JSON.parse(raw);
-      if (typeof parsed?.text === 'string') setDraftText(parsed.text);
-      if (Array.isArray(parsed?.images)) setDraftImages(parsed.images.map((v: unknown) => String(v || '')).filter(Boolean));
-      if (parsed?.category === 'general' || parsed?.category === 'work') setManualCategory(parsed.category);
+      const text = typeof parsed?.text === 'string' ? parsed.text.trim() : '';
+      const images: string[] = Array.isArray(parsed?.images)
+        ? parsed.images.map((v: unknown) => String(v || '')).filter(Boolean)
+        : [];
+      if (!text && images.length === 0) return;
+      const category: NoteCategory | null =
+        parsed?.category === 'general' || parsed?.category === 'work' ? parsed.category : null;
+      setPendingDraft({ text, images, category, updatedAt: parsed?.updatedAt });
     }).catch(() => undefined);
   }, []);
 
@@ -520,6 +526,36 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
     };
     window.addEventListener('focus', handleFocus);
     return () => window.removeEventListener('focus', handleFocus);
+  }, []);
+
+  // Global paste handler (Ctrl+V / Cmd+V) — captures clipboard images without needing
+  // the clipboard-read permission that navigator.clipboard.read() requires.
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+    const handlePaste = (e: Event) => {
+      const ce = e as ClipboardEvent;
+      const items = ce.clipboardData?.items;
+      if (!items) return;
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        if (item.kind === 'file' && item.type.startsWith('image/')) {
+          const blob = item.getAsFile();
+          if (!blob) continue;
+          const reader = new FileReader();
+          reader.onload = () => {
+            const dataUri = String(reader.result || '');
+            if (dataUri) {
+              setDraftImages((current) => Array.from(new Set([dataUri, ...current])).slice(0, 6));
+              showToast('Image pasted');
+            }
+          };
+          reader.readAsDataURL(blob);
+          return;
+        }
+      }
+    };
+    window.addEventListener('paste', handlePaste);
+    return () => window.removeEventListener('paste', handlePaste);
   }, []);
 
   // Reset pagination when filters change
@@ -658,7 +694,7 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
   }
 
   async function pasteImageFromClipboardToDraft() {
-    // Web: prefer native Clipboard API which preserves mime type and avoids black-JPEG issue
+    // Web: try Clipboard API first (needs clipboard-read permission in some browsers)
     if (Platform.OS === 'web' && typeof navigator !== 'undefined' && navigator.clipboard?.read) {
       try {
         const items = await navigator.clipboard.read();
@@ -671,7 +707,10 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
               const reader = new FileReader();
               reader.onload = () => {
                 const dataUri = String(reader.result || '');
-                if (dataUri) setDraftImages((current) => Array.from(new Set([dataUri, ...current])).slice(0, 6));
+                if (dataUri) {
+                  setDraftImages((current) => Array.from(new Set([dataUri, ...current])).slice(0, 6));
+                  showToast('Image pasted');
+                }
                 resolve();
               };
               reader.onerror = () => resolve();
@@ -680,18 +719,29 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
             return;
           }
         }
+        // Clipboard had no image
+        showToast('No image in clipboard — copy an image first, or use Ctrl+V');
+        return;
       } catch {
-        // fallthrough to expo-clipboard
+        // Permission denied or API not available — guide user to use keyboard shortcut
+        showToast('Press Ctrl+V to paste an image');
+        return;
       }
     }
-    // Native / fallback: expo-clipboard
+    // Native: expo-clipboard
     const getImageAsync = (Clipboard as unknown as { getImageAsync?: () => Promise<{ data: string } | null> }).getImageAsync;
-    if (!getImageAsync) return;
+    if (!getImageAsync) {
+      showToast('Image paste not supported on this device');
+      return;
+    }
     const image = await getImageAsync();
-    if (!image?.data) return;
-    // expo-clipboard returns raw PNG base64 bytes
+    if (!image?.data) {
+      showToast('No image in clipboard');
+      return;
+    }
     const dataUri = `data:image/png;base64,${image.data}`;
     setDraftImages((current) => Array.from(new Set([dataUri, ...current])).slice(0, 6));
+    showToast('Image pasted');
   }
 
   async function saveDraftAsNote() {
@@ -1355,6 +1405,115 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
                       <Text style={{ color: palette.fg, fontSize: 12, fontWeight: '500' }}>Draft saved</Text>
                     </>
                   )}
+                </View>
+              )}
+
+              {pendingDraft && (
+                <View
+                  style={{
+                    borderRadius: 12,
+                    borderWidth: 1,
+                    borderColor: '#F59E0B66',
+                    backgroundColor: '#1C1400',
+                    padding: 12,
+                    gap: 10,
+                  }}
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <MaterialCommunityIcons name="pencil-outline" size={15} color="#F59E0B" />
+                    <Text style={{ color: '#F59E0B', fontSize: 13, fontWeight: '700', flex: 1 }}>
+                      Unfinished draft
+                    </Text>
+                    {pendingDraft.updatedAt ? (
+                      <Text style={{ color: '#97650A', fontSize: 11 }}>
+                        {(() => {
+                          const diff = Date.now() - pendingDraft.updatedAt;
+                          if (diff < 60_000) return 'just now';
+                          if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`;
+                          if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h ago`;
+                          return `${Math.floor(diff / 86_400_000)}d ago`;
+                        })()}
+                      </Text>
+                    ) : null}
+                  </View>
+                  <Text
+                    numberOfLines={2}
+                    style={{ color: '#BFA060', fontSize: 12, lineHeight: 18 }}
+                  >
+                    {pendingDraft.text || `${pendingDraft.images.length} image${pendingDraft.images.length !== 1 ? 's' : ''}`}
+                  </Text>
+                  <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
+                    <Pressable
+                      onPress={() => {
+                        setDraftText(pendingDraft.text);
+                        setDraftImages(pendingDraft.images);
+                        if (pendingDraft.category) setManualCategory(pendingDraft.category);
+                        setPendingDraft(null);
+                        setTimeout(() => draftInputRef.current?.focus(), 80);
+                      }}
+                      style={({ pressed }) => ({
+                        paddingHorizontal: 12,
+                        paddingVertical: 6,
+                        borderRadius: 8,
+                        backgroundColor: pressed ? '#F59E0Bcc' : '#F59E0B',
+                      })}
+                    >
+                      <Text style={{ color: '#000', fontSize: 12, fontWeight: '700' }}>Continue editing</Text>
+                    </Pressable>
+                    <Pressable
+                      onPress={async () => {
+                        const draft = pendingDraft;
+                        setPendingDraft(null);
+                        const groupId = activeGroupId === 'personal' ? undefined : activeGroupId;
+                        const result = await addRichNoteUnique(
+                          draft.text,
+                          draft.category || detectAutoCategory(draft.text),
+                          draft.images,
+                          groupId,
+                        );
+                        setNotes(result.notes);
+                        await AsyncStorage.removeItem(DRAFT_KEY);
+                        if (result.inserted) showToast('Draft saved as note');
+                      }}
+                      style={({ pressed }) => ({
+                        paddingHorizontal: 12,
+                        paddingVertical: 6,
+                        borderRadius: 8,
+                        borderWidth: 1,
+                        borderColor: '#F59E0B66',
+                        backgroundColor: pressed ? '#F59E0B22' : 'transparent',
+                      })}
+                    >
+                      <Text style={{ color: '#F59E0B', fontSize: 12, fontWeight: '600' }}>Save as note</Text>
+                    </Pressable>
+                    <Pressable
+                      onPress={() => {
+                        Alert.alert(
+                          'Discard draft?',
+                          'This text will be permanently deleted.',
+                          [
+                            { text: 'Cancel', style: 'cancel' },
+                            {
+                              text: 'Discard', style: 'destructive', onPress: async () => {
+                                setPendingDraft(null);
+                                await AsyncStorage.removeItem(DRAFT_KEY);
+                              },
+                            },
+                          ],
+                        );
+                      }}
+                      style={({ pressed }) => ({
+                        paddingHorizontal: 12,
+                        paddingVertical: 6,
+                        borderRadius: 8,
+                        borderWidth: 1,
+                        borderColor: `${palette.border}`,
+                        backgroundColor: pressed ? `${palette.muted}12` : 'transparent',
+                      })}
+                    >
+                      <Text style={{ color: palette.muted, fontSize: 12, fontWeight: '500' }}>Discard</Text>
+                    </Pressable>
+                  </View>
                 </View>
               )}
 
@@ -2215,6 +2374,32 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
             <Text style={{ color: '#fff', fontSize: 13, fontWeight: '700' }}>Delete</Text>
           </Pressable>
         </View>
+      ) : null}
+
+      {workspaceTab === 'notes' && (draftTextValue.trim().length > 0 || draftImages.length > 0) && selectedNoteIds.size === 0 ? (
+        <Pressable
+          onPress={() => saveDraftAsNote().catch(() => undefined)}
+          style={({ pressed }) => ({
+            position: 'absolute',
+            bottom: 80,
+            right: 16,
+            paddingHorizontal: 18,
+            paddingVertical: 11,
+            borderRadius: 24,
+            backgroundColor: pressed ? `${palette.accent}cc` : palette.accent,
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 7,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 3 },
+            shadowOpacity: 0.3,
+            shadowRadius: 6,
+            elevation: 6,
+          })}
+        >
+          <Ionicons name="checkmark" size={16} color="#000" />
+          <Text style={{ color: '#000', fontSize: 13, fontWeight: '800' }}>Save note</Text>
+        </Pressable>
       ) : null}
     </View>
   );
