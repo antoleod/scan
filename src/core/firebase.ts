@@ -56,6 +56,11 @@ function normalizeScanType(type: string): string {
   return String(type || '').trim().toUpperCase();
 }
 
+function tsMillis(val: unknown): number {
+  if (val && typeof (val as any).toMillis === 'function') return (val as any).toMillis();
+  return Number(val ?? 0);
+}
+
 const OPTIONAL_FIREBASE_ENV = [
   'EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET',
   'EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID',
@@ -694,7 +699,7 @@ export async function syncNotesWithFirebase(localNotes: NoteItem[], localTemplat
       continue;
     }
     const serverNote = serverNotesMap.get(note.id);
-    if (!serverNote || note.updatedAt >= serverNote.updatedAt) {
+    if (!serverNote || tsMillis(note.updatedAt) >= tsMillis(serverNote.updatedAt)) {
       const payload = { ...sanitizeNoteForFirestore(note), uid, updatedAtServer: serverTimestamp() };
       await setDoc(doc(notesRef, note.id), payload, { merge: true });
       pushedNotes += 1;
@@ -719,7 +724,7 @@ export async function syncNotesWithFirebase(localNotes: NoteItem[], localTemplat
   let pushedTemplates = 0;
   for (const template of localTemplatesLimited) {
     const serverTemplate = serverTemplatesMap.get(template.id);
-    if (!serverTemplate || template.updatedAt >= serverTemplate.updatedAt) {
+    if (!serverTemplate || tsMillis(template.updatedAt) >= tsMillis(serverTemplate.updatedAt)) {
       await setDoc(doc(templatesRef, template.id), { ...template, uid, updatedAtServer: serverTimestamp() }, { merge: true });
       pushedTemplates += 1;
     }
@@ -736,7 +741,7 @@ export async function syncNotesWithFirebase(localNotes: NoteItem[], localTemplat
       return;
     }
     const existing = mergedNotesMap.get(x.id);
-    if (!existing || x.updatedAt >= existing.updatedAt) mergedNotesMap.set(x.id, x);
+    if (!existing || tsMillis(x.updatedAt) >= tsMillis(existing.updatedAt)) mergedNotesMap.set(x.id, x);
   });
   const serverNotes = Array.from(mergedNotesMap.values());
 
@@ -746,7 +751,7 @@ export async function syncNotesWithFirebase(localNotes: NoteItem[], localTemplat
   templatesSnap.forEach((d) => {
     const x = { ...(d.data() as NoteTemplate), id: d.id };
     const existing = mergedTemplatesMap.get(x.id);
-    if (!existing || x.updatedAt >= existing.updatedAt) mergedTemplatesMap.set(x.id, x);
+    if (!existing || tsMillis(x.updatedAt) >= tsMillis(existing.updatedAt)) mergedTemplatesMap.set(x.id, x);
   });
   const serverTemplates = Array.from(mergedTemplatesMap.values());
 

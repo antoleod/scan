@@ -42,6 +42,7 @@ import {
   initFirebaseRuntime,
   recheckFirebaseRuntime,
   subscribeToScans,
+  subscribeToNotes,
   fetchNotesFromFirebase,
   syncScansWithFirebase,
 } from '../core/firebase';
@@ -65,7 +66,7 @@ import { QrModal } from '../components/mainApp/QrModal';
 import { ScanTab } from '../components/mainApp/tabs/ScanTab';
 import { SelectionFooter } from '../components/mainApp/SelectionFooter';
 import { SettingsTab } from '../components/mainApp/tabs/SettingsTab';
-import { hardDeleteAllNotes, hardDeleteAllTemplates, clearArchivedNotes, clearUnpinnedNotes, clearNotesOlderThan, saveNotes as saveWorkNotes, saveTemplates as saveNoteTemplates } from '../core/notes';
+import { hardDeleteAllNotes, hardDeleteAllTemplates, clearArchivedNotes, clearUnpinnedNotes, clearNotesOlderThan, loadNotes, saveNotes as saveWorkNotes, saveTemplates as saveNoteTemplates } from '../core/notes';
 import { clearClipboardEntries, reinitClipboardFirebaseSync } from '../core/clipboard';
 import { Toast, useToast } from '../components/Toast';
 import { BatchSessionModal } from '../components/mainApp/BatchSessionModal';
@@ -1151,8 +1152,13 @@ function MainApp() {
   // Real-time cross-device sync via Firestore onSnapshot.
   useEffect(() => {
     if (!user || persistenceMode !== 'firebase') return;
-    let cancelled = false;
+    let active = true;
     let cleanupFn: (() => void) | null = null;
+
+    function tsMillis(val: unknown): number {
+      if (val && typeof (val as any).toMillis === 'function') return (val as any).toMillis();
+      return Number(val ?? 0);
+    }
 
     subscribeToScans((serverScans) => {
       setHistory((current) => {
@@ -1172,8 +1178,8 @@ function MainApp() {
           if (!local) {
             changed = true; // new record from server
           } else {
-            const serverTs = Number(s.updatedAt ?? 0);
-            const localTs  = Number(local.updatedAt ?? 0);
+            const serverTs = tsMillis(s.updatedAt);
+            const localTs  = tsMillis(local.updatedAt);
             if (serverTs > localTs) { changed = true; } // server version is newer
           }
         }
@@ -1187,8 +1193,8 @@ function MainApp() {
           const key = historyKey(x);
           const server = serverByKey.get(key);
           if (server) {
-            const serverTs = Number(server.updatedAt ?? 0);
-            const localTs  = Number(x.updatedAt ?? 0);
+            const serverTs = tsMillis(server.updatedAt);
+            const localTs  = tsMillis(x.updatedAt);
             const resolved = serverTs > localTs ? server : x;
             // Pending local records are not yet on server — keep them pending
             merged.push(x.status === 'pending' ? x : { ...resolved, status: 'sent' as const });
@@ -1209,12 +1215,11 @@ function MainApp() {
         return merged;
       });
     }).then((u) => {
-      if (cancelled) { u(); return; }
-      cleanupFn = u;
+      if (active) { cleanupFn = u; } else { u(); }
     }).catch(() => undefined);
 
     return () => {
-      cancelled = true;
+      active = false;
       if (realtimeSaveTimerRef.current) clearTimeout(realtimeSaveTimerRef.current);
       cleanupFn?.();
     };
@@ -1279,25 +1284,46 @@ function MainApp() {
   }
 
   async function clearArchivedNotesNow() {
-    await clearArchivedNotes();
-    showToast('Archived notes cleared', 'success');
+    try {
+      await clearArchivedNotes();
+      // Trigger a refresh — NotesTab will reload from storage
+      await diag.info('notes.clearArchived.success', {});
+      showToast('Archived notes cleared', 'success');
+    } catch (error) {
+      showToast('Failed to clear archived notes', 'error');
+      await diag.error('notes.clearArchived.error', { message: String(error) });
+    }
   }
 
   async function clearUnpinnedNotesNow() {
-    await clearUnpinnedNotes();
-    showToast('Unpinned notes cleared', 'success');
+    try {
+      await clearUnpinnedNotes();
+      // Trigger a refresh — NotesTab will reload from storage
+      await diag.info('notes.clearUnpinned.success', {});
+      showToast('Unpinned notes cleared', 'success');
+    } catch (error) {
+      showToast('Failed to clear unpinned notes', 'error');
+      await diag.error('notes.clearUnpinned.error', { message: String(error) });
+    }
   }
 
   async function hardDeleteNotesNow() {
-    // Do NOT call syncNow after this — syncNow calls fetchNotesFromFirebase which can
-    // serve stale in-memory SDK cache and restore notes we just deleted.
-    // hardDeleteAllNotes already clears AsyncStorage AND calls clearNotesInFirebase.
-    await hardDeleteAllNotes();
-    // Purge localStorage, cookies, cache, and IndexedDB entries for notes.
-    clearDomainCookies('note');
-    clearAppLocalStorage('note');
-    await clearCacheStorage('note');
-    await purgeIndexedDBByKeyword('note');
+    try {
+      // Do NOT call syncNow after this — syncNow calls fetchNotesFromFirebase which can
+      // serve stale in-memory SDK cache and restore notes we just deleted.
+      // hardDeleteAllNotes already clears AsyncStorage AND calls clearNotesInFirebase.
+      await hardDeleteAllNotes();
+      // Purge localStorage, cookies, cache, and IndexedDB entries for notes.
+      clearDomainCookies('note');
+      clearAppLocalStorage('note');
+      await clearCacheStorage('note');
+      await purgeIndexedDBByKeyword('note');
+      await diag.info('notes.hardDelete.success', {});
+      showToast('All notes deleted', 'success');
+    } catch (error) {
+      showToast('Failed to delete notes', 'error');
+      await diag.error('notes.hardDelete.error', { message: String(error) });
+    }
     await diag.info('notes.hard_delete');
     showToast('Notes permanently deleted from all storage layers', 'success');
   }
