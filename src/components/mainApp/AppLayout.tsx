@@ -13,7 +13,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         style={[
           styles.inner,
           {
-            paddingHorizontal: isDesktop ? 24 : 12,
+            paddingHorizontal: isDesktop ? 24 : 0,
           },
         ]}
       >

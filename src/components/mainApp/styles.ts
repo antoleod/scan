@@ -55,7 +55,7 @@ export const mainAppStyles = StyleSheet.create({
   logoBar: { width: 4, borderRadius: 99 },
   logoBarThin: { width: 2, borderRadius: 99, opacity: 0.9 },
   content: { flex: 1, minHeight: 0, minWidth: 0, width: '100%' },
-  screen: { flex: 1, width: '100%', maxWidth: '100%', minWidth: 0, minHeight: 0, padding: 12, gap: 10, overflow: 'visible' },
+  screen: { flex: 1, width: '100%', maxWidth: '100%', minWidth: 0, minHeight: 0, paddingVertical: 0, overflow: 'visible' },
   screenLocked: { overflow: 'visible' },
   tabViewport: { flex: 1, width: '100%', maxWidth: '100%', minWidth: 0, minHeight: 0, overflow: 'visible' },
   settingsContent: { width: '100%', minWidth: 0, paddingBottom: 24, overflow: 'visible' },

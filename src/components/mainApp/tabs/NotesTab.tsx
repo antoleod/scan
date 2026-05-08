@@ -264,7 +264,6 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
   const [pinUnlocked, setPinUnlocked] = useState(false);
   const [pinModalMode, setPinModalMode] = useState<'setup' | 'unlock' | null>(null);
   const [vaultMode, setVaultMode] = useState(false);
-  const [fabMenuOpen, setFabMenuOpen] = useState(false);
   const pendingSecretActionRef = useRef<(() => void) | null>(null);
   const pendingVaultRef = useRef(false);
   const draftInputRef = useRef<React.ElementRef<typeof TextInput> | null>(null);
@@ -1250,7 +1249,7 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
 
         {workspaceTab === 'notes' ? (
           <>
-            <View style={{ width: '100%', gap: 10, paddingHorizontal: 16, paddingTop: 16, paddingBottom: 50, alignSelf: 'stretch', minWidth: 0 }}>
+            <View style={{ width: '100%', gap: 8, paddingHorizontal: 8, paddingTop: 12, paddingBottom: 16, alignSelf: 'stretch', minWidth: 0 }}>
               <ComposerSection
                 ref={draftInputRef}
                 palette={uiPalette}
@@ -1917,71 +1916,6 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
       />
       </ScrollView>
 
-      {/* ── Floating action button (smart compose menu) ── */}
-      {!vaultMode ? (
-        <View pointerEvents="box-none" style={{ position: 'absolute', right: 16, bottom: 84, alignItems: 'flex-end', gap: 10 }}>
-          {fabMenuOpen ? (
-            <View style={{ gap: 8 }}>
-              {([
-                { icon: 'camera-outline', label: 'Camera', color: '#FF6B35', action: () => takePhotoToDraft().catch(() => undefined) },
-                { icon: 'text-recognition', label: 'OCR', color: '#4DA3FF', action: () => setOcrVisible(true), iconLib: 'mci' as const },
-                { icon: 'mic-outline', label: 'Audio', color: '#00D4FF', action: () => showToast('Hold the mic in the editor to dictate') },
-                { icon: 'checkbox-outline', label: 'Checklist', color: '#22c55e', action: () => { setDraftText((t) => `${t}${t ? '\n' : ''}- [ ] `); draftInputRef.current?.focus(); } },
-                { icon: 'color-wand-outline', label: 'Highlight', color: '#A855F7', action: () => setGeneratorVisible(true) },
-              ]).map((item) => (
-                <Pressable
-                  key={item.label}
-                  onPress={() => { item.action(); setFabMenuOpen(false); }}
-                  style={({ pressed }) => ({
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    gap: 10,
-                    paddingHorizontal: 14,
-                    paddingVertical: 10,
-                    borderRadius: 999,
-                    backgroundColor: uiPalette.surface,
-                    borderWidth: 1,
-                    borderColor: uiPalette.chipBorder,
-                    opacity: pressed ? 0.85 : 1,
-                    shadowColor: '#000',
-                    shadowOffset: { width: 0, height: 2 },
-                    shadowOpacity: 0.18,
-                    shadowRadius: 6,
-                    elevation: 4,
-                  })}
-                >
-                  {item.iconLib === 'mci'
-                    ? <MaterialCommunityIcons name={item.icon as any} size={18} color={item.color} />
-                    : <Ionicons name={item.icon as any} size={18} color={item.color} />}
-                  <Text style={{ color: uiPalette.textBody, fontSize: 13, fontWeight: '600' }}>{item.label}</Text>
-                </Pressable>
-              ))}
-            </View>
-          ) : null}
-
-          <Pressable
-            onPress={() => setFabMenuOpen((v) => !v)}
-            style={({ pressed }) => ({
-              width: 56,
-              height: 56,
-              borderRadius: 28,
-              backgroundColor: palette.accent,
-              alignItems: 'center',
-              justifyContent: 'center',
-              opacity: pressed ? 0.9 : 1,
-              transform: [{ rotate: fabMenuOpen ? '45deg' : '0deg' }, { scale: pressed ? 0.92 : 1 }],
-              shadowColor: palette.accent,
-              shadowOffset: { width: 0, height: 4 },
-              shadowOpacity: 0.4,
-              shadowRadius: 8,
-              elevation: 8,
-            })}
-          >
-            <Ionicons name="add" size={28} color="#fff" />
-          </Pressable>
-        </View>
-      ) : null}
-
       {/* ── OCR: image → note ── */}
       <NoteOcrModal
         visible={ocrVisible}
@@ -2287,40 +2221,260 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
 }
 
 const styles = StyleSheet.create({
-  content: { paddingBottom: 128, width: '100%', minWidth: 0, alignItems: 'stretch' },
-  workspace: { gap: 10, minWidth: 0 },
-  workspaceTabs: { flexDirection: 'row', gap: 6, marginBottom: 0 },
-  workspaceTab: { flex: 1, minHeight: 44, borderWidth: 1, borderRadius: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingHorizontal: 8 },
-  resumeCard: { paddingVertical: 10 },
-  editorHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  groupSelectorRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
-  shareRow: { flexDirection: 'row', gap: 10, minWidth: 0 },
-  iconAction: { borderWidth: 1, borderRadius: 999, minHeight: 44, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', gap: 6, justifyContent: 'center' },
-  noteInput: { minHeight: 100, textAlignVertical: 'top' },
-  attachmentRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 },
-  attachmentChip: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 5, flexDirection: 'row', alignItems: 'center', gap: 5, maxWidth: 120 },
-  editorFooter: { marginTop: 10, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 10 },
-  categoryRow: { flexDirection: 'row', gap: 6 },
-  categoryChip: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 7, minHeight: 44, justifyContent: 'center' },
-  editorActions: { flexDirection: 'row', gap: 10, alignItems: 'center' },
-  iconOnlyAction: { width: 44, height: 44, borderRadius: 17, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
-  filterRow: { flexDirection: 'row', gap: 6 },
-  filterChipRow: { flexDirection: 'row', gap: 6, alignItems: 'center' },
-  searchRow: { flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 8 },
-  searchInput: { flex: 1, fontSize: 13, paddingVertical: 0 },
-  gridWrap: { gap: 8, width: '100%', minWidth: 0 },
-  gridRow: { flexDirection: 'row', gap: 8, width: '100%', minWidth: 0 },
-  compactCard: { borderWidth: 1, borderRadius: 12, padding: 10, gap: 8, minWidth: 0 },
-  noteThumb: { width: '100%', height: 120, borderRadius: 8, backgroundColor: '#111' },
-  clipThumb: { width: '100%', height: 96, borderRadius: 8, backgroundColor: '#111' },
-  cardHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
-  cardFoot: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 6 },
-  colorRow: { flexDirection: 'row', gap: 8, marginTop: 2 },
-  colorDot: { width: 14, height: 14, borderRadius: 999, borderWidth: 1 },
-  previewImage: { width: '100%', height: 260, borderRadius: 10, backgroundColor: '#000' },
-  previewImageLarge: { width: '100%', height: 420, borderRadius: 10, backgroundColor: '#000' },
-  previewActions: { marginTop: 14, flexDirection: 'row', gap: 10 },
-  previewBtn: { flex: 1, minHeight: 44, borderRadius: 10, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  content: {
+    paddingBottom: 98,
+    width: '100%',
+    minWidth: 0,
+    alignItems: 'stretch',
+    paddingHorizontal: 6,
+  },
+
+  workspace: {
+    gap: 10,
+    minWidth: 0,
+    width: '100%',
+    alignSelf: 'stretch',
+  },
+
+  workspaceTabs: {
+    flexDirection: 'row',
+    gap: 6,
+    marginBottom: 0,
+    width: '100%',
+  },
+
+  workspaceTab: {
+    flex: 1,
+    minHeight: 44,
+    borderWidth: 1,
+    borderRadius: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingHorizontal: 8,
+  },
+
+  resumeCard: {
+    paddingVertical: 10,
+    width: '100%',
+    alignSelf: 'stretch',
+  },
+
+  editorHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+
+  groupSelectorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 8,
+    width: '100%',
+  },
+
+  shareRow: {
+    flexDirection: 'row',
+    gap: 10,
+    minWidth: 0,
+  },
+
+  iconAction: {
+    borderWidth: 1,
+    borderRadius: 999,
+    minHeight: 44,
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    justifyContent: 'center',
+  },
+
+  noteInput: {
+    minHeight: 100,
+    textAlignVertical: 'top',
+    width: '100%',
+  },
+
+  attachmentRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 8,
+  },
+
+  attachmentChip: {
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    maxWidth: 120,
+  },
+
+  editorFooter: {
+    marginTop: 10,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 10,
+  },
+
+  categoryRow: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+
+  categoryChip: {
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    minHeight: 44,
+    justifyContent: 'center',
+  },
+
+  editorActions: {
+    flexDirection: 'row',
+    gap: 10,
+    alignItems: 'center',
+  },
+
+  iconOnlyAction: {
+    width: 44,
+    height: 44,
+    borderRadius: 17,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  filterRow: {
+    flexDirection: 'row',
+    gap: 6,
+    width: '100%',
+  },
+
+  filterChipRow: {
+    flexDirection: 'row',
+    gap: 6,
+    alignItems: 'center',
+  },
+
+  searchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    width: '100%',
+  },
+
+  searchInput: {
+    flex: 1,
+    fontSize: 13,
+    paddingVertical: 0,
+  },
+
+  gridWrap: {
+    gap: 10,
+    width: '100%',
+    minWidth: 0,
+    alignSelf: 'stretch',
+  },
+
+  gridRow: {
+    flexDirection: 'row',
+    gap: 8,
+    width: '100%',
+    minWidth: 0,
+    alignSelf: 'stretch',
+  },
+
+  compactCard: {
+    borderWidth: 1,
+    borderRadius: 14,
+    padding: 12,
+    gap: 8,
+    minWidth: 0,
+    width: '100%',
+    alignSelf: 'stretch',
+  },
+
+  noteThumb: {
+    width: '100%',
+    height: 120,
+    borderRadius: 8,
+    backgroundColor: '#111',
+  },
+
+  clipThumb: {
+    width: '100%',
+    height: 96,
+    borderRadius: 8,
+    backgroundColor: '#111',
+  },
+
+  cardHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+
+  cardFoot: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingTop: 6,
+  },
+
+  colorRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 2,
+  },
+
+  colorDot: {
+    width: 14,
+    height: 14,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+
+  previewImage: {
+    width: '100%',
+    height: 260,
+    borderRadius: 10,
+    backgroundColor: '#000',
+  },
+
+  previewImageLarge: {
+    width: '100%',
+    height: 420,
+    borderRadius: 10,
+    backgroundColor: '#000',
+  },
+
+  previewActions: {
+    marginTop: 14,
+    flexDirection: 'row',
+    gap: 10,
+  },
+
+  previewBtn: {
+    flex: 1,
+    minHeight: 44,
+    borderRadius: 10,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 });
-
-

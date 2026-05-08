@@ -12,6 +12,7 @@ import {
   Text,
   TextInput,
   Switch,
+  useWindowDimensions,
   View
 } from 'react-native';
 import Animated, {
@@ -277,6 +278,8 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
   const { theme, themeName } = useAppTheme();
   const isWeb = Platform.OS === 'web';
   const isIOS = Platform.OS === 'ios';
+  const { height: windowHeight } = useWindowDimensions();
+  const isCompact = windowHeight < 680;
   const scanProgress = useSharedValue(0);
   const fx = useMemo(
     () => ({
@@ -659,20 +662,42 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
             <FloatingOrb size={200} color={theme.primary} delay={6000} dur={9500} startX={50} startY={400} />
           </View>
         )}
+        {/* Star ring — lives in background layer so it doesn't consume scroll height */}
+        <View style={styles.bgStarRing} pointerEvents="none">
+          <Animated.View style={pulseStyle}>
+            <View style={styles.iconShell}>
+              <GlowRing size={150} color={theme.secondary} delay={0} dur={2800} opacity={0.22} />
+              <Animated.View style={[styles.starsContainer, starsStyle]}>
+                {Array.from({ length: 12 }).map((_, i) => {
+                  const angle = (i * 30) * (Math.PI / 180);
+                  const radius = 56;
+                  const x = 65 + radius * Math.cos(angle) - 6;
+                  const y = 65 + radius * Math.sin(angle) - 6;
+                  return (
+                    <View key={i} style={{ position: 'absolute', left: x, top: y }}>
+                      <Ionicons name="star" size={12} color={theme.secondary} style={{ opacity: 0.8 }} />
+                    </View>
+                  );
+                })}
+              </Animated.View>
+              {themeName === 'obsidianGold' ? (
+                <View style={styles.crosshairWrap}>
+                  <Animated.View style={[styles.iconLaser, { backgroundColor: theme.secondary }, iconScanLineStyle]} />
+                  <View style={[styles.crosshairCircle, { borderColor: theme.secondary }]} />
+                  <View style={[styles.crosshairRing, { borderColor: theme.secondary }]} />
+                  <View style={[styles.crosshairLineV, { backgroundColor: theme.secondary }]} />
+                  <View style={[styles.crosshairLineH, { backgroundColor: theme.secondary }]} />
+                  <View style={[styles.crosshairDot, { backgroundColor: theme.secondary }]} />
+                </View>
+              ) : null}
+            </View>
+          </Animated.View>
+        </View>
+
         {palette.watermark && (
           <View style={[styles.watermarkContainer, styles.watermarkVisible]} pointerEvents="none">
             {/* Chromatic aberration layer: Red (shift left) */}
-            <Animated.View style={[StyleSheet.absoluteFill, chromaticRedStyle]} pointerEvents="none">
-              <View style={[styles.gridLineV, { left: '20%', backgroundColor: theme.error }]} />
-              <View style={[styles.gridLineV, { left: '40%', backgroundColor: theme.error }]} />
-              <View style={[styles.gridLineV, { left: '60%', backgroundColor: theme.error }]} />
-              <View style={[styles.gridLineV, { left: '80%', backgroundColor: theme.error }]} />
-              <View style={[styles.gridLineH, { top: '25%', backgroundColor: theme.error }]} />
-              <View style={[styles.gridLineH, { top: '50%', backgroundColor: theme.error }]} />
-              <View style={[styles.gridLineH, { top: '75%', backgroundColor: theme.error }]} />
-              <View style={[styles.techCircle, { top: -50, right: -50, width: 200, height: 200, borderColor: theme.error, opacity: 0.05 }]} />
-              <View style={[styles.techCircle, { bottom: -100, left: -60, width: 300, height: 300, borderColor: theme.error, opacity: 0.03 }]} />
-            </Animated.View>
+    
 
             {/* Chromatic aberration layer: Blue (shift right) */}
             <Animated.View style={[StyleSheet.absoluteFill, chromaticBlueStyle]} pointerEvents="none">
@@ -749,21 +774,18 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
 
       <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[styles.scrollContent, isCompact && { paddingVertical: 12 }]}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
-        <Animated.View entering={FadeIn.duration(450)} style={styles.shell}>
-          <Animated.View entering={FadeInDown.delay(0).duration(450)} style={styles.badgeRow}>
-
-          </Animated.View>
-
-          <Animated.View entering={FadeInDown.delay(80).duration(600)} style={styles.logoRow}>
-            <AnimatedLogo size={60} color={theme.text} accentColor={theme.secondary} />
-            <View style={styles.logoTextContainer}>
+        <Animated.View entering={FadeIn.duration(450)} style={[styles.shell, isCompact && { gap: 8 }]}>
+          <Animated.View entering={FadeInDown.delay(80).duration(600)} style={[styles.logoRow, isCompact && styles.logoRowCompact]}>
+            <AnimatedLogo size={isCompact ? 40 : 60} color={theme.text} accentColor={theme.secondary} />
+            <View style={[styles.logoTextContainer, isCompact && styles.logoTextContainerCompact]}>
               <Text
                 style={[
                   styles.logo,
+                  isCompact && styles.logoCompact,
                   {
                     color: theme.text,
                     fontFamily: palette.logoFamily,
@@ -779,42 +801,7 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
                 SECURE ACCESS
               </Text>
             </View>
-            <View style={[styles.logoDivider, { backgroundColor: theme.secondary, opacity: 0.1 }]} />
-          </Animated.View>
-
-          <Animated.View entering={FadeInDown.delay(160).duration(450)} style={styles.iconRow}>
-            <Animated.View style={pulseStyle}>
-              <View style={styles.iconShell}>
-                {/* Premium glow rings */}
-                <GlowRing size={150} color={theme.secondary} delay={0} dur={2800} opacity={0.22} />
-                <GlowRing size={118} color={theme.primary} delay={700} dur={2200} opacity={0.18} />
-                {/* Circle of European stars */}
-                <Animated.View style={[styles.starsContainer, starsStyle]}>
-                  {Array.from({ length: 12 }).map((_, i) => {
-                    const angle = (i * 30) * (Math.PI / 180);
-                    const radius = 56;
-                    const x = 65 + radius * Math.cos(angle) - 6;
-                    const y = 65 + radius * Math.sin(angle) - 6;
-                    return (
-                      <View key={i} style={{ position: 'absolute', left: x, top: y }}>
-                        <Ionicons name="star" size={12} color={theme.secondary} style={{ opacity: 0.8 }} />
-                      </View>
-                    );
-                  })}
-                </Animated.View>
-
-                {themeName === 'obsidianGold' ? (
-                  <View style={styles.crosshairWrap}>
-                    <Animated.View style={[styles.iconLaser, { backgroundColor: theme.secondary }, iconScanLineStyle]} />
-                    <View style={[styles.crosshairCircle, { borderColor: theme.secondary }]} />
-                    <View style={[styles.crosshairRing, { borderColor: theme.secondary }]} />
-                    <View style={[styles.crosshairLineV, { backgroundColor: theme.secondary }]} />
-                    <View style={[styles.crosshairLineH, { backgroundColor: theme.secondary }]} />
-                    <View style={[styles.crosshairDot, { backgroundColor: theme.secondary }]} />
-                  </View>
-                ) : null}
-              </View>
-            </Animated.View>
+            {!isCompact && <View style={[styles.logoDivider, { backgroundColor: theme.secondary, opacity: 0.1 }]} />}
           </Animated.View>
 
           <Animated.View style={[styles.formCard, { backgroundColor: theme.surface, borderColor: theme.border }, cardEntranceStyle]}>
@@ -1115,11 +1102,15 @@ const styles = StyleSheet.create({
   shell: { width: '100%', maxWidth: 420, minWidth: 0, gap: 14, alignSelf: 'center' },
   badgeRow: { flexDirection: 'row', gap: 8 },
   logoRow: { gap: 16, alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
+  logoRowCompact: { flexDirection: 'row', gap: 12, marginBottom: 0 },
   logoTextContainer: { alignItems: 'center', gap: 4 },
+  logoTextContainerCompact: { alignItems: 'flex-start' },
   logo: { fontSize: 32, lineHeight: 36, fontWeight: '900', letterSpacing: 1 },
+  logoCompact: { fontSize: 24, lineHeight: 28 },
   logoSubtitle: { fontSize: 10, fontWeight: '700', letterSpacing: 2, textTransform: 'uppercase' },
   logoBar: {},
   logoDivider: { height: 1, opacity: 0.2, width: '100%', marginTop: 8 },
+  bgStarRing: { position: 'absolute', top: '6%', left: 0, right: 0, alignItems: 'center', pointerEvents: 'none' },
   iconRow: { alignItems: 'center', paddingVertical: 12 },
   iconShell: { width: 130, height: 130, alignItems: 'center', justifyContent: 'center' },
   starsContainer: { position: 'absolute', width: 130, height: 130 },

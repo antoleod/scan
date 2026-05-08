@@ -545,7 +545,7 @@ export function ClipboardScreen({ palette, settings, onSendToNote, onSendToTempl
 export default ClipboardScreen;
 
 const styles = StyleSheet.create({
-  content: { paddingBottom: 128, gap: 24, width: '100%', minWidth: 0, alignItems: 'stretch' },
+  content: { paddingBottom: 128, paddingHorizontal: 8, gap: 24, width: '100%', minWidth: 0, alignItems: 'stretch' },
   headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' },
   searchRow: { flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 8 },
   searchInput: { flex: 1, fontSize: 13, paddingVertical: 0 },
