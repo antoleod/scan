@@ -176,8 +176,14 @@ function noteKey(note: Pick<NoteItem, 'id' | 'groupId'>): string {
   return noteStorageKey(note.id, note.groupId ? 'group' : 'personal', note.groupId);
 }
 
+// Safe timestamp conversion: handles Firestore Timestamp objects
+function tsMillis(val: unknown): number {
+  if (val && typeof (val as any).toMillis === 'function') return (val as any).toMillis();
+  return Number(val ?? 0);
+}
+
 function sortNotes(items: NoteItem[]): NoteItem[] {
-  return [...items].sort((a, b) => (a.pinned === b.pinned ? b.updatedAt - a.updatedAt : a.pinned ? -1 : 1));
+  return [...items].sort((a, b) => (a.pinned === b.pinned ? tsMillis(b.updatedAt) - tsMillis(a.updatedAt) : a.pinned ? -1 : 1));
 }
 
 function mergeNotesByNewest(localNotes: NoteItem[], serverNotes: NoteItem[], sharedNotes: NoteItem[], deletedKeys: Set<string>): NoteItem[] {
@@ -189,7 +195,7 @@ function mergeNotesByNewest(localNotes: NoteItem[], serverNotes: NoteItem[], sha
       continue;
     }
     const prev = map.get(key);
-    if (!prev || Number(item.updatedAt || 0) >= Number(prev.updatedAt || 0)) {
+    if (!prev || tsMillis(item.updatedAt) >= tsMillis(prev.updatedAt)) {
       map.set(key, item);
     }
   }
@@ -201,9 +207,9 @@ function mergeTemplatesByNewest(local: NoteTemplate[], incoming: NoteTemplate[])
   for (const item of local) map.set(item.id, item);
   for (const item of incoming) {
     const prev = map.get(item.id);
-    if (!prev || item.updatedAt >= prev.updatedAt) map.set(item.id, item);
+    if (!prev || tsMillis(item.updatedAt) >= tsMillis(prev.updatedAt)) map.set(item.id, item);
   }
-  return Array.from(map.values()).sort((a, b) => b.updatedAt - a.updatedAt);
+  return Array.from(map.values()).sort((a, b) => tsMillis(b.updatedAt) - tsMillis(a.updatedAt));
 }
 
 export function NotesTab({ palette, settings }: { palette: Palette; settings: AppSettings }) {
@@ -357,7 +363,7 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
           };
         }));
       }
-    }, 1500);
+    }, 300);
     return () => {
       if (notesSyncTimerRef.current) clearTimeout(notesSyncTimerRef.current);
     };

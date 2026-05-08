@@ -1,0 +1,1 @@
+- [Firebase Sync Architecture](project_firebase_sync.md) — confirmed race condition + Timestamp NaN bug blocking cross-device sync; notes listener missing entirely
