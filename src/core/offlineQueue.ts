@@ -4,7 +4,7 @@
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { upsertNoteInFirebase, deleteNoteFromFirebase, getFirebaseRuntime } from './firebase';
+import { upsertNoteInFirebase, deleteNoteFromFirebase, initFirebaseRuntime } from './firebase';
 import { diag } from './diagnostics';
 import { onNetworkReconnect } from './network';
 import type { NoteItem } from './notes';
@@ -66,7 +66,17 @@ export async function enqueueOperation(
       uid,
       retries: 0,
     };
-    const next = [...current, entry];
+    // Upsert: replace existing entry for same operation + note id rather than appending.
+    // This prevents a note edited N times offline from queuing N redundant writes.
+    const entryNoteId = isNoteItem(payload) ? payload.id : (typeof payload === 'string' ? payload : null);
+    const existingIndex = entryNoteId !== null
+      ? current.findIndex((e) => e.op === op && (
+          isNoteItem(e.payload) ? e.payload.id === entryNoteId : e.payload === entryNoteId
+        ))
+      : -1;
+    const next = existingIndex !== -1
+      ? current.map((e, i) => i === existingIndex ? entry : e)
+      : [...current, entry];
     await saveQueue(next);
     await diag.info('offlineQueue.enqueued', { op, id: entry.id });
   } catch (error) {
@@ -83,11 +93,13 @@ export async function flushQueue(): Promise<{ flushed: number; remaining: number
   let queue = await loadQueue();
   if (queue.length === 0) return { flushed: 0, remaining: 0 };
 
-  // Get current authenticated user
-  const rt = await getFirebaseRuntime();
-  const currentUid = rt?.auth?.currentUser?.uid;
+  // Ensure Firebase runtime is initialized and auth is ready before processing any entries.
+  const rt = await initFirebaseRuntime();
+  if (!rt.enabled || !rt.auth?.currentUser) return { flushed: 0, remaining: queue.length };
+  const currentUid = rt.auth.currentUser.uid;
 
   const TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+  const MAX_RETRIES = 10; // Drop permanently-failing entries after this many attempts
   const now = Date.now();
 
   let flushed = 0;
@@ -107,6 +119,13 @@ export async function flushQueue(): Promise<{ flushed: number; remaining: number
         op: entry.op,
         ageMs: now - entry.createdAt,
       });
+      continue;
+    }
+
+    // Drop entries that have permanently failed (e.g. Firestore rule violation).
+    // Without this cap the entry retries on every reconnect for the full 7-day TTL.
+    if (entry.retries >= MAX_RETRIES) {
+      await diag.warn('offlineQueue.entry.max_retries', { id: entry.id, op: entry.op, retries: entry.retries });
       continue;
     }
 

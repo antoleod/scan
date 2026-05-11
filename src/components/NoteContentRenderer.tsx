@@ -3,7 +3,7 @@
  * Renders note content based on smartType and content analysis
  * Centralizes the rendering logic that was previously in NoteCard
  */
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Text } from 'react-native';
 import { SmartNoteModel } from '../core/smartNotes';
 import { ShoppingListModel } from '../core/shoppingList';
@@ -110,6 +110,13 @@ export function NoteContentRenderer({
   onMedicationDismissCycle,
   onMedicationReactivate,
 }: NoteContentRendererProps): React.ReactNode {
+  // Memoize the V2 shopping parse so it only re-runs when note.text changes,
+  // not on every render triggered by unrelated state updates in the parent.
+  const shoppingModelV2 = useMemo(
+    () => parseShoppingListV2(note.text),
+    [note.text],
+  );
+
   // Priority 1: Medication notes
   if (note.smartType === 'medication') {
     return (
@@ -131,10 +138,9 @@ export function NoteContentRenderer({
 
   // Priority 2: Shopping lists
   if ((note.smartType === 'shopping' || (shoppingModel?.isShoppingList)) && shoppingModel) {
-    const modelV2 = parseShoppingListV2(note.text);
     return (
       <ShoppingListBlockV2
-        model={modelV2}
+        model={shoppingModelV2}
         palette={palette}
         onRawTextChange={onRawTextChange || (() => {})}
       />

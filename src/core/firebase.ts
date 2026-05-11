@@ -58,7 +58,8 @@ function normalizeScanType(type: string): string {
 
 function tsMillis(val: unknown): number {
   if (val && typeof (val as any).toMillis === 'function') return (val as any).toMillis();
-  return Number(val ?? 0);
+  const n = Number(val);
+  return Number.isFinite(n) && n > 0 ? n : Date.now();
 }
 
 const OPTIONAL_FIREBASE_ENV = [
@@ -528,6 +529,11 @@ export async function subscribeToNotes(
 
     let latestNotes: NoteItem[] = [];
     let latestTemplates: NoteTemplate[] = [];
+    // Guard: only call the callback once both listeners have delivered their first
+    // snapshot. Without this, the notes listener fires first with latestTemplates=[]
+    // and the callback would wipe existing templates for one render cycle (and vice versa).
+    let notesReady = false;
+    let templatesReady = false;
 
     const notesRef     = collection(db, 'users', user.uid, 'notes');
     const templatesRef = collection(db, 'users', user.uid, 'noteTemplates');
@@ -535,8 +541,20 @@ export async function subscribeToNotes(
     notesUnsub = onSnapshot(
       query(notesRef),
       (snap) => {
-        latestNotes = snap.docs.map((d) => ({ ...(d.data() as NoteItem), id: d.id }));
-        callback({ notes: latestNotes, templates: latestTemplates });
+        latestNotes = snap.docs.map((d) => {
+          const data = d.data() as NoteItem;
+          // Handle workflowMetadata stored as JSON string (legacy) or object (new)
+          if (typeof data.workflowMetadata === 'string') {
+            try {
+              data.workflowMetadata = JSON.parse(data.workflowMetadata);
+            } catch {
+              data.workflowMetadata = undefined;
+            }
+          }
+          return { ...data, id: d.id };
+        });
+        notesReady = true;
+        if (notesReady && templatesReady) callback({ notes: latestNotes, templates: latestTemplates });
       },
       async (error) => {
         await diag.warn('notes.subscribe.notes.error', { message: String(error) });
@@ -547,7 +565,8 @@ export async function subscribeToNotes(
       query(templatesRef),
       (snap) => {
         latestTemplates = snap.docs.map((d) => ({ ...(d.data() as NoteTemplate), id: d.id }));
-        callback({ notes: latestNotes, templates: latestTemplates });
+        templatesReady = true;
+        if (notesReady && templatesReady) callback({ notes: latestNotes, templates: latestTemplates });
       },
       async (error) => {
         await diag.warn('notes.subscribe.templates.error', { message: String(error) });
@@ -589,12 +608,22 @@ function sanitizeNoteForFirestore(note: NoteItem): Record<string, unknown> {
     payload.hasLocalAttachments = true;
   }
   if (note.imageRtdbPaths?.length) payload.imageRtdbPaths = note.imageRtdbPaths;
+  if (note.versions && note.versions.length > 0) {
+    payload.versions = note.versions.slice(0, 12).map((v) => ({
+      id: v.id,
+      title: v.title,
+      text: typeof v.text === 'string' ? v.text.slice(0, 4000) : '',
+      createdAt: Number(v.createdAt || 0),
+    }));
+  }
   if (note.title !== undefined) payload.title = note.title;
   if (note.smartType) payload.smartType = note.smartType;
   if (note.workflowStatus) payload.workflowStatus = note.workflowStatus;
-  if (note.workflowMetadata) payload.workflowMetadata = JSON.stringify(note.workflowMetadata);
+  if (note.workflowMetadata) payload.workflowMetadata = note.workflowMetadata;
   if (note.isSecret !== undefined) payload.isSecret = note.isSecret;
   if (note.draft !== undefined) payload.draft = note.draft;
+  // syncStatus is intentionally excluded — it is local UI state, not server data.
+  // Writing it to Firestore would conflict with the server-side merge logic.
   return payload;
 }
 
@@ -680,6 +709,10 @@ export async function syncNotesWithFirebase(localNotes: NoteItem[], localTemplat
   const serverNotesMap = new Map<string, NoteItem>();
   notesSnapBefore.forEach((d) => {
     const x = d.data() as NoteItem;
+    // Handle workflowMetadata stored as JSON string (legacy) or object (new)
+    if (typeof x.workflowMetadata === 'string') {
+      try { x.workflowMetadata = JSON.parse(x.workflowMetadata); } catch { x.workflowMetadata = undefined; }
+    }
     serverNotesMap.set(d.id, { ...x, id: d.id });
   });
 
@@ -699,9 +732,12 @@ export async function syncNotesWithFirebase(localNotes: NoteItem[], localTemplat
       continue;
     }
     const serverNote = serverNotesMap.get(note.id);
-    if (!serverNote || tsMillis(note.updatedAt) >= tsMillis(serverNote.updatedAt)) {
+    // Never overwrite a server-side tombstone with a local copy, even if local is newer.
+    if (serverNote?.deletedAt) continue;
+    if (!serverNote || tsMillis(note.updatedAt) > tsMillis(serverNote.updatedAt)) {
       const payload = { ...sanitizeNoteForFirestore(note), uid, updatedAtServer: serverTimestamp() };
       await setDoc(doc(notesRef, note.id), payload, { merge: true });
+      serverNotesMap.set(note.id, note); // keep in-memory map current
       pushedNotes += 1;
     }
   }
@@ -730,19 +766,30 @@ export async function syncNotesWithFirebase(localNotes: NoteItem[], localTemplat
     }
   }
 
-  // Read final server state and merge with local (server may have items from other devices).
-  const notesSnap = await getDocs(query(notesRef));
+  // Build merged result from in-memory data — avoids a second full getDocs read.
+  // serverNotesMap already contains all server notes from the first read above.
+  // We pushed local-newer notes above, so the source of truth is: local wins if newer, server wins otherwise.
   const mergedNotesMap = new Map<string, NoteItem>();
-  for (const note of localNotesLimited) mergedNotesMap.set(note.id, note);
-  notesSnap.forEach((d) => {
-    const x = { ...(d.data() as NoteItem), id: d.id };
-    if (x.deletedAt || deletedKeys.has(noteStorageKey(x.id, x.groupId ? 'group' : 'personal', x.groupId))) {
-      mergedNotesMap.delete(x.id);
-      return;
+  for (const note of localNotesLimited) {
+    const key = noteStorageKey(note.id, note.groupId ? 'group' : 'personal', note.groupId);
+    if (note.deletedAt || deletedKeys.has(key)) continue;
+    mergedNotesMap.set(note.id, note);
+  }
+  for (const [id, serverNote] of serverNotesMap.entries()) {
+    const key = noteStorageKey(id, serverNote.groupId ? 'group' : 'personal', serverNote.groupId);
+    if (serverNote.deletedAt || deletedKeys.has(key)) {
+      mergedNotesMap.delete(id);
+      continue;
     }
-    const existing = mergedNotesMap.get(x.id);
-    if (!existing || tsMillis(x.updatedAt) >= tsMillis(existing.updatedAt)) mergedNotesMap.set(x.id, x);
-  });
+    // Handle workflowMetadata stored as JSON string (legacy)
+    if (typeof serverNote.workflowMetadata === 'string') {
+      try { serverNote.workflowMetadata = JSON.parse(serverNote.workflowMetadata); } catch { serverNote.workflowMetadata = undefined; }
+    }
+    const existing = mergedNotesMap.get(id);
+    if (!existing || tsMillis(serverNote.updatedAt) >= tsMillis(existing.updatedAt)) {
+      mergedNotesMap.set(id, serverNote);
+    }
+  }
   const serverNotes = Array.from(mergedNotesMap.values());
 
   const templatesSnap = await getDocs(query(templatesRef));
@@ -936,12 +983,11 @@ export async function subscribeToSharedGroupNotes(
 ): Promise<() => void> {
   const rt = await initFirebaseRuntime();
   if (!rt.enabled || !rt.auth || !rt.db) return () => {};
-  const user = rt.auth.currentUser;
-  if (!user) return () => {};
 
-  const groupsRef = collection(rt.db, 'noteGroups');
+  const db = rt.db;
   const perGroupUnsub = new Map<string, () => void>();
   const latestByGroup = new Map<string, NoteItem[]>();
+  let groupsUnsub: (() => void) | null = null;
 
   const emit = () => {
     const all: NoteItem[] = [];
@@ -949,41 +995,55 @@ export async function subscribeToSharedGroupNotes(
     callback(all);
   };
 
-  const groupsUnsub = onSnapshot(query(groupsRef, where('members', 'array-contains', user.uid)), (groupsSnap) => {
-    const seen = new Set<string>();
-    groupsSnap.forEach((d) => {
-      const groupId = d.id;
-      seen.add(groupId);
-      if (perGroupUnsub.has(groupId)) return;
-
-      const notesRef = collection(rt.db as Firestore, 'noteGroups', groupId, 'notes');
-      const unsub = onSnapshot(query(notesRef), (notesSnap) => {
-        const items = notesSnap.docs.map((docSnap) => {
-          const raw = docSnap.data() as NoteItem;
-          return { ...raw, id: raw.id || docSnap.id, groupId };
-        });
-        latestByGroup.set(groupId, items);
-        emit();
-      });
-      perGroupUnsub.set(groupId, unsub);
-    });
-
-    // Cleanup listeners for groups no longer present.
-    Array.from(perGroupUnsub.keys()).forEach((groupId) => {
-      if (seen.has(groupId)) return;
-      perGroupUnsub.get(groupId)?.();
-      perGroupUnsub.delete(groupId);
-      latestByGroup.delete(groupId);
-    });
-
-    emit();
-  });
-
-  return () => {
-    groupsUnsub();
+  function teardownInner() {
+    groupsUnsub?.();
+    groupsUnsub = null;
     perGroupUnsub.forEach((u) => u());
     perGroupUnsub.clear();
     latestByGroup.clear();
+  }
+
+  const authUnsub = onAuthStateChanged(rt.auth, (user) => {
+    teardownInner();
+    if (!user) return;
+
+    const groupsRef = collection(db, 'noteGroups');
+    groupsUnsub = onSnapshot(query(groupsRef, where('members', 'array-contains', user.uid)), (groupsSnap) => {
+      const seen = new Set<string>();
+      groupsSnap.forEach((d) => {
+        const groupId = d.id;
+        seen.add(groupId);
+        if (perGroupUnsub.has(groupId)) return;
+
+        const notesRef = collection(db, 'noteGroups', groupId, 'notes');
+        const unsub = onSnapshot(query(notesRef), (notesSnap) => {
+          const items = notesSnap.docs
+            .map((docSnap) => {
+              const raw = docSnap.data() as NoteItem;
+              return { ...raw, id: raw.id || docSnap.id, groupId };
+            })
+            .filter((n) => !n.deletedAt);
+          latestByGroup.set(groupId, items);
+          emit();
+        });
+        perGroupUnsub.set(groupId, unsub);
+      });
+
+      // Cleanup listeners for groups no longer present.
+      Array.from(perGroupUnsub.keys()).forEach((groupId) => {
+        if (seen.has(groupId)) return;
+        perGroupUnsub.get(groupId)?.();
+        perGroupUnsub.delete(groupId);
+        latestByGroup.delete(groupId);
+      });
+
+      emit();
+    });
+  });
+
+  return () => {
+    teardownInner();
+    authUnsub();
   };
 }
 

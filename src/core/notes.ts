@@ -14,10 +14,23 @@ import { diag } from './diagnostics';
 import { clearDeletedNoteKeys, loadDeletedNoteKeys, markDeletedNoteKey, noteStorageKey } from './noteDeletions';
 import { enqueueOperation } from './offlineQueue';
 import type { SmartWorkflowType } from './smartNoteWorkflows';
+import { detectSmartTypeFromContent } from './smartNoteWorkflows';
 
 const NOTES_KEY = '@barra_notes_v1';
 const TEMPLATES_KEY = '@barra_note_templates_v1';
 const TEMPLATES_PURGED_KEY = '@barra_templates_purged_v1';
+
+// C-3: In-memory write lock to serialise concurrent read-modify-write sequences
+// on AsyncStorage. Without this, two concurrent mutation functions (e.g. two rapid
+// note creates) both call loadNotes() → get the same snapshot → one save overwrites
+// the other, silently dropping a write.
+let notesSaveLock: Promise<void> = Promise.resolve();
+
+function withNotesSaveLock<T>(fn: () => Promise<T>): Promise<T> {
+  const next = notesSaveLock.then(fn, fn);
+  notesSaveLock = next.then(() => undefined, () => undefined);
+  return next;
+}
 
 export type NoteKind = 'text' | 'image';
 export type NoteCategory = 'general' | 'work' | 'health' | 'shopping';
@@ -195,13 +208,18 @@ export async function saveNotes(items: NoteItem[]): Promise<void> {
 }
 
 async function updateNoteSyncStatus(noteId: string, status: NoteItem['syncStatus']): Promise<void> {
-  try {
-    const notes = await loadNotes();
-    const updated = notes.map((n) => (n.id === noteId ? { ...n, syncStatus: status } : n));
-    await saveNotes(updated);
-  } catch (error) {
-    await diag.warn('notes.update.sync_status.error', { noteId, status, message: String(error) });
-  }
+  // C-3: serialise the read-modify-write via the write lock so concurrent callers
+  // (e.g. pushNoteIfAuthenticated called from two rapid mutations) don't overwrite
+  // each other's changes.
+  return withNotesSaveLock(async () => {
+    try {
+      const notes = await loadNotes();
+      const updated = notes.map((n) => (n.id === noteId ? { ...n, syncStatus: status } : n));
+      await saveNotes(updated);
+    } catch (error) {
+      await diag.warn('notes.update.sync_status.error', { noteId, status, message: String(error) });
+    }
+  });
 }
 
 async function pushNoteIfAuthenticated(note: NoteItem): Promise<boolean> {
@@ -331,7 +349,6 @@ export async function addRichNoteUnique(
   let smartType: SmartWorkflowType | undefined;
   if (autoDetectSmartType && trimmed) {
     try {
-      const { detectSmartTypeFromContent } = require('../core/smartNoteWorkflows');
       smartType = detectSmartTypeFromContent(trimmed);
       if (smartType === 'none') smartType = undefined;
     } catch {
@@ -934,7 +951,9 @@ export async function updateNoteSmartType(
 export async function markNotesSynced(noteIds: ReadonlySet<string>): Promise<NoteItem[]> {
   const current = await loadNotes();
   const updated = current.map((n) =>
-    noteIds.has(n.id) && n.syncStatus === 'pending'
+    // C-4: also transition 'retrying' → 'synced'; previously only 'pending' was
+    // handled, causing notes stuck in 'retrying' to trigger perpetual re-sync loops.
+    noteIds.has(n.id) && (n.syncStatus === 'pending' || n.syncStatus === 'retrying')
       ? { ...n, syncStatus: 'synced' as const }
       : n,
   );
@@ -955,7 +974,7 @@ export async function clearNotes(): Promise<void> {
 export async function clearArchivedNotes(): Promise<NoteItem[]> {
   const current = await loadNotes();
   const archived = current.filter((n) => n.archived && !n.deletedAt);
-  for (const n of archived) await markDeletedNoteKey(n.id);
+  for (const n of archived) await markDeletedNoteKey(noteStorageKey(n.id, n.groupId ? 'group' : 'personal', n.groupId));
   const kept = current.filter((n) => !n.archived);
   await saveNotes(kept);
   return normalizeNotes(kept);
@@ -964,7 +983,7 @@ export async function clearArchivedNotes(): Promise<NoteItem[]> {
 export async function clearUnpinnedNotes(): Promise<NoteItem[]> {
   const current = await loadNotes();
   const unpinned = current.filter((n) => !n.pinned && !n.deletedAt);
-  for (const n of unpinned) await markDeletedNoteKey(n.id);
+  for (const n of unpinned) await markDeletedNoteKey(noteStorageKey(n.id, n.groupId ? 'group' : 'personal', n.groupId));
   const kept = current.filter((n) => n.pinned);
   await saveNotes(kept);
   return normalizeNotes(kept);
@@ -975,7 +994,7 @@ export async function clearNotesOlderThan(days: number): Promise<NoteItem[]> {
   const cutoff = Date.now() - days * 86_400_000;
   const current = await loadNotes();
   const old = current.filter((n) => !n.pinned && !n.deletedAt && n.updatedAt < cutoff);
-  for (const n of old) await markDeletedNoteKey(n.id);
+  for (const n of old) await markDeletedNoteKey(noteStorageKey(n.id, n.groupId ? 'group' : 'personal', n.groupId));
   const kept = current.filter((n) => n.pinned || n.updatedAt >= cutoff);
   await saveNotes(kept);
   return normalizeNotes(kept);

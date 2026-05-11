@@ -176,10 +176,13 @@ function noteKey(note: Pick<NoteItem, 'id' | 'groupId'>): string {
   return noteStorageKey(note.id, note.groupId ? 'group' : 'personal', note.groupId);
 }
 
-// Safe timestamp conversion: handles Firestore Timestamp objects
+// Safe timestamp conversion: handles Firestore Timestamp objects.
+// Falls back to Date.now() (not 0) so notes without a timestamp are treated as recent,
+// preventing a server note with a real timestamp from always winning over a local note.
 function tsMillis(val: unknown): number {
   if (val && typeof (val as any).toMillis === 'function') return (val as any).toMillis();
-  return Number(val ?? 0);
+  const n = Number(val);
+  return Number.isFinite(n) && n > 0 ? n : Date.now();
 }
 
 function sortNotes(items: NoteItem[]): NoteItem[] {
@@ -280,8 +283,14 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
   const serverUpdateRef = useRef(false);
   const notesSyncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const deletedNoteKeysRef = useRef<Set<string>>(new Set());
+  const [deletedKeysLoaded, setDeletedKeysLoaded] = useState(false);
   const serverNotesRef = useRef<NoteItem[]>([]);
   const sharedNotesRef = useRef<NoteItem[]>([]);
+
+  // Latest-ref pattern: keeps the online-retry handler up-to-date without
+  // re-registering the window event listener on every notes/templates change.
+  const latestNotesRef = useRef(notes);
+  const latestTemplatesRef = useRef(templates);
 
   const autoCategory = useMemo(() => detectAutoCategory(draftTextValue), [draftTextValue]);
   const activeCategory = manualCategory || autoCategory;
@@ -310,14 +319,16 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
     }).catch(() => undefined);
     loadDeletedNoteKeys().then((keys) => {
       deletedNoteKeysRef.current = new Set([...deletedNoteKeysRef.current, ...keys]);
-    }).catch(() => undefined);
+      setDeletedKeysLoaded(true);
+    }).catch(() => { setDeletedKeysLoaded(true); });
   }, []);
 
   // Real-time cross-device sync via Firestore onSnapshot.
   useEffect(() => {
-    if (!user) return;
+    if (!user || !deletedKeysLoaded) return;
     let unsub: (() => void) | null = null;
-  subscribeToNotes(({ notes: serverNotes, templates: serverTemplates }) => {
+    let isMounted = true;
+    subscribeToNotes(({ notes: serverNotes, templates: serverTemplates }) => {
       serverUpdateRef.current = true;
       serverNotesRef.current = serverNotes;
       setNotes((current) => {
@@ -326,31 +337,55 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
       setTemplates((current) => {
         return mergeTemplatesByNewest(current, serverTemplates);
       });
-    }).then((u) => { unsub = u; }).catch(() => undefined);
-    return () => { unsub?.(); };
-  }, [user?.uid]);
+    }).then((u) => {
+      if (!isMounted) { u(); return; }
+      unsub = u;
+    }).catch(() => undefined);
+    return () => {
+      isMounted = false;
+      unsub?.();
+    };
+  }, [user?.uid, deletedKeysLoaded]);
 
   // Auto-push notes to Firebase when they change locally (debounced, skips server-initiated updates).
   useEffect(() => {
     if (!user) return;
-    const hasPendingLocalNotes = notes.some((item) => item.syncStatus === 'pending' || item.syncStatus === 'retrying' || item.syncStatus === 'offline');
-    if (serverUpdateRef.current && !hasPendingLocalNotes) {
+    const hasUnpushedNotes = notes.some((item) =>
+      !item.syncStatus ||
+      item.syncStatus === 'pending' ||
+      item.syncStatus === 'retrying' ||
+      item.syncStatus === 'offline' ||
+      item.syncStatus === 'failed'
+    );
+    if (serverUpdateRef.current && !hasUnpushedNotes) {
       serverUpdateRef.current = false;
       return;
     }
     serverUpdateRef.current = false;
     if (notesSyncTimerRef.current) clearTimeout(notesSyncTimerRef.current);
     notesSyncTimerRef.current = setTimeout(async () => {
+      // C-2: use refs instead of closed-over state to avoid stale closure when two
+      // notes are created rapidly and the second debounce fires with old state.
       const pendingIds = new Set(
-        notes.filter((n) => n.syncStatus === 'pending' || n.syncStatus === 'retrying' || n.syncStatus === 'offline').map((n) => n.id),
+        latestNotesRef.current
+          .filter((n) =>
+            !n.syncStatus ||
+            n.syncStatus === 'pending' ||
+            n.syncStatus === 'retrying' ||
+            n.syncStatus === 'offline' ||
+            n.syncStatus === 'failed'
+          )
+          .map((n) => n.id),
       );
       try {
         setNotes((current) => current.map((item) =>
           pendingIds.has(item.id) ? { ...item, syncStatus: 'retrying' as const } : item,
         ));
-        await syncNotesWithFirebase(notes, templates);
+        await syncNotesWithFirebase(latestNotesRef.current, latestTemplatesRef.current);
         if (pendingIds.size > 0) {
           const updated = await markNotesSynced(pendingIds);
+          // C-1: set the flag BEFORE setNotes so the next render's effect sees it
+          // as true and exits early, preventing the sync loop.
           serverUpdateRef.current = true;   // prevents re-sync loop
           setNotes(updated);
         }
@@ -369,15 +404,23 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
     };
   }, [notes, templates, user?.uid]);
 
+  // Keep latest-refs in sync so the online handler always reads fresh state.
+  useEffect(() => { latestNotesRef.current = notes; }, [notes]);
+  useEffect(() => { latestTemplatesRef.current = templates; }, [templates]);
+
+  // Register the online retry handler once per user session — not on every
+  // notes/templates change. Reads current values via refs to avoid stale closures.
   useEffect(() => {
     if (!user || Platform.OS !== 'web' || typeof window === 'undefined') return;
     const retryPendingSync = async () => {
+      const currentNotes = latestNotesRef.current;
+      const currentTemplates = latestTemplatesRef.current;
       const pendingIds = new Set(
-        notes.filter((n) => n.syncStatus === 'pending' || n.syncStatus === 'retrying' || n.syncStatus === 'offline' || n.syncStatus === 'failed').map((n) => n.id),
+        currentNotes.filter((n) => n.syncStatus === 'pending' || n.syncStatus === 'retrying' || n.syncStatus === 'offline' || n.syncStatus === 'failed').map((n) => n.id),
       );
       if (pendingIds.size === 0) return;
       try {
-        await syncNotesWithFirebase(notes, templates);
+        await syncNotesWithFirebase(currentNotes, currentTemplates);
         const updated = await markNotesSynced(pendingIds);
         serverUpdateRef.current = true;
         setNotes(updated);
@@ -387,22 +430,33 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
     };
     window.addEventListener('online', retryPendingSync);
     return () => window.removeEventListener('online', retryPendingSync);
-  }, [notes, templates, user?.uid]);
+  }, [user?.uid]);
 
   // Live shared groups + their notes (cross-device / multi-user).
   useEffect(() => {
     if (!user) return;
     let groupsUnsub: (() => void) | null = null;
     let notesUnsub: (() => void) | null = null;
-    subscribeToSharedGroups(setGroups).then((u) => { groupsUnsub = u; }).catch(() => undefined);
+    let isMounted = true;
+    subscribeToSharedGroups(setGroups).then((u) => {
+      if (!isMounted) { u(); return; }
+      groupsUnsub = u;
+    }).catch(() => undefined);
     subscribeToSharedGroupNotes((sharedNotes) => {
       serverUpdateRef.current = true;
       sharedNotesRef.current = sharedNotes;
       setNotes((current) => {
         return mergeNotesByNewest(current, serverNotesRef.current, sharedNotesRef.current, deletedNoteKeysRef.current);
       });
-    }).then((u) => { notesUnsub = u; }).catch(() => undefined);
-    return () => { groupsUnsub?.(); notesUnsub?.(); };
+    }).then((u) => {
+      if (!isMounted) { u(); return; }
+      notesUnsub = u;
+    }).catch(() => undefined);
+    return () => {
+      isMounted = false;
+      groupsUnsub?.();
+      notesUnsub?.();
+    };
   }, [user?.uid]);
 
   useEffect(() => {
