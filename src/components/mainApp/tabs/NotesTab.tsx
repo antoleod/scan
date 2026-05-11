@@ -361,9 +361,11 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
       serverUpdateRef.current = false;
       return;
     }
-    serverUpdateRef.current = false;
     if (notesSyncTimerRef.current) clearTimeout(notesSyncTimerRef.current);
     notesSyncTimerRef.current = setTimeout(async () => {
+      // N-3: clear the flag inside the callback so a server snapshot that arrives
+      // during the 300ms debounce window is not prematurely discarded.
+      serverUpdateRef.current = false;
       // C-2: use refs instead of closed-over state to avoid stale closure when two
       // notes are created rapidly and the second debounce fires with old state.
       const pendingIds = new Set(

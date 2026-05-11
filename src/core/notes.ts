@@ -431,12 +431,17 @@ export async function addImageNoteUnique(dataUri: string, title = 'Screenshot ca
 }
 
 export async function removeNote(id: string): Promise<NoteItem[]> {
-  const current = await loadNotes();
-  const existing = current.find((item) => item.id === id);
-  const next = current.filter((item) => item.id !== id);
-  const normalized = normalizeNotes(next);
-  await markDeletedNoteKey(noteStorageKey(id, existing?.groupId ? 'group' : 'personal', existing?.groupId));
-  await saveNotes(normalized);
+  // N-1: lock covers the load/markDeleted/save sequence; Firebase calls are outside.
+  let existing: NoteItem | undefined;
+  const normalized = await withNotesSaveLock(async () => {
+    const current = await loadNotes();
+    existing = current.find((item) => item.id === id);
+    const next = current.filter((item) => item.id !== id);
+    const norm = normalizeNotes(next);
+    await markDeletedNoteKey(noteStorageKey(id, existing?.groupId ? 'group' : 'personal', existing?.groupId));
+    await saveNotes(norm);
+    return norm;
+  });
   try {
     await deleteNoteFromFirebase(id);
     if (existing?.groupId) {
@@ -451,22 +456,34 @@ export async function removeNote(id: string): Promise<NoteItem[]> {
 export async function updateNoteText(id: string, text: string): Promise<NoteItem[]> {
   const nextText = safeText(text).trim();
   if (!nextText) return loadNotes();
-  const current = await loadNotes();
-  const next = current.map((item) =>
-    item.id === id ? { ...item, text: nextText, updatedAt: Date.now(), syncStatus: 'pending' as const } : item,
-  );
-  const updatedItem = next.find((item) => item.id === id);
-  if (updatedItem && hasDuplicateNote(current, updatedItem, id)) {
-    return normalizeNotes(current);
-  }
-  await saveNotes(next);
-  const updated = next.find((item) => item.id === id);
+  // N-1: lock covers load/save; Firebase calls are outside.
+  let updated: NoteItem | undefined;
+  let next: NoteItem[] = [];
+  const lockResult = await withNotesSaveLock(async () => {
+    const current = await loadNotes();
+    const mapped = current.map((item) =>
+      item.id === id ? { ...item, text: nextText, updatedAt: Date.now(), syncStatus: 'pending' as const } : item,
+    );
+    const updatedItem = mapped.find((item) => item.id === id);
+    if (updatedItem && hasDuplicateNote(current, updatedItem, id)) {
+      return normalizeNotes(current);
+    }
+    await saveNotes(mapped);
+    next = mapped;
+    return null;
+  });
+  if (lockResult !== null) return lockResult;
+  updated = next.find((item) => item.id === id);
   if (updated) {
     const synced = await pushNoteIfAuthenticated(updated);
     if (synced) {
-      const syncedNext = next.map((item) => item.id === id ? { ...item, syncStatus: 'synced' as const } : item);
-      await saveNotes(syncedNext);
-      return normalizeNotes(syncedNext);
+      const syncedNext = await withNotesSaveLock(async () => {
+        const fresh = await loadNotes();
+        const mapped = fresh.map((item) => item.id === id ? { ...item, syncStatus: 'synced' as const } : item);
+        await saveNotes(mapped);
+        return normalizeNotes(mapped);
+      });
+      return syncedNext;
     }
   }
   if (updated?.groupId) {
@@ -476,55 +493,73 @@ export async function updateNoteText(id: string, text: string): Promise<NoteItem
 }
 
 export async function createBranchFromNoteVersion(noteId: string, versionId?: string): Promise<NoteItem[]> {
-  const current = await loadNotes();
-  const source = current.find((item) => item.id === noteId);
-  if (!source) return current;
-  const version = versionId ? source.versions?.find((item) => item.id === versionId) : source.versions?.[0];
-  if (!version) return current;
-  const now = Date.now();
-  const branch: NoteItem = {
-    ...source,
-    id: makeId('note'),
-    title: version.title,
-    text: version.text,
-    versions: [],
-    createdAt: now,
-    updatedAt: now,
-  };
-  const next = [branch, ...current];
-  await saveNotes(next);
-  await pushNoteIfAuthenticated(branch);
-  return normalizeNotes(next);
+  // N-1: lock the load/save; Firebase push is outside.
+  let branch: NoteItem | undefined;
+  const next = await withNotesSaveLock(async () => {
+    const current = await loadNotes();
+    const source = current.find((item) => item.id === noteId);
+    if (!source) return current;
+    const version = versionId ? source.versions?.find((item) => item.id === versionId) : source.versions?.[0];
+    if (!version) return current;
+    const now = Date.now();
+    branch = {
+      ...source,
+      id: makeId('note'),
+      title: version.title,
+      text: version.text,
+      versions: [],
+      createdAt: now,
+      updatedAt: now,
+    };
+    const mapped = [branch, ...current];
+    await saveNotes(mapped);
+    return normalizeNotes(mapped);
+  });
+  if (branch) await pushNoteIfAuthenticated(branch);
+  return next;
 }
 
 export async function mergeNoteVersion(noteId: string, versionId: string): Promise<NoteItem[]> {
-  const current = await loadNotes();
-  const next = current.map((item) => {
-    if (item.id !== noteId) return item;
-    const version = item.versions?.find((entry) => entry.id === versionId);
-    if (!version) return item;
-    return { ...pushVersion(item), title: version.title, text: version.text, updatedAt: Date.now() };
+  // N-1: lock the load/save; Firebase calls are outside.
+  let updated: NoteItem | undefined;
+  const next = await withNotesSaveLock(async () => {
+    const current = await loadNotes();
+    const mapped = current.map((item) => {
+      if (item.id !== noteId) return item;
+      const version = item.versions?.find((entry) => entry.id === versionId);
+      if (!version) return item;
+      return { ...pushVersion(item), title: version.title, text: version.text, updatedAt: Date.now() };
+    });
+    await saveNotes(mapped);
+    updated = mapped.find((item) => item.id === noteId);
+    return normalizeNotes(mapped);
   });
-  await saveNotes(next);
-  const updated = next.find((item) => item.id === noteId);
   if (updated) await pushNoteIfAuthenticated(updated);
   if (updated?.groupId) await upsertSharedGroupNote(updated.groupId, updated);
-  return normalizeNotes(next);
+  return next;
 }
 
 export async function togglePinned(id: string): Promise<NoteItem[]> {
-  const current = await loadNotes();
-  const next = current.map((item) =>
-    item.id === id ? { ...item, pinned: !item.pinned, updatedAt: Date.now(), syncStatus: 'pending' as const } : item,
-  );
-  await saveNotes(next);
+  // N-1: lock the load/save; Firebase calls are outside.
+  let next: NoteItem[] = [];
+  await withNotesSaveLock(async () => {
+    const current = await loadNotes();
+    next = current.map((item) =>
+      item.id === id ? { ...item, pinned: !item.pinned, updatedAt: Date.now(), syncStatus: 'pending' as const } : item,
+    );
+    await saveNotes(next);
+  });
   const updated = next.find((item) => item.id === id);
   if (updated) {
     const synced = await pushNoteIfAuthenticated(updated);
     if (synced) {
-      const syncedNext = next.map((item) => item.id === id ? { ...item, syncStatus: 'synced' as const } : item);
-      await saveNotes(syncedNext);
-      return normalizeNotes(syncedNext);
+      const syncedNext = await withNotesSaveLock(async () => {
+        const fresh = await loadNotes();
+        const mapped = fresh.map((item) => item.id === id ? { ...item, syncStatus: 'synced' as const } : item);
+        await saveNotes(mapped);
+        return normalizeNotes(mapped);
+      });
+      return syncedNext;
     }
   }
   if (updated?.groupId) {
@@ -534,18 +569,26 @@ export async function togglePinned(id: string): Promise<NoteItem[]> {
 }
 
 export async function setNoteColor(id: string, color: NoteItem['color'] = 'default'): Promise<NoteItem[]> {
-  const current = await loadNotes();
-  const next = current.map((item) =>
-    item.id === id ? { ...item, color, updatedAt: Date.now(), syncStatus: 'pending' as const } : item,
-  );
-  await saveNotes(next);
+  // N-1: lock the load/save; Firebase calls are outside.
+  let next: NoteItem[] = [];
+  await withNotesSaveLock(async () => {
+    const current = await loadNotes();
+    next = current.map((item) =>
+      item.id === id ? { ...item, color, updatedAt: Date.now(), syncStatus: 'pending' as const } : item,
+    );
+    await saveNotes(next);
+  });
   const updated = next.find((item) => item.id === id);
   if (updated) {
     const synced = await pushNoteIfAuthenticated(updated);
     if (synced) {
-      const syncedNext = next.map((item) => item.id === id ? { ...item, syncStatus: 'synced' as const } : item);
-      await saveNotes(syncedNext);
-      return normalizeNotes(syncedNext);
+      const syncedNext = await withNotesSaveLock(async () => {
+        const fresh = await loadNotes();
+        const mapped = fresh.map((item) => item.id === id ? { ...item, syncStatus: 'synced' as const } : item);
+        await saveNotes(mapped);
+        return normalizeNotes(mapped);
+      });
+      return syncedNext;
     }
   }
   if (updated?.groupId) {
@@ -555,19 +598,27 @@ export async function setNoteColor(id: string, color: NoteItem['color'] = 'defau
 }
 
 export async function updateNoteTitle(id: string, title: string): Promise<NoteItem[]> {
-  const current = await loadNotes();
-  const next = current.map((item) =>
-    item.id === id ? { ...item, title: normalizeText(title) || undefined, updatedAt: Date.now(), syncStatus: 'pending' as const } : item,
-  );
-  await saveNotes(next);
+  // N-1: lock the load/save; Firebase calls are outside.
+  let next: NoteItem[] = [];
+  await withNotesSaveLock(async () => {
+    const current = await loadNotes();
+    next = current.map((item) =>
+      item.id === id ? { ...item, title: normalizeText(title) || undefined, updatedAt: Date.now(), syncStatus: 'pending' as const } : item,
+    );
+    await saveNotes(next);
+  });
   const updated = next.find((item) => item.id === id);
   if (updated) {
     const synced = await pushNoteIfAuthenticated(updated);
     if (synced) {
-      const syncedNext = next.map((item) => item.id === id ? { ...item, syncStatus: 'synced' as const } : item);
-      await saveNotes(syncedNext);
+      const syncedNext = await withNotesSaveLock(async () => {
+        const fresh = await loadNotes();
+        const mapped = fresh.map((item) => item.id === id ? { ...item, syncStatus: 'synced' as const } : item);
+        await saveNotes(mapped);
+        return normalizeNotes(mapped);
+      });
       if (updated.groupId) await upsertSharedGroupNote(updated.groupId, { ...updated, syncStatus: 'synced' });
-      return normalizeNotes(syncedNext);
+      return syncedNext;
     }
   }
   if (updated?.groupId) await upsertSharedGroupNote(updated.groupId, updated);
@@ -575,18 +626,26 @@ export async function updateNoteTitle(id: string, title: string): Promise<NoteIt
 }
 
 export async function toggleArchived(id: string): Promise<NoteItem[]> {
-  const current = await loadNotes();
-  const next = current.map((item) =>
-    item.id === id ? { ...item, archived: !item.archived, updatedAt: Date.now(), syncStatus: 'pending' as const } : item,
-  );
-  await saveNotes(next);
+  // N-1: lock the load/save; Firebase calls are outside.
+  let next: NoteItem[] = [];
+  await withNotesSaveLock(async () => {
+    const current = await loadNotes();
+    next = current.map((item) =>
+      item.id === id ? { ...item, archived: !item.archived, updatedAt: Date.now(), syncStatus: 'pending' as const } : item,
+    );
+    await saveNotes(next);
+  });
   const updated = next.find((item) => item.id === id);
   if (updated) {
     const synced = await pushNoteIfAuthenticated(updated);
     if (synced) {
-      const syncedNext = next.map((item) => item.id === id ? { ...item, syncStatus: 'synced' as const } : item);
-      await saveNotes(syncedNext);
-      return normalizeNotes(syncedNext);
+      const syncedNext = await withNotesSaveLock(async () => {
+        const fresh = await loadNotes();
+        const mapped = fresh.map((item) => item.id === id ? { ...item, syncStatus: 'synced' as const } : item);
+        await saveNotes(mapped);
+        return normalizeNotes(mapped);
+      });
+      return syncedNext;
     }
   }
   if (updated?.groupId) {
@@ -596,18 +655,26 @@ export async function toggleArchived(id: string): Promise<NoteItem[]> {
 }
 
 export async function setNoteSecret(id: string, isSecret: boolean): Promise<NoteItem[]> {
-  const current = await loadNotes();
-  const next = current.map((item) =>
-    item.id === id ? { ...item, isSecret, updatedAt: Date.now(), syncStatus: 'pending' as const } : item,
-  );
-  await saveNotes(next);
+  // N-1: lock the load/save; Firebase calls are outside.
+  let next: NoteItem[] = [];
+  await withNotesSaveLock(async () => {
+    const current = await loadNotes();
+    next = current.map((item) =>
+      item.id === id ? { ...item, isSecret, updatedAt: Date.now(), syncStatus: 'pending' as const } : item,
+    );
+    await saveNotes(next);
+  });
   const updated = next.find((item) => item.id === id);
   if (updated) {
     const synced = await pushNoteIfAuthenticated(updated);
     if (synced) {
-      const syncedNext = next.map((item) => item.id === id ? { ...item, syncStatus: 'synced' as const } : item);
-      await saveNotes(syncedNext);
-      return normalizeNotes(syncedNext);
+      const syncedNext = await withNotesSaveLock(async () => {
+        const fresh = await loadNotes();
+        const mapped = fresh.map((item) => item.id === id ? { ...item, syncStatus: 'synced' as const } : item);
+        await saveNotes(mapped);
+        return normalizeNotes(mapped);
+      });
+      return syncedNext;
     }
   }
   if (updated?.groupId) {
@@ -641,20 +708,28 @@ export async function updateWorkflowStatus(
   id: string,
   status: WorkflowStatus,
 ): Promise<NoteItem[]> {
-  const current = await loadNotes();
-  const next = current.map((item) =>
-    item.id === id
-      ? { ...item, workflowStatus: status, updatedAt: Date.now(), syncStatus: 'pending' as const }
-      : item,
-  );
-  await saveNotes(next);
+  // N-1: lock the load/save; Firebase calls are outside.
+  let next: NoteItem[] = [];
+  await withNotesSaveLock(async () => {
+    const current = await loadNotes();
+    next = current.map((item) =>
+      item.id === id
+        ? { ...item, workflowStatus: status, updatedAt: Date.now(), syncStatus: 'pending' as const }
+        : item,
+    );
+    await saveNotes(next);
+  });
   const updated = next.find((item) => item.id === id);
   if (updated) {
     const synced = await pushNoteIfAuthenticated(updated);
     if (synced) {
-      const syncedNext = next.map((item) => item.id === id ? { ...item, syncStatus: 'synced' as const } : item);
-      await saveNotes(syncedNext);
-      return normalizeNotes(syncedNext);
+      const syncedNext = await withNotesSaveLock(async () => {
+        const fresh = await loadNotes();
+        const mapped = fresh.map((item) => item.id === id ? { ...item, syncStatus: 'synced' as const } : item);
+        await saveNotes(mapped);
+        return normalizeNotes(mapped);
+      });
+      return syncedNext;
     }
   }
   if (updated?.groupId) {
@@ -695,28 +770,41 @@ async function persistNoteMutation(
   id: string,
   mutate: (item: NoteItem) => NoteItem | null,
 ): Promise<NoteItem[]> {
-  const current = await loadNotes();
-  let mutated: NoteItem | null = null;
-  const next = current.map((item) => {
-    if (item.id !== id) return item;
-    const updated = mutate(item);
-    if (!updated) return item;
-    mutated = updated;
-    return updated;
+  // N-1: wrap the load/save section with the write lock to prevent concurrent
+  // mutations from racing on AsyncStorage. Firebase calls are kept outside.
+  let finalItem: NoteItem | null = null;
+  let next: NoteItem[] = [];
+  const result = await withNotesSaveLock(async () => {
+    const current = await loadNotes();
+    let mutated: NoteItem | null = null;
+    const mapped = current.map((item) => {
+      if (item.id !== id) return item;
+      const updated = mutate(item);
+      if (!updated) return item;
+      mutated = updated;
+      return updated;
+    });
+    if (!mutated) return normalizeNotes(current);
+    finalItem = mutated as NoteItem;
+    next = mapped;
+    await saveNotes(next);
+    return null; // signal: proceed to Firebase outside the lock
   });
-  const finalItem = mutated as NoteItem | null;
-  if (!finalItem) return normalizeNotes(current);
-  await saveNotes(next);
-  const synced = await pushNoteIfAuthenticated(finalItem);
+  if (result !== null) return result; // mutate returned null (no-op)
+  const synced = await pushNoteIfAuthenticated(finalItem!);
   if (synced) {
-    const syncedNext = next.map((item) =>
-      item.id === id ? { ...item, syncStatus: 'synced' as const } : item,
-    );
-    await saveNotes(syncedNext);
-    return normalizeNotes(syncedNext);
+    const syncedNext = await withNotesSaveLock(async () => {
+      const fresh = await loadNotes();
+      const updated = fresh.map((item) =>
+        item.id === id ? { ...item, syncStatus: 'synced' as const } : item,
+      );
+      await saveNotes(updated);
+      return normalizeNotes(updated);
+    });
+    return syncedNext;
   }
-  if (finalItem.groupId) {
-    await upsertSharedGroupNote(finalItem.groupId, finalItem).catch(() => undefined);
+  if (finalItem!.groupId) {
+    await upsertSharedGroupNote(finalItem!.groupId, finalItem!).catch(() => undefined);
   }
   return normalizeNotes(next);
 }
@@ -917,29 +1005,37 @@ export async function updateNoteSmartType(
   workflowStatus?: WorkflowStatus,
   workflowMetadata?: WorkflowMetadata,
 ): Promise<NoteItem[]> {
-  const current = await loadNotes();
-  const next = current.map((item) =>
-    item.id === id
-      ? {
-          ...item,
-          smartType,
-          workflowStatus: workflowStatus || item.workflowStatus,
-          workflowMetadata: workflowMetadata || item.workflowMetadata,
-          updatedAt: Date.now(),
-          syncStatus: 'pending' as const,
-        }
-      : item,
-  );
-  await saveNotes(next);
+  // N-1: lock the load/save; Firebase calls are outside.
+  let next: NoteItem[] = [];
+  await withNotesSaveLock(async () => {
+    const current = await loadNotes();
+    next = current.map((item) =>
+      item.id === id
+        ? {
+            ...item,
+            smartType,
+            workflowStatus: workflowStatus || item.workflowStatus,
+            workflowMetadata: workflowMetadata || item.workflowMetadata,
+            updatedAt: Date.now(),
+            syncStatus: 'pending' as const,
+          }
+        : item,
+    );
+    await saveNotes(next);
+  });
   const updated = next.find((item) => item.id === id);
   if (updated) {
     const synced = await pushNoteIfAuthenticated(updated);
     if (synced) {
-      const syncedNext = next.map((item) =>
-        item.id === id ? { ...item, syncStatus: 'synced' as const } : item,
-      );
-      await saveNotes(syncedNext);
-      return normalizeNotes(syncedNext);
+      const syncedNext = await withNotesSaveLock(async () => {
+        const fresh = await loadNotes();
+        const mapped = fresh.map((item) =>
+          item.id === id ? { ...item, syncStatus: 'synced' as const } : item,
+        );
+        await saveNotes(mapped);
+        return normalizeNotes(mapped);
+      });
+      return syncedNext;
     }
   }
   if (updated?.groupId) {
@@ -949,16 +1045,19 @@ export async function updateNoteSmartType(
 }
 
 export async function markNotesSynced(noteIds: ReadonlySet<string>): Promise<NoteItem[]> {
-  const current = await loadNotes();
-  const updated = current.map((n) =>
-    // C-4: also transition 'retrying' → 'synced'; previously only 'pending' was
-    // handled, causing notes stuck in 'retrying' to trigger perpetual re-sync loops.
-    noteIds.has(n.id) && (n.syncStatus === 'pending' || n.syncStatus === 'retrying')
-      ? { ...n, syncStatus: 'synced' as const }
-      : n,
-  );
-  await saveNotes(updated);
-  return normalizeNotes(updated);
+  // N-1: lock the load/save to avoid overwriting a concurrent mutation.
+  return withNotesSaveLock(async () => {
+    const current = await loadNotes();
+    const updated = current.map((n) =>
+      // C-4: also transition 'retrying' → 'synced'; previously only 'pending' was
+      // handled, causing notes stuck in 'retrying' to trigger perpetual re-sync loops.
+      noteIds.has(n.id) && (n.syncStatus === 'pending' || n.syncStatus === 'retrying')
+        ? { ...n, syncStatus: 'synced' as const }
+        : n,
+    );
+    await saveNotes(updated);
+    return normalizeNotes(updated);
+  });
 }
 
 export async function clearNotes(): Promise<void> {
@@ -972,32 +1071,41 @@ export async function clearNotes(): Promise<void> {
 }
 
 export async function clearArchivedNotes(): Promise<NoteItem[]> {
-  const current = await loadNotes();
-  const archived = current.filter((n) => n.archived && !n.deletedAt);
-  for (const n of archived) await markDeletedNoteKey(noteStorageKey(n.id, n.groupId ? 'group' : 'personal', n.groupId));
-  const kept = current.filter((n) => !n.archived);
-  await saveNotes(kept);
-  return normalizeNotes(kept);
+  // N-1: lock the load/markDeleted/save sequence.
+  return withNotesSaveLock(async () => {
+    const current = await loadNotes();
+    const archived = current.filter((n) => n.archived && !n.deletedAt);
+    for (const n of archived) await markDeletedNoteKey(noteStorageKey(n.id, n.groupId ? 'group' : 'personal', n.groupId));
+    const kept = current.filter((n) => !n.archived);
+    await saveNotes(kept);
+    return normalizeNotes(kept);
+  });
 }
 
 export async function clearUnpinnedNotes(): Promise<NoteItem[]> {
-  const current = await loadNotes();
-  const unpinned = current.filter((n) => !n.pinned && !n.deletedAt);
-  for (const n of unpinned) await markDeletedNoteKey(noteStorageKey(n.id, n.groupId ? 'group' : 'personal', n.groupId));
-  const kept = current.filter((n) => n.pinned);
-  await saveNotes(kept);
-  return normalizeNotes(kept);
+  // N-1: lock the load/markDeleted/save sequence.
+  return withNotesSaveLock(async () => {
+    const current = await loadNotes();
+    const unpinned = current.filter((n) => !n.pinned && !n.deletedAt);
+    for (const n of unpinned) await markDeletedNoteKey(noteStorageKey(n.id, n.groupId ? 'group' : 'personal', n.groupId));
+    const kept = current.filter((n) => n.pinned);
+    await saveNotes(kept);
+    return normalizeNotes(kept);
+  });
 }
 
 export async function clearNotesOlderThan(days: number): Promise<NoteItem[]> {
   if (days <= 0) return loadNotes();
   const cutoff = Date.now() - days * 86_400_000;
-  const current = await loadNotes();
-  const old = current.filter((n) => !n.pinned && !n.deletedAt && n.updatedAt < cutoff);
-  for (const n of old) await markDeletedNoteKey(noteStorageKey(n.id, n.groupId ? 'group' : 'personal', n.groupId));
-  const kept = current.filter((n) => n.pinned || n.updatedAt >= cutoff);
-  await saveNotes(kept);
-  return normalizeNotes(kept);
+  // N-1: lock the load/markDeleted/save sequence.
+  return withNotesSaveLock(async () => {
+    const current = await loadNotes();
+    const old = current.filter((n) => !n.pinned && !n.deletedAt && n.updatedAt < cutoff);
+    for (const n of old) await markDeletedNoteKey(noteStorageKey(n.id, n.groupId ? 'group' : 'personal', n.groupId));
+    const kept = current.filter((n) => n.pinned || n.updatedAt >= cutoff);
+    await saveNotes(kept);
+    return normalizeNotes(kept);
+  });
 }
 
 export async function hardDeleteAllNotes(): Promise<void> {

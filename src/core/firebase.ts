@@ -792,14 +792,16 @@ export async function syncNotesWithFirebase(localNotes: NoteItem[], localTemplat
   }
   const serverNotes = Array.from(mergedNotesMap.values());
 
-  const templatesSnap = await getDocs(query(templatesRef));
+  // N-2: build the merged templates result from serverTemplatesMap (already in memory
+  // from the first read above) instead of doing a second getDocs — avoids double read.
   const mergedTemplatesMap = new Map<string, NoteTemplate>();
   for (const t of localTemplatesLimited) mergedTemplatesMap.set(t.id, t);
-  templatesSnap.forEach((d) => {
-    const x = { ...(d.data() as NoteTemplate), id: d.id };
-    const existing = mergedTemplatesMap.get(x.id);
-    if (!existing || tsMillis(x.updatedAt) >= tsMillis(existing.updatedAt)) mergedTemplatesMap.set(x.id, x);
-  });
+  for (const [tid, serverTemplate] of serverTemplatesMap.entries()) {
+    const existing = mergedTemplatesMap.get(tid);
+    if (!existing || tsMillis(serverTemplate.updatedAt) >= tsMillis(existing.updatedAt)) {
+      mergedTemplatesMap.set(tid, serverTemplate);
+    }
+  }
   const serverTemplates = Array.from(mergedTemplatesMap.values());
 
   return { pushedNotes, pushedTemplates, serverNotes, serverTemplates };
@@ -1055,7 +1057,14 @@ export async function upsertSharedGroupNote(groupId: string, note: NoteItem): Pr
   const groupRef = doc(rt.db, 'noteGroups', groupId);
   const groupSnap = await getDoc(groupRef);
   if (!groupSnap.exists()) return;
-  await setDoc(doc(rt.db, 'noteGroups', groupId, 'notes', note.id), { ...note, groupId, updatedAtServer: serverTimestamp() }, { merge: true });
+  // N-4: sanitize before writing to strip imageBase64 and avoid exceeding Firestore's
+  // 1MB document limit. Matches what upsertNoteInFirebase does.
+  const payload = sanitizeNoteForFirestore({ ...note, groupId });
+  await setDoc(
+    doc(rt.db, 'noteGroups', groupId, 'notes', note.id),
+    { ...payload, groupId, uid: user.uid, updatedAtServer: serverTimestamp() },
+    { merge: true },
+  );
 }
 
 export async function deleteSharedGroupNote(groupId: string, noteId: string): Promise<void> {
