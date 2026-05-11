@@ -277,6 +277,7 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
   const pendingVaultRef = useRef(false);
   const draftInputRef = useRef<React.ElementRef<typeof TextInput> | null>(null);
   const templateInputRef = useRef<React.ElementRef<typeof TextInput> | null>(null);
+  const templateToInputRef = useRef<React.ElementRef<typeof TextInput> | null>(null);
 
   // Ref to avoid auto-pushing notes back to Firebase when they just arrived from the server.
   const serverUpdateRef = useRef(false);
@@ -466,7 +467,9 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
       const parsed = JSON.parse(raw);
       const text = typeof parsed?.text === 'string' ? parsed.text.trim() : '';
       const images: string[] = Array.isArray(parsed?.images)
-        ? parsed.images.map((v: unknown) => String(v || '')).filter(Boolean)
+        ? parsed.images
+            .map((v: unknown) => String(v || ''))
+            .filter((v: string) => v && !v.startsWith('blob:'))
         : [];
       if (!text && images.length === 0) return;
       const category: NoteCategory | null =
@@ -739,14 +742,18 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
     try {
       const res = await fetch(uri);
       const blob = await res.blob();
-      return await new Promise<string>((resolve, reject) => {
+      const dataUri = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = reject;
+        reader.onload = () => resolve(String(reader.result || ''));
+        reader.onerror = () => reject(new Error('FileReader failed'));
         reader.readAsDataURL(blob);
       });
+      // Revoke the blob URL after converting to free memory
+      URL.revokeObjectURL(uri);
+      return dataUri || '';
     } catch {
-      return uri;
+      // Never return a blob URL — it won't survive across sessions
+      return '';
     }
   }
 
@@ -754,6 +761,7 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
     const picked = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.9, base64: false });
     if (picked.canceled || !picked.assets?.length) return;
     const uri = await resolveImageUri(picked.assets[0].uri);
+    if (!uri) { showToast('Could not load image'); return; }
     setDraftImages((current) => Array.from(new Set([uri, ...current])).slice(0, 6));
   }
 
@@ -768,6 +776,7 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
     });
     if (picked.canceled || !picked.assets?.length) return;
     const uri = await resolveImageUri(picked.assets[0].uri);
+    if (!uri) { showToast('Could not load image'); return; }
     setDraftImages((current) => Array.from(new Set([uri, ...current])).slice(0, 6));
   }
 
@@ -1172,6 +1181,8 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
     setTemplateTo('');
     setTemplateSubject(category === 'work' ? 'Work update' : 'General note');
     setTemplateBody(text);
+    // Focus the 'to' field after the tab switches and re-renders
+    setTimeout(() => templateToInputRef.current?.focus(), 150);
   }
 
   async function createQuickReminderFromNote(note: NoteItem) {
@@ -1901,7 +1912,7 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
           <>
             <View style={[mainAppStyles.card, { backgroundColor: palette.card, borderColor: palette.border, width: '100%', alignSelf: 'stretch' }]}>
               <TextInput ref={templateInputRef} style={[mainAppStyles.input, { backgroundColor: palette.bg, color: palette.fg, borderColor: palette.border, marginTop: 0 }]} placeholder="Template name" placeholderTextColor={palette.muted} value={templateName} onChangeText={setTemplateName} />
-              <TextInput style={[mainAppStyles.input, { backgroundColor: palette.bg, color: palette.fg, borderColor: palette.border }]} placeholder="To (emails separated by ;)" placeholderTextColor={palette.muted} value={templateTo} onChangeText={setTemplateTo} />
+              <TextInput ref={templateToInputRef} style={[mainAppStyles.input, { backgroundColor: palette.bg, color: palette.fg, borderColor: palette.border }]} placeholder="To (emails separated by ;)" placeholderTextColor={palette.muted} value={templateTo} onChangeText={setTemplateTo} />
               <TextInput style={[mainAppStyles.input, { backgroundColor: palette.bg, color: palette.fg, borderColor: palette.border }]} placeholder="Subject" placeholderTextColor={palette.muted} value={templateSubject} onChangeText={setTemplateSubject} />
               <TextInput style={[mainAppStyles.input, styles.noteInput, { backgroundColor: palette.bg, color: palette.fg, borderColor: palette.border }]} placeholder="Body" placeholderTextColor={palette.muted} multiline value={templateBody} onChangeText={setTemplateBody} />
               <View style={styles.editorActions}>
@@ -1986,8 +1997,8 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
                       {[
                         { icon: 'create-outline' as const,      label: 'Editar',     color: palette.fg,  onPress: () => startEditingTemplate(template) },
                         { icon: 'copy-outline' as const,        label: 'Copiar',     color: palette.fg,  onPress: () => forceCopyToClipboard(buildTemplateShareText(template)).catch(() => undefined) },
-                        { icon: 'logo-whatsapp' as const,       label: 'WhatsApp',   color: '#25D366',   onPress: () => { const t = buildTemplateShareText(template); void Linking.openURL(`https://wa.me/?text=${encodeURIComponent(t)}`); } },
-                        { icon: 'mail-outline' as const,        label: 'Email',      color: palette.accent, onPress: () => { const b = buildTemplateShareText(template); void Linking.openURL(`mailto:${encodeURIComponent(template.to || '')}?subject=${encodeURIComponent(template.subject || template.name)}&body=${encodeURIComponent(b)}`); } },
+                        { icon: 'logo-whatsapp' as const,       label: 'WhatsApp',   color: '#25D366',   onPress: () => { const parts = [template.subject ? `*${template.subject}*` : '', template.body || ''].filter(Boolean); void Linking.openURL(`https://wa.me/?text=${encodeURIComponent(parts.join('\n\n'))}`); } },
+                        { icon: 'mail-outline' as const,        label: 'Email',      color: palette.accent, onPress: () => { if (!template.to?.trim()) { showToast('Add a recipient email to use this action'); return; } void Linking.openURL(`mailto:${encodeURIComponent(template.to)}?subject=${encodeURIComponent(template.subject || template.name)}&body=${encodeURIComponent(template.body || '')}`); } },
                         { icon: 'trash-outline' as const,       label: 'Eliminar',   color: '#ef4444',   onPress: () => removeTemplate(template.id).then(setTemplates) },
                       ].map((action, idx, arr) => (
                         <Pressable

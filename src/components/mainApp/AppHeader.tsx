@@ -68,7 +68,7 @@ function SyncChip({
   useEffect(() => {
     if (!lastSyncedAt) return;
     fadeAnim.setValue(0);
-    Animated.timing(fadeAnim, { toValue: 1, duration: 400, useNativeDriver: true }).start();
+    Animated.timing(fadeAnim, { toValue: 1, duration: 400, useNativeDriver: Platform.OS !== 'web' }).start();
   }, [lastSyncedAt]);
 
   // Refresh label every 60s so "hace Xm" stays accurate.

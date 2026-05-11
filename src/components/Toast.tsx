@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Animated, Text, View } from 'react-native';
+import { Animated, Platform, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 type ToastType = 'success' | 'info' | 'error';
@@ -55,15 +55,15 @@ export function Toast({
 
     // Fade + slide in
     Animated.parallel([
-      Animated.spring(opacity, { toValue: 1, useNativeDriver: true, tension: 120, friction: 10 }),
-      Animated.spring(translateY, { toValue: 0, useNativeDriver: true, tension: 120, friction: 10 }),
+      Animated.spring(opacity, { toValue: 1, useNativeDriver: Platform.OS !== 'web', tension: 120, friction: 10 }),
+      Animated.spring(translateY, { toValue: 0, useNativeDriver: Platform.OS !== 'web', tension: 120, friction: 10 }),
     ]).start();
 
     // Auto-dismiss after 2.2s
     const timer = setTimeout(() => {
       Animated.parallel([
-        Animated.timing(opacity, { toValue: 0, duration: 250, useNativeDriver: true }),
-        Animated.timing(translateY, { toValue: 16, duration: 250, useNativeDriver: true }),
+        Animated.timing(opacity, { toValue: 0, duration: 250, useNativeDriver: Platform.OS !== 'web' }),
+        Animated.timing(translateY, { toValue: 16, duration: 250, useNativeDriver: Platform.OS !== 'web' }),
       ]).start(() => onHide());
     }, 2200);
 

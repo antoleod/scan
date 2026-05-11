@@ -4,6 +4,7 @@ import {
   Image,
   Modal,
   PanResponder,
+  Platform,
   Pressable,
   Text,
   TextInput,
@@ -191,8 +192,8 @@ export function NoteCard({
     if (!note.attachments?.length) return;
     const loop = Animated.loop(
       Animated.sequence([
-        Animated.timing(heartPulse, { toValue: 1.12, duration: 700, useNativeDriver: true }),
-        Animated.timing(heartPulse, { toValue: 1, duration: 700, useNativeDriver: true }),
+        Animated.timing(heartPulse, { toValue: 1.12, duration: 700, useNativeDriver: Platform.OS !== 'web' }),
+        Animated.timing(heartPulse, { toValue: 1, duration: 700, useNativeDriver: Platform.OS !== 'web' }),
       ])
     );
     loop.start();
@@ -246,7 +247,7 @@ export function NoteCard({
     setSwipeOpen(false);
     Animated.spring(translateX, {
       toValue: 0,
-      useNativeDriver: true,
+      useNativeDriver: Platform.OS !== 'web',
       tension: 90,
       friction: 13,
     }).start();
@@ -258,7 +259,7 @@ export function NoteCard({
     setSwipeOpen(true);
     Animated.spring(translateX, {
       toValue: -SWIPE_WIDTH,
-      useNativeDriver: true,
+      useNativeDriver: Platform.OS !== 'web',
       tension: 90,
       friction: 13,
     }).start();

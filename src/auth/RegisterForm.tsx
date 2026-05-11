@@ -48,8 +48,7 @@ function FloatingOrb({ size, color, delay, dur, startX, startY }: {
 
   return (
     <Animated.View
-      style={[{ position: 'absolute', width: size, height: size, borderRadius: size / 2, backgroundColor: color }, style]}
-      pointerEvents="none"
+      style={[{ position: 'absolute', width: size, height: size, borderRadius: size / 2, backgroundColor: color, pointerEvents: 'none' }, style]}
     />
   );
 }
@@ -72,9 +71,8 @@ function GlowRing({ size, color, delay, dur, opacity }: { size: number; color: s
     <Animated.View
       style={[{
         position: 'absolute', width: size, height: size, borderRadius: size / 2,
-        borderWidth: 1, borderColor: color,
+        borderWidth: 1, borderColor: color, pointerEvents: 'none',
       }, style]}
-      pointerEvents="none"
     />
   );
 }
@@ -365,7 +363,7 @@ export default function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
             )}
           </View>
           {/* Tooltip Copied Overlay */}
-          <Animated.View style={[styles.tooltip, { backgroundColor: theme.secondary }, tooltipStyle]} pointerEvents="none">
+          <Animated.View style={[styles.tooltip, { backgroundColor: theme.secondary }, tooltipStyle, { pointerEvents: 'none' }]}>
             <Text style={[styles.tooltipText, { color: theme.primary }]}>COPIED!</Text>
           </Animated.View>
         </View>

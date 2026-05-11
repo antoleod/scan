@@ -157,8 +157,7 @@ function FloatingOrb({ size, color, delay, dur, startX, startY }: {
 
   return (
     <Animated.View
-      style={[{ position: 'absolute', width: size, height: size, borderRadius: size / 2, backgroundColor: color }, style]}
-      pointerEvents="none"
+      style={[{ position: 'absolute', width: size, height: size, borderRadius: size / 2, backgroundColor: color, pointerEvents: 'none' }, style]}
     />
   );
 }
@@ -181,9 +180,8 @@ function GlowRing({ size, color, delay, dur, opacity }: { size: number; color: s
     <Animated.View
       style={[{
         position: 'absolute', width: size, height: size, borderRadius: size / 2,
-        borderWidth: 1, borderColor: color,
+        borderWidth: 1, borderColor: color, pointerEvents: 'none',
       }, style]}
-      pointerEvents="none"
     />
   );
 }
@@ -650,20 +648,20 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
       <View style={[styles.background, palette.watermark ? styles.watermarkShell : null]}>
         {/* Premium ambient orbs – CSS on web, Reanimated on native */}
         {Platform.OS === 'web' ? (
-          <View style={StyleSheet.absoluteFill} pointerEvents="none">
+          <View style={[StyleSheet.absoluteFill, { pointerEvents: 'none' }]}>
             <View {...({ className: 'MyKit-orb-a' } as any)} style={{ width: 360, height: 360, top: -80, left: -80, backgroundColor: theme.primary + '33' }} />
             <View {...({ className: 'MyKit-orb-b' } as any)} style={{ width: 280, height: 280, bottom: -60, right: -60, backgroundColor: theme.secondary + '28' }} />
             <View {...({ className: 'MyKit-orb-c' } as any)} style={{ width: 220, height: 220, top: '40%', left: '55%', backgroundColor: theme.primary + '22' }} />
           </View>
         ) : (
-          <View style={StyleSheet.absoluteFill} pointerEvents="none">
+          <View style={[StyleSheet.absoluteFill, { pointerEvents: 'none' }]}>
             <FloatingOrb size={320} color={theme.primary} delay={0} dur={8000} startX={-80} startY={-80} />
             <FloatingOrb size={260} color={theme.secondary} delay={3000} dur={11000} startX={100} startY={200} />
             <FloatingOrb size={200} color={theme.primary} delay={6000} dur={9500} startX={50} startY={400} />
           </View>
         )}
         {/* Star ring — lives in background layer so it doesn't consume scroll height */}
-        <View style={styles.bgStarRing} pointerEvents="none">
+        <View style={[styles.bgStarRing, { pointerEvents: 'none' }]}>
           <Animated.View style={pulseStyle}>
             <View style={styles.iconShell}>
               <GlowRing size={150} color={theme.secondary} delay={0} dur={2800} opacity={0.22} />
@@ -695,12 +693,12 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
         </View>
 
         {palette.watermark && (
-          <View style={[styles.watermarkContainer, styles.watermarkVisible]} pointerEvents="none">
+          <View style={[styles.watermarkContainer, styles.watermarkVisible, { pointerEvents: 'none' }]}>
             {/* Chromatic aberration layer: Red (shift left) */}
     
 
             {/* Chromatic aberration layer: Blue (shift right) */}
-            <Animated.View style={[StyleSheet.absoluteFill, chromaticBlueStyle]} pointerEvents="none">
+            <Animated.View style={[StyleSheet.absoluteFill, chromaticBlueStyle, { pointerEvents: 'none' }]}>
               <View style={[styles.gridLineV, { left: '20%', backgroundColor: theme.primary }]} />
               <View style={[styles.gridLineV, { left: '40%', backgroundColor: theme.primary }]} />
               <View style={[styles.gridLineV, { left: '60%', backgroundColor: theme.primary }]} />
@@ -769,7 +767,7 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
             </View>
           </View>
         )}
-        <View pointerEvents="none" style={styles.readabilityVeil} />
+        <View style={[styles.readabilityVeil, { pointerEvents: 'none' }]} />
       </View>
 
       <ScrollView
@@ -807,7 +805,7 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
           <Animated.View style={[styles.formCard, { backgroundColor: theme.surface, borderColor: theme.border }, cardEntranceStyle]}>
             {/* Web shimmer overlay via CSS */}
             {Platform.OS === 'web' && (
-              <View {...({ className: 'MyKit-card-shimmer' } as any)} style={StyleSheet.absoluteFill} pointerEvents="none" />
+              <View {...({ className: 'MyKit-card-shimmer' } as any)} style={[StyleSheet.absoluteFill, { pointerEvents: 'none' }]} />
             )}
 
             {/* Biometric Quick Login */}
@@ -1006,7 +1004,7 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
             </Animated.View>
 
             {/* Tooltip Copied */}
-            <Animated.View style={[styles.tooltip, { backgroundColor: theme.secondary }, tooltipStyle]} pointerEvents="none">
+            <Animated.View style={[styles.tooltip, { backgroundColor: theme.secondary }, tooltipStyle, { pointerEvents: 'none' }]}>
               <Text style={[styles.tooltipText, { color: theme.primary }]}>COPIED!</Text>
             </Animated.View>
 

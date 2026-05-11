@@ -170,7 +170,7 @@ export async function loadNotes(): Promise<NoteItem[]> {
           archived: Boolean(item?.archived),
           imageBase64: typeof item?.imageBase64 === 'string' ? item.imageBase64 : undefined,
           imageMimeType: typeof item?.imageMimeType === 'string' ? item.imageMimeType : undefined,
-          attachments: Array.isArray(item?.attachments) ? item.attachments.map((v: unknown) => String(v || '')).filter(Boolean).slice(0, 8) : undefined,
+          attachments: Array.isArray(item?.attachments) ? item.attachments.map((v: unknown) => String(v || '')).filter((v: string) => Boolean(v) && !v.startsWith('blob:')).slice(0, 8) : undefined,
           versions: Array.isArray(item?.versions)
             ? item.versions.map((version: unknown) => ({
               id: String((version as { id?: unknown })?.id || makeId('ver')),
