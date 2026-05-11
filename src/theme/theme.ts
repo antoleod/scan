@@ -67,4 +67,32 @@
 
 export type ThemeName = keyof typeof themes;
 
+/** Legacy 6-field palette passed down from MainAppScreen (derived from `themes[ThemeName]`). */
+export type Palette = {
+  bg: string;
+  fg: string;
+  accent: string;
+  muted: string;
+  card: string;
+  border: string;
+};
+
+/**
+ * Extended semantic palette used by note-specific components (NoteCard,
+ * NoteContentRenderer, MedicationCard, NoteListBlock, NoteDetailModal).
+ * Typically derived from the legacy Palette in NotesTab's `uiPalette`.
+ */
+export type NotePalette = {
+  bg: string;
+  accent: string;
+  border: string;
+  surface: string;
+  surfaceAlt: string;
+  textBody: string;
+  textDim: string;
+  textMuted: string;
+  textPrimary: string;
+  chipBorder: string;
+};
+
 export const lightThemes: ThemeName[] = ['light'];

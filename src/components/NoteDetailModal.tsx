@@ -13,34 +13,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useCtrlEnterSave } from '../hooks/useCtrlEnterSave';
 import { parseServiceNowFields, buildRedactedText } from '../core/smartNotes';
 import { useFieldVisibility } from '../hooks/useFieldVisibility';
-
-type NoteCategory = 'general' | 'work' | 'health' | 'shopping';
-type NoteColor   = 'default' | 'amber' | 'mint' | 'sky' | 'rose';
-
-type NoteItem = {
-  id: string;
-  title?: string;
-  text: string;
-  category: NoteCategory;
-  pinned: boolean;
-  archived?: boolean;
-  color?: NoteColor;
-  attachments?: string[];
-  updatedAt: number;
-  createdAt?: number;
-};
-
-type Palette = {
-  bg: string;
-  accent: string;
-  border: string;
-  surface: string;
-  surfaceAlt: string;
-  textBody: string;
-  textDim: string;
-  textMuted: string;
-  chipBorder: string;
-};
+import type { NoteItem, NoteColor } from '../core/notes';
+import type { NotePalette as Palette } from '../theme/theme';
 
 const colorSwatches: { key: NoteColor; hex: string; label: string }[] = [
   { key: 'default', hex: 'transparent', label: 'None'   },

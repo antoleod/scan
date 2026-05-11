@@ -20,18 +20,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { detectNoteEntities } from '../core/smartNotes';
 import { defaultSettings } from '../core/settings';
 import type { AppSettings } from '../types';
-
-type Palette = {
-  bg: string;
-  fg: string;
-  accent: string;
-  muted: string;
-  card: string;
-  border: string;
-  surface?: string;
-  textBody?: string;
-  textDim?: string;
-};
+import type { Palette } from '../theme/theme';
 
 type FieldKey = 'rawText' | 'pi' | 'hostname' | 'ip' | 'office';
 

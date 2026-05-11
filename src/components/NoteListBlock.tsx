@@ -2,19 +2,7 @@ import React from 'react';
 import { Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SmartNoteModel } from '../core/smartNotes';
-
-type Palette = {
-  bg: string;
-  accent: string;
-  border: string;
-  surface: string;
-  surfaceAlt: string;
-  textBody: string;
-  textDim: string;
-  textMuted: string;
-  textPrimary: string;
-  chipBorder: string;
-};
+import type { NotePalette as Palette } from '../theme/theme';
 
 export function NoteListBlock({
   model,

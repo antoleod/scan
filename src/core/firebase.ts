@@ -33,6 +33,7 @@ import {
   serverTimestamp,
   setDoc,
   where,
+  writeBatch,
 } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { Database, getDatabase } from 'firebase/database';
@@ -726,45 +727,93 @@ export async function syncNotesWithFirebase(localNotes: NoteItem[], localTemplat
   // Push local notes that are newer than (or absent from) the server.
   const localNotesLimited = localNotes.slice(0, 3000);
   let pushedNotes = 0;
+
+  // --- Build write arrays before touching Firestore ---
+
+  // Notes to push
+  type NoteWriteOp = { noteId: string; payload: Record<string, unknown> };
+  const noteWrites: NoteWriteOp[] = [];
   for (const note of localNotesLimited) {
     const key = noteStorageKey(note.id, note.groupId ? 'group' : 'personal', note.groupId);
-    if (deletedKeys.has(key) || note.deletedAt) {
-      continue;
-    }
+    if (deletedKeys.has(key) || note.deletedAt) continue;
     const serverNote = serverNotesMap.get(note.id);
     // Never overwrite a server-side tombstone with a local copy, even if local is newer.
     if (serverNote?.deletedAt) continue;
     if (!serverNote || tsMillis(note.updatedAt) > tsMillis(serverNote.updatedAt)) {
-      const payload = { ...sanitizeNoteForFirestore(note), uid, updatedAtServer: serverTimestamp() };
-      await setDoc(doc(notesRef, note.id), payload, { merge: true });
+      noteWrites.push({
+        noteId: note.id,
+        payload: { ...sanitizeNoteForFirestore(note), uid, updatedAtServer: serverTimestamp() },
+      });
       serverNotesMap.set(note.id, note); // keep in-memory map current
       pushedNotes += 1;
     }
   }
 
-  // Re-apply tombstones so deleted notes do not get resurrected by stale clients.
+  // Tombstones to re-apply so deleted notes are not resurrected by stale clients.
+  type TombstoneWriteOp = { noteId: string; payload: Record<string, unknown> };
+  const tombstoneWrites: TombstoneWriteOp[] = [];
   for (const [noteId, serverNote] of serverNotesMap.entries()) {
     const key = noteStorageKey(noteId, serverNote.groupId ? 'group' : 'personal', serverNote.groupId);
     if (!deletedKeys.has(key)) continue;
     if (serverNote.deletedAt) continue;
-    await setDoc(doc(notesRef, noteId), {
-      id: noteId,
-      deletedAt: Date.now(),
-      uid,
-      updatedAtServer: serverTimestamp(),
-    }, { merge: true });
+    tombstoneWrites.push({
+      noteId,
+      payload: { id: noteId, deletedAt: Date.now(), uid, updatedAtServer: serverTimestamp() },
+    });
   }
 
-  // Push local templates that are newer than (or absent from) the server.
+  // Templates to push
   const localTemplatesLimited = localTemplates.slice(0, 300);
   let pushedTemplates = 0;
+  type TemplateWriteOp = { templateId: string; payload: Record<string, unknown> };
+  const templateWrites: TemplateWriteOp[] = [];
   for (const template of localTemplatesLimited) {
     const serverTemplate = serverTemplatesMap.get(template.id);
     if (!serverTemplate || tsMillis(template.updatedAt) >= tsMillis(serverTemplate.updatedAt)) {
-      await setDoc(doc(templatesRef, template.id), { ...template, uid, updatedAtServer: serverTimestamp() }, { merge: true });
+      templateWrites.push({
+        templateId: template.id,
+        payload: { ...template, uid, updatedAtServer: serverTimestamp() },
+      });
       pushedTemplates += 1;
     }
   }
+
+  // --- Commit all writes in batches (max 499 ops per commit) ---
+  const BATCH_LIMIT = 499;
+  let batch = writeBatch(rt.db);
+  let opCount = 0;
+
+  for (const { noteId, payload } of noteWrites) {
+    batch.set(doc(notesRef, noteId), payload, { merge: true });
+    opCount++;
+    if (opCount >= BATCH_LIMIT) {
+      await batch.commit();
+      batch = writeBatch(rt.db);
+      opCount = 0;
+    }
+  }
+
+  for (const { noteId, payload } of tombstoneWrites) {
+    batch.set(doc(notesRef, noteId), payload, { merge: true });
+    opCount++;
+    if (opCount >= BATCH_LIMIT) {
+      await batch.commit();
+      batch = writeBatch(rt.db);
+      opCount = 0;
+    }
+  }
+
+  for (const { templateId, payload } of templateWrites) {
+    batch.set(doc(templatesRef, templateId), payload, { merge: true });
+    opCount++;
+    if (opCount >= BATCH_LIMIT) {
+      await batch.commit();
+      batch = writeBatch(rt.db);
+      opCount = 0;
+    }
+  }
+
+  if (opCount > 0) await batch.commit();
 
   // Build merged result from in-memory data — avoids a second full getDocs read.
   // serverNotesMap already contains all server notes from the first read above.

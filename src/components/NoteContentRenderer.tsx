@@ -11,62 +11,8 @@ import { ShoppingListBlockV2 } from './ShoppingListBlockV2';
 import { parseShoppingListV2 } from '../core/shoppingListV2';
 import { MedicationCard } from './MedicationCard';
 import { NoteListBlock } from './NoteListBlock';
-
-type Palette = {
-  bg: string;
-  accent: string;
-  border: string;
-  surface: string;
-  surfaceAlt: string;
-  textBody: string;
-  textDim: string;
-  textMuted: string;
-  textPrimary: string;
-  chipBorder: string;
-};
-
-type NoteColor = 'default' | 'amber' | 'mint' | 'sky' | 'rose';
-
-type NoteItem = {
-  id: string;
-  title?: string;
-  text: string;
-  category: string;
-  pinned: boolean;
-  archived?: boolean;
-  color?: NoteColor;
-  attachments?: string[];
-  versions?: { id: string; title?: string; text: string; createdAt: number }[];
-  updatedAt: number;
-  syncStatus?: 'pending' | 'retrying' | 'failed' | 'offline' | 'synced';
-  smartType?: 'none' | 'medication' | 'shopping' | 'reminder' | 'task';
-  workflowStatus?: 'draft' | 'active' | 'snoozed' | 'completed' | 'dismissed';
-  workflowMetadata?: {
-    medicationName?: string;
-    doseText?: string;
-    takenAt?: number;
-    takenAtText?: string;
-    reason?: string;
-    followUpAt?: number;
-    followUpLabel?: string;
-    medications?: Array<{
-      name: string;
-      dose?: string;
-      takenAt?: number;
-      lastTakenAt?: number;
-      nextSuggestedAt?: number;
-      snoozedUntil?: number;
-      lastActionAt?: number;
-      recommendedIntervalHours?: number;
-      minimumIntervalHours?: number;
-      followPrescription?: boolean;
-      status?: 'active' | 'snoozed' | 'dismissed';
-      safetyNote?: string;
-    }>;
-    checklistItems?: { id: string; text: string; completed: boolean; quantity?: string; unit?: string; rawText?: string }[];
-  };
-  groupId?: string;
-};
+import type { NoteItem } from '../core/notes';
+import type { NotePalette as Palette } from '../theme/theme';
 
 interface NoteContentRendererProps {
   note: NoteItem;

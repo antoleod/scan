@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Image, Linking, Modal, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View, Alert } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, FlatList, Image, Linking, Modal, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View, Alert } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import * as ImagePicker from 'expo-image-picker';
@@ -72,8 +72,7 @@ import { NoteOcrModal } from '../../NoteOcrModal';
 import { NoteDetailModal } from '../../NoteDetailModal';
 import { Toast, useToast } from '../../Toast';
 import { AppSettings } from '../../../types';
-
-type Palette = { bg: string; fg: string; accent: string; muted: string; card: string; border: string };
+import type { Palette } from '../../../theme/theme';
 type WorkspaceTab = 'notes' | 'templates' | 'clipboard';
 type NoteFilter = 'all' | 'work' | 'pinned' | 'draft' | 'archived';
 type InboxView = 'all' | 'shopping' | 'medication' | 'work' | 'reminder' | 'image';
@@ -1359,7 +1358,7 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
         </View>
       ) : null}
 
-      <ScrollView
+      <FlatList
         style={[mainAppStyles.screen, Platform.OS === 'web' ? ({ scrollbarWidth: 'none', msOverflowStyle: 'none' } as any) : null]}
         contentInsetAdjustmentBehavior="automatic"
         showsVerticalScrollIndicator={false}
@@ -1373,12 +1372,148 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
             colors={[palette.accent]}
           />
         }
-      >
-      <View style={[styles.workspace, { width: '100%', minWidth: 0, alignSelf: 'stretch' }]}>
+        data={workspaceTab === 'notes' ? noteRows : []}
+        keyExtractor={(_, index) => `row-${index}`}
+        renderItem={({ item: row, index: rowIndex }) => (
+          <View key={`row-${rowIndex}`} style={[styles.gridRow, { marginBottom: 10 }]}>
+            {row.map((note) => {
+              const expanded = expandedNoteId === note.id;
+              const editing = editingNoteId === note.id;
+              if (note.isSecret && !pinUnlocked) {
+                return (
+                  <View key={note.id} style={{ flex: 1, minWidth: 0 }}>
+                    <Pressable
+                      onPress={() => setPinModalMode('unlock')}
+                      onLongPress={() => {
+                        Alert.alert('Secret note', 'Unlock secret notes to view, edit or remove this entry.', [
+                          { text: 'Cancel', style: 'cancel' },
+                          { text: 'Unlock', onPress: () => setPinModalMode('unlock') },
+                          { text: 'Make non-secret', style: 'destructive', onPress: () => setPinModalMode('unlock') },
+                        ]);
+                      }}
+                      style={({ pressed }) => ({
+                        borderWidth: 1,
+                        borderColor: uiPalette.chipBorder,
+                        borderLeftWidth: 4,
+                        borderLeftColor: '#F59E0B',
+                        borderRadius: 14,
+                        backgroundColor: uiPalette.surface,
+                        padding: 16,
+                        gap: 6,
+                        opacity: pressed ? 0.85 : 1,
+                      })}
+                    >
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                        <Ionicons name="lock-closed" size={16} color="#F59E0B" />
+                        <Text style={{ color: uiPalette.textBody, fontSize: 13, fontWeight: '700', flex: 1 }}>Secret note</Text>
+                        <Text style={{ color: uiPalette.textDim, fontSize: 10 }}>
+                          {new Date(note.updatedAt).toLocaleDateString()}
+                        </Text>
+                      </View>
+                      <Text style={{ color: uiPalette.textDim, fontSize: 11 }}>Tap to unlock</Text>
+                    </Pressable>
+                  </View>
+                );
+              }
+              return (
+                <View key={note.id} style={{ flex: 1, minWidth: 0 }}>
+                  <NoteCard
+                    note={note}
+                    palette={{
+                      bg: palette.bg,
+                      accent: palette.accent,
+                      border: palette.border,
+                      surface: uiPalette.surface,
+                      surfaceAlt: uiPalette.surfaceAlt,
+                      textBody: uiPalette.textBody,
+                      textDim: uiPalette.textDim,
+                      textMuted: uiPalette.textMuted,
+                      textPrimary: uiPalette.textPrimary,
+                      chipBorder: uiPalette.chipBorder,
+                    }}
+                    expanded={expanded}
+                    editing={editing}
+                    editingText={editingText}
+                    selected={selectedNoteIds.size > 0 ? selectedNoteIds.has(note.id) : undefined}
+                    onToggleExpand={() => {
+                      if (selectedNoteIds.size > 0) { toggleNoteSelection(note.id); return; }
+                      setExpandedNoteId(expanded ? null : note.id);
+                    }}
+                    onLongPress={() => enterSelectionMode(note.id)}
+                    onStartEdit={() => {
+                      setEditingNoteId(note.id);
+                      setEditingText(note.text);
+                    }}
+                    onChangeEditingText={(value) => {
+                      const nextText = String(value || '');
+                      setEditingText(nextText);
+                      if (!editing) {
+                        updateNoteText(note.id, nextText).then(setNotes).catch(() => undefined);
+                      }
+                    }}
+                    onSaveEdit={() => {
+                      updateNoteText(note.id, editingText).then((next) => {
+                        setNotes(next);
+                        clearDraftFlag(note.id).then(setNotes);
+                        setEditingNoteId(null);
+                        setEditingText('');
+                        showToast('Note saved', 'success');
+                      }).catch((error) => {
+                        console.error('Failed to save note:', error);
+                        showToast('Failed to save note', 'error');
+                      });
+                    }}
+                    onCancelEdit={() => {
+                      setEditingNoteId(null);
+                      setEditingText('');
+                    }}
+                    onTogglePinned={() => togglePinned(note.id).then(setNotes)}
+                    onOpenImage={setPreviewNoteImageUri}
+                    onCopy={(text) => forceCopyToClipboard(text).catch(() => undefined)}
+                    settings={settings}
+                    onCopyValue={(value, label) => {
+                      forceCopyToClipboard(value).then(() => showToast(`${label} copied`)).catch(() => undefined);
+                    }}
+                    onPressOffice={(office) => {
+                      setOfficeEntityFilter((current) => (current === office ? null : office));
+                      showToast(`Office filter: ${office}`);
+                    }}
+                    onSaveToDevice={() => saveNoteToDevice(note).catch(() => undefined)}
+                    onShare={() => setShareNote(note)}
+                    onOpenVersions={() => setVersionNoteId(note.id)}
+                    onSetReminder={() => createQuickReminderFromNote(note).catch(() => undefined)}
+                    onArchive={() => toggleArchived(note.id).then(setNotes)}
+                    onDelete={() => handleRemoveNote(note.id).then(setNotes)}
+                    onSetColor={(color) => setNoteColor(note.id, color).then(setNotes)}
+                    onDoubleTap={() => setDetailNote(note)}
+                    onDuplicate={() => duplicateNote(note).catch(() => undefined)}
+                    onUpdateWorkflowStatus={async (id, status) => {
+                      const next = await updateWorkflowStatus(id, status);
+                      setNotes(next);
+                    }}
+                    onMedicationTaken={(id, medIndex) => handleMedicationTaken(id, medIndex).catch(() => undefined)}
+                    onMedicationSnooze={(id, medIndex, ms) => handleMedicationSnooze(id, medIndex, ms).catch(() => undefined)}
+                    onMedicationDismissCycle={(id, medIndex) => handleMedicationDismissCycle(id, medIndex).catch(() => undefined)}
+                    onMedicationReactivate={(id, medIndex) => handleMedicationReactivate(id, medIndex).catch(() => undefined)}
+                  />
+                </View>
+              );
+            })}
+            {row.length < (isDesktop ? desktopColumns : 1) ? Array.from({ length: (isDesktop ? desktopColumns : 1) - row.length }).map((_, i) => <View key={`fill-${i}`} style={{ flex: 1, minWidth: 0 }} />) : null}
+          </View>
+        )}
+        onEndReached={() => { if (notesHasMore) setNotesPage((p) => p + 1); }}
+        onEndReachedThreshold={0.3}
+        removeClippedSubviews={Platform.OS !== 'web'}
+        maxToRenderPerBatch={8}
+        updateCellsBatchingPeriod={50}
+        initialNumToRender={12}
+        windowSize={5}
+        ListHeaderComponent={(
+          <View style={[styles.workspace, { width: '100%', minWidth: 0, alignSelf: 'stretch' }]}>
 
-        {workspaceTab === 'notes' ? (
-          <>
-            <View style={{ width: '100%', gap: 8, paddingHorizontal: 8, paddingTop: 12, paddingBottom: 16, alignSelf: 'stretch', minWidth: 0 }}>
+            {workspaceTab === 'notes' ? (
+              <View style={{ width: '100%', gap: 8, paddingHorizontal: 8, paddingTop: 12, paddingBottom: 16, alignSelf: 'stretch', minWidth: 0 }}>
               <ComposerSection
                 ref={draftInputRef}
                 palette={uiPalette}
@@ -1759,150 +1894,7 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
                 </View>
               ) : null}
 
-              <View style={styles.gridWrap}>
-                {noteRows.map((row, rowIndex) => (
-                  <View key={`row-${rowIndex}`} style={styles.gridRow}>
-                    {row.map((note) => {
-                      const expanded = expandedNoteId === note.id;
-                      const editing = editingNoteId === note.id;
-                      if (note.isSecret && !pinUnlocked) {
-                        return (
-                          <View key={note.id} style={{ flex: 1, minWidth: 0 }}>
-                            <Pressable
-                              onPress={() => setPinModalMode('unlock')}
-                              onLongPress={() => {
-                                Alert.alert('Secret note', 'Unlock secret notes to view, edit or remove this entry.', [
-                                  { text: 'Cancel', style: 'cancel' },
-                                  { text: 'Unlock', onPress: () => setPinModalMode('unlock') },
-                                  { text: 'Make non-secret', style: 'destructive', onPress: () => setPinModalMode('unlock') },
-                                ]);
-                              }}
-                              style={({ pressed }) => ({
-                                borderWidth: 1,
-                                borderColor: uiPalette.chipBorder,
-                                borderLeftWidth: 4,
-                                borderLeftColor: '#F59E0B',
-                                borderRadius: 14,
-                                backgroundColor: uiPalette.surface,
-                                padding: 16,
-                                gap: 6,
-                                opacity: pressed ? 0.85 : 1,
-                              })}
-                            >
-                              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                                <Ionicons name="lock-closed" size={16} color="#F59E0B" />
-                                <Text style={{ color: uiPalette.textBody, fontSize: 13, fontWeight: '700', flex: 1 }}>Secret note</Text>
-                                <Text style={{ color: uiPalette.textDim, fontSize: 10 }}>
-                                  {new Date(note.updatedAt).toLocaleDateString()}
-                                </Text>
-                              </View>
-                              <Text style={{ color: uiPalette.textDim, fontSize: 11 }}>Tap to unlock</Text>
-                            </Pressable>
-                          </View>
-                        );
-                      }
-                      return (
-                        <View key={note.id} style={{ flex: 1, minWidth: 0 }}>
-                          <NoteCard
-                            note={note}
-                            palette={{
-                              bg: palette.bg,
-                              accent: palette.accent,
-                              border: palette.border,
-                              surface: uiPalette.surface,
-                              surfaceAlt: uiPalette.surfaceAlt,
-                              textBody: uiPalette.textBody,
-                              textDim: uiPalette.textDim,
-                              textMuted: uiPalette.textMuted,
-                              textPrimary: uiPalette.textPrimary,
-                              chipBorder: uiPalette.chipBorder,
-                            }}
-                            expanded={expanded}
-                            editing={editing}
-                            editingText={editingText}
-                            selected={selectedNoteIds.size > 0 ? selectedNoteIds.has(note.id) : undefined}
-                            onToggleExpand={() => {
-                              if (selectedNoteIds.size > 0) { toggleNoteSelection(note.id); return; }
-                              setExpandedNoteId(expanded ? null : note.id);
-                            }}
-                            onLongPress={() => enterSelectionMode(note.id)}
-                            onStartEdit={() => {
-                              setEditingNoteId(note.id);
-                              setEditingText(note.text);
-                            }}
-                            onChangeEditingText={(value) => {
-                              const nextText = String(value || '');
-                              setEditingText(nextText);
-                              if (!editing) {
-                                updateNoteText(note.id, nextText).then(setNotes).catch(() => undefined);
-                              }
-                            }}
-                            onSaveEdit={() => {
-                              updateNoteText(note.id, editingText).then((next) => {
-                                setNotes(next);
-                                clearDraftFlag(note.id).then(setNotes);
-                                setEditingNoteId(null);
-                                setEditingText('');
-                                showToast('Note saved', 'success');
-                              }).catch((error) => {
-                                console.error('Failed to save note:', error);
-                                showToast('Failed to save note', 'error');
-                              });
-                            }}
-                            onCancelEdit={() => {
-                              setEditingNoteId(null);
-                              setEditingText('');
-                            }}
-                            onTogglePinned={() => togglePinned(note.id).then(setNotes)}
-                            onOpenImage={setPreviewNoteImageUri}
-                            onCopy={(text) => forceCopyToClipboard(text).catch(() => undefined)}
-                            settings={settings}
-                            onCopyValue={(value, label) => {
-                              forceCopyToClipboard(value).then(() => showToast(`${label} copied`)).catch(() => undefined);
-                            }}
-                            onPressOffice={(office) => {
-                              setOfficeEntityFilter((current) => (current === office ? null : office));
-                              showToast(`Office filter: ${office}`);
-                            }}
-                            onSaveToDevice={() => saveNoteToDevice(note).catch(() => undefined)}
-                            onShare={() => setShareNote(note)}
-                            onOpenVersions={() => setVersionNoteId(note.id)}
-                            onSetReminder={() => createQuickReminderFromNote(note).catch(() => undefined)}
-                            onArchive={() => toggleArchived(note.id).then(setNotes)}
-                            onDelete={() => handleRemoveNote(note.id).then(setNotes)}
-                            onSetColor={(color) => setNoteColor(note.id, color).then(setNotes)}
-                            onDoubleTap={() => setDetailNote(note)}
-                            onDuplicate={() => duplicateNote(note).catch(() => undefined)}
-                            onUpdateWorkflowStatus={async (id, status) => {
-                              const next = await updateWorkflowStatus(id, status);
-                              setNotes(next);
-                            }}
-                            onMedicationTaken={(id, medIndex) => handleMedicationTaken(id, medIndex).catch(() => undefined)}
-                            onMedicationSnooze={(id, medIndex, ms) => handleMedicationSnooze(id, medIndex, ms).catch(() => undefined)}
-                            onMedicationDismissCycle={(id, medIndex) => handleMedicationDismissCycle(id, medIndex).catch(() => undefined)}
-                            onMedicationReactivate={(id, medIndex) => handleMedicationReactivate(id, medIndex).catch(() => undefined)}
-                          />
-                        </View>
-                      );
-                    })}
-                    {row.length < (isDesktop ? desktopColumns : 1) ? Array.from({ length: (isDesktop ? desktopColumns : 1) - row.length }).map((_, i) => <View key={`fill-${i}`} style={{ flex: 1, minWidth: 0 }} />) : null}
-                  </View>
-                ))}
-              </View>
-
-              {notesHasMore && (
-                <Pressable
-                  onPress={() => setNotesPage((p) => p + 1)}
-                  style={({ pressed }) => [
-                    mainAppStyles.btn,
-                    { backgroundColor: palette.accent, borderColor: palette.accent, opacity: pressed ? 0.85 : 1, alignSelf: 'stretch', marginTop: 16 },
-                  ]}
-                >
-                  <Text style={[mainAppStyles.btnText, { textAlign: 'center' }]}>Load more ({pagedFilteredNotes.length} / {filteredNotes.length})</Text>
-                </Pressable>
-              )}
             </View>
-          </>
         ) : null}
 
         {workspaceTab === 'templates' ? (
@@ -2034,6 +2026,8 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
           />
         ) : null}
       </View>
+        )}
+      />
 
       <Modal animationType="fade" transparent visible={Boolean(previewEntry)} onRequestClose={() => setPreviewEntry(null)} statusBarTranslucent>
         <Pressable style={mainAppStyles.modalBackdrop} onPress={() => setPreviewEntry(null)}>
@@ -2159,7 +2153,6 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
         }}
         onCreateTemplate={({ text, category }) => createTemplateFromSuggestion(text, category)}
       />
-      </ScrollView>
 
       {/* ── OCR: image → note ── */}
       <NoteOcrModal

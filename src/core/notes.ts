@@ -34,6 +34,7 @@ function withNotesSaveLock<T>(fn: () => Promise<T>): Promise<T> {
 
 export type NoteKind = 'text' | 'image';
 export type NoteCategory = 'general' | 'work' | 'health' | 'shopping';
+export type NoteColor = 'default' | 'amber' | 'mint' | 'sky' | 'rose';
 export type { SmartWorkflowType } from './smartNoteWorkflows';
 
 // Simple version format for backward compatibility with existing notes
@@ -305,13 +306,16 @@ export async function addNoteUnique(
 ): Promise<{ notes: NoteItem[]; inserted: boolean }> {
   const trimmed = safeText(text).trim();
   if (!trimmed) return { notes: await loadNotes(), inserted: false };
-  const current = await loadNotes();
-  if (isDuplicateText(current, trimmed)) {
-    return { notes: current, inserted: false };
-  }
-  const now = Date.now();
-  const next: NoteItem[] = [
-    {
+  // N-1: lock covers the dedup check + first save so a concurrent addNoteUnique
+  // cannot sneak past the duplicate guard or race on the same AsyncStorage slot.
+  let newNote: NoteItem | undefined;
+  const lockResult = await withNotesSaveLock(async () => {
+    const current = await loadNotes();
+    if (isDuplicateText(current, trimmed)) {
+      return { notes: current, inserted: false } as const;
+    }
+    const now = Date.now();
+    const note: NoteItem = {
       id: makeId('note'),
       kind: 'text',
       category,
@@ -320,14 +324,25 @@ export async function addNoteUnique(
       createdAt: now,
       updatedAt: now,
       syncStatus: 'pending',
-    },
-    ...current,
-  ];
-  await saveNotes(next);
-  const synced = await pushNoteIfAuthenticated(next[0]);
-  next[0] = { ...next[0], syncStatus: synced ? 'synced' : 'pending' };
-  await saveNotes(next);
-  return { notes: normalizeNotes(next), inserted: true };
+    };
+    const next: NoteItem[] = [note, ...current];
+    await saveNotes(next);
+    newNote = note;
+    return null;
+  });
+  if (lockResult !== null) return lockResult;
+  const id = newNote!.id;
+  const synced = await pushNoteIfAuthenticated(newNote!);
+  // N-1: second lock — fresh read so we don't overwrite any concurrent change.
+  const finalNotes = await withNotesSaveLock(async () => {
+    const fresh = await loadNotes();
+    const mapped = fresh.map((n) =>
+      n.id === id ? { ...n, syncStatus: synced ? 'synced' as const : 'pending' as const } : n,
+    );
+    await saveNotes(mapped);
+    return normalizeNotes(mapped);
+  });
+  return { notes: finalNotes, inserted: true };
 }
 
 export async function addRichNoteUnique(
@@ -343,9 +358,7 @@ export async function addRichNoteUnique(
   const normalizedAttachments = attachments.map((item) => String(item || '').trim()).filter(Boolean).slice(0, 8);
   if (!trimmed && normalizedAttachments.length === 0) return { notes: await loadNotes(), inserted: false };
 
-  const current = await loadNotes();
-
-  // Auto-detect smart type from content
+  // Smart-type detection is pure/CPU-only — safe to run before acquiring the lock.
   let smartType: SmartWorkflowType | undefined;
   if (autoDetectSmartType && trimmed) {
     try {
@@ -356,38 +369,52 @@ export async function addRichNoteUnique(
     }
   }
 
-  const candidate: NoteItem = {
-    id: 'candidate',
-    kind: 'text',
-    category,
-    text: trimmed || 'Attachment note',
-    groupId: safeText(groupId).trim() || undefined,
-    color: 'default',
-    archived: false,
-    attachments: normalizedAttachments.length ? normalizedAttachments : undefined,
-    pinned: false,
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
-    smartType,
-  };
-  if (hasDuplicateNote(current, candidate)) {
-    return { notes: current, inserted: false };
-  }
-
-  const now = Date.now();
-  const next: NoteItem[] = [
-    { ...candidate, id: makeId('note'), createdAt: now, updatedAt: now, draft: draft ?? false },
-    ...current,
-  ];
-
-  await saveNotes(next);
-  const synced = await pushNoteIfAuthenticated(next[0]);
-  next[0] = { ...next[0], syncStatus: synced ? 'synced' : 'pending' };
-  await saveNotes(next);
+  // N-1: lock covers the dedup check + first save.
+  let newNote: NoteItem | undefined;
+  const lockResult = await withNotesSaveLock(async () => {
+    const current = await loadNotes();
+    const candidate: NoteItem = {
+      id: 'candidate',
+      kind: 'text',
+      category,
+      text: trimmed || 'Attachment note',
+      groupId: safeText(groupId).trim() || undefined,
+      color: 'default',
+      archived: false,
+      attachments: normalizedAttachments.length ? normalizedAttachments : undefined,
+      pinned: false,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      smartType,
+    };
+    if (hasDuplicateNote(current, candidate)) {
+      return { notes: current, inserted: false } as const;
+    }
+    const now = Date.now();
+    const note: NoteItem = { ...candidate, id: makeId('note'), createdAt: now, updatedAt: now, draft: draft ?? false };
+    const next: NoteItem[] = [note, ...current];
+    await saveNotes(next);
+    newNote = note;
+    return null;
+  });
+  if (lockResult !== null) return lockResult;
+  const id = newNote!.id;
+  const synced = await pushNoteIfAuthenticated(newNote!);
   if (safeText(groupId).trim()) {
-    await upsertSharedGroupNote(safeText(groupId).trim(), next[0]).catch((error) => diag.warn('notes.push.shared.error', { message: String(error), noteId: next[0].id }));
+    await upsertSharedGroupNote(safeText(groupId).trim(), newNote!).catch((error) =>
+      diag.warn('notes.push.shared.error', { message: String(error), noteId: id }),
+    );
   }
-  return { notes: normalizeNotes(next), inserted: true };
+  // N-1: second lock — fresh read for sync-status update.
+  const finalNotes = await withNotesSaveLock(async () => {
+    const fresh = await loadNotes();
+    const mapped = fresh.map((n) =>
+      n.id === id ? { ...n, syncStatus: synced ? 'synced' as const : 'pending' as const } : n,
+    );
+    await saveNotes(mapped);
+    return normalizeNotes(mapped);
+  });
+  return { notes: finalNotes, inserted: true };
 }
 
 export async function addImageNoteUnique(dataUri: string, title = 'Screenshot capture'): Promise<{ notes: NoteItem[]; inserted: boolean }> {
@@ -402,13 +429,15 @@ export async function addImageNoteUnique(dataUri: string, title = 'Screenshot ca
   const meta = split[0];
   const base64 = split.slice(1).join(',');
   const mimeType = meta.replace('data:', '').replace(';base64', '');
-  const current = await loadNotes();
-  if (isDuplicateImage(current, base64)) {
-    return { notes: current, inserted: false };
-  }
-  const now = Date.now();
-  const next: NoteItem[] = [
-    {
+  // N-1: lock covers the dedup check + first save.
+  let newNote: NoteItem | undefined;
+  const lockResult = await withNotesSaveLock(async () => {
+    const current = await loadNotes();
+    if (isDuplicateImage(current, base64)) {
+      return { notes: current, inserted: false } as const;
+    }
+    const now = Date.now();
+    const note: NoteItem = {
       id: makeId('img'),
       kind: 'image',
       category: 'general',
@@ -420,14 +449,25 @@ export async function addImageNoteUnique(dataUri: string, title = 'Screenshot ca
       pinned: false,
       createdAt: now,
       updatedAt: now,
-    },
-    ...current,
-  ];
-  await saveNotes(next);
-  const synced = await pushNoteIfAuthenticated(next[0]);
-  next[0] = { ...next[0], syncStatus: synced ? 'synced' : 'pending' };
-  await saveNotes(next);
-  return { notes: normalizeNotes(next), inserted: true };
+    };
+    const next: NoteItem[] = [note, ...current];
+    await saveNotes(next);
+    newNote = note;
+    return null;
+  });
+  if (lockResult !== null) return lockResult;
+  const id = newNote!.id;
+  const synced = await pushNoteIfAuthenticated(newNote!);
+  // N-1: second lock — fresh read for sync-status update.
+  const finalNotes = await withNotesSaveLock(async () => {
+    const fresh = await loadNotes();
+    const mapped = fresh.map((n) =>
+      n.id === id ? { ...n, syncStatus: synced ? 'synced' as const : 'pending' as const } : n,
+    );
+    await saveNotes(mapped);
+    return normalizeNotes(mapped);
+  });
+  return { notes: finalNotes, inserted: true };
 }
 
 export async function removeNote(id: string): Promise<NoteItem[]> {
@@ -684,18 +724,27 @@ export async function setNoteSecret(id: string, isSecret: boolean): Promise<Note
 }
 
 export async function clearDraftFlag(id: string): Promise<NoteItem[]> {
-  const current = await loadNotes();
-  const next = current.map((item) =>
-    item.id === id ? { ...item, draft: false, updatedAt: Date.now(), syncStatus: 'pending' as const } : item,
-  );
-  await saveNotes(next);
-  const updated = next.find((item) => item.id === id);
+  // N-1: lock covers the load/save; Firebase calls are outside.
+  let updated: NoteItem | undefined;
+  let next: NoteItem[] = [];
+  await withNotesSaveLock(async () => {
+    const current = await loadNotes();
+    next = current.map((item) =>
+      item.id === id ? { ...item, draft: false, updatedAt: Date.now(), syncStatus: 'pending' as const } : item,
+    );
+    await saveNotes(next);
+    updated = next.find((item) => item.id === id);
+  });
   if (updated) {
     const synced = await pushNoteIfAuthenticated(updated);
     if (synced) {
-      const syncedNext = next.map((item) => item.id === id ? { ...item, syncStatus: 'synced' as const } : item);
-      await saveNotes(syncedNext);
-      return normalizeNotes(syncedNext);
+      const syncedNext = await withNotesSaveLock(async () => {
+        const fresh = await loadNotes();
+        const mapped = fresh.map((item) => item.id === id ? { ...item, syncStatus: 'synced' as const } : item);
+        await saveNotes(mapped);
+        return normalizeNotes(mapped);
+      });
+      return syncedNext;
     }
   }
   if (updated?.groupId) {

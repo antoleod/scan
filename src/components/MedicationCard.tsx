@@ -2,19 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Text, View, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import type { WorkflowMetadata, WorkflowStatus, MedicationCycleEntry } from '../core/notes';
-
-type Palette = {
-  bg: string;
-  accent: string;
-  border: string;
-  surface: string;
-  surfaceAlt: string;
-  textBody: string;
-  textDim: string;
-  textMuted: string;
-  textPrimary: string;
-  chipBorder: string;
-};
+import type { NotePalette as Palette } from '../theme/theme';
 
 interface MedicationCardProps {
   noteText?: string;
