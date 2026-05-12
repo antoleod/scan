@@ -1,4 +1,5 @@
 import { AppSettings } from '../types';
+import { compileUserRegex } from './validation';
 
 export type SmartNoteType = 'network' | 'device' | 'office' | 'asset' | 'general';
 export type SmartNoteItemKind = 'checkbox' | 'bullet' | 'numbered';
@@ -28,12 +29,12 @@ export type SmartNoteEntities = {
   pi: string[];
 };
 
+// `compileUserRegex` rejects oversized inputs, ReDoS-shaped patterns, and
+// invalid syntax, falling back to the developer-supplied default. Without
+// this, an imported backup or shared-group note could plant a catastrophic
+// pattern that freezes every note render.
 function safeRegex(source: string, fallback: RegExp): RegExp {
-  try {
-    return new RegExp(source, 'gi');
-  } catch {
-    return fallback;
-  }
+  return compileUserRegex(source, 'gi', fallback);
 }
 
 function uniq(values: string[]): string[] {

@@ -18,6 +18,7 @@ service cloud.firestore {
         'id',
         'deletedAt',
         'uid',
+        'groupId',
         'updatedAtServer'
       ])
       && request.resource.data.id is string
@@ -25,20 +26,29 @@ service cloud.firestore {
       && request.resource.data.uid == request.auth.uid;
     }
 
-    function noteValid() {
-      return noteTombstoneValid() || (
-        hasOnlyKeys([
+    function noteCommonValid() {
+      return hasOnlyKeys([
         'id',
         'kind',
         'category',
         'text',
+        'title',
         'groupId',
         'color',
         'archived',
         'imageBase64',
         'imageMimeType',
         'attachments',
+        'imageRtdbPaths',
+        'hasLocalImage',
+        'hasLocalAttachments',
         'pinned',
+        'versions',
+        'smartType',
+        'workflowStatus',
+        'workflowMetadata',
+        'isSecret',
+        'draft',
         'createdAt',
         'updatedAt',
         'deletedAt',
@@ -47,16 +57,40 @@ service cloud.firestore {
       ])
       && request.resource.data.id is string
       && request.resource.data.kind in ['text', 'image']
-      && request.resource.data.category in ['general', 'work']
+      && request.resource.data.category in ['general', 'work', 'health', 'shopping']
       && request.resource.data.text is string
+      && request.resource.data.text.size() < 50000
       && request.resource.data.pinned is bool
       && request.resource.data.createdAt is number
       && request.resource.data.updatedAt is number
-      && request.resource.data.uid == request.auth.uid
       && (!('groupId' in request.resource.data) || request.resource.data.groupId is string)
       && (!('color' in request.resource.data) || request.resource.data.color in ['default', 'amber', 'mint', 'sky', 'rose'])
       && (!('archived' in request.resource.data) || request.resource.data.archived is bool)
       && (!('deletedAt' in request.resource.data) || request.resource.data.deletedAt is number)
+      && (!('title' in request.resource.data) || (request.resource.data.title is string && request.resource.data.title.size() < 500))
+      && (!('attachments' in request.resource.data) || request.resource.data.attachments is list)
+      && (!('imageRtdbPaths' in request.resource.data) || request.resource.data.imageRtdbPaths is list)
+      && (!('versions' in request.resource.data) || (request.resource.data.versions is list && request.resource.data.versions.size() <= 12))
+      && (!('smartType' in request.resource.data) || request.resource.data.smartType is string)
+      && (!('workflowStatus' in request.resource.data) || request.resource.data.workflowStatus is string)
+      && (!('isSecret' in request.resource.data) || request.resource.data.isSecret is bool)
+      && (!('draft' in request.resource.data) || request.resource.data.draft is bool)
+      && (!('hasLocalImage' in request.resource.data) || request.resource.data.hasLocalImage is bool)
+      && (!('hasLocalAttachments' in request.resource.data) || request.resource.data.hasLocalAttachments is bool);
+    }
+
+    function noteValid() {
+      return noteTombstoneValid() || (
+        noteCommonValid()
+        && request.resource.data.uid == request.auth.uid
+      );
+    }
+
+    function groupNoteValid(groupId) {
+      return noteTombstoneValid() || (
+        noteCommonValid()
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.groupId == groupId
       );
     }
 
@@ -90,6 +124,13 @@ service cloud.firestore {
 
     function scanValid() {
       return request.resource.data.uid == request.auth.uid;
+    }
+
+    function usernameDocValid() {
+      return hasOnlyKeys(['username', 'uid', 'authEmailSource', 'updatedAt'])
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.username is string
+        && request.resource.data.authEmailSource is string;
     }
 
     match /users/{uid} {
@@ -132,44 +173,72 @@ service cloud.firestore {
       allow create: if signedIn()
         && request.resource.data.ownerUid == request.auth.uid
         && request.resource.data.members is list
+        && request.resource.data.members.size() <= 50
         && request.resource.data.members.hasAny([request.auth.uid])
         && request.resource.data.inviteCode is string
         && request.resource.data.name is string;
 
-      allow update: if signedIn() && (
-        resource.data.ownerUid == request.auth.uid
-        || (
-          request.resource.data.ownerUid == resource.data.ownerUid
-          && request.resource.data.inviteCode == resource.data.inviteCode
-          && request.resource.data.name == resource.data.name
-          && request.resource.data.members.size() == resource.data.members.size() + 1
-          && request.resource.data.members.hasAny([request.auth.uid])
-        )
-      );
+      // Only the owner may modify the group document directly. Joining a group
+      // must go through the `joinSharedNoteGroupByInvite` Cloud Function, which
+      // validates the invite code with Admin SDK privileges (bypassing rules).
+      // The previous self-add update path let any signed-in user add themselves
+      // to any group whose ID they knew, without ever supplying the code.
+      allow update: if signedIn()
+        && resource.data.ownerUid == request.auth.uid
+        && request.resource.data.ownerUid == resource.data.ownerUid
+        && request.resource.data.name is string
+        && request.resource.data.inviteCode is string
+        && request.resource.data.members is list
+        && request.resource.data.members.size() <= 50;
 
       allow delete: if signedIn() && resource.data.ownerUid == request.auth.uid;
 
       match /notes/{noteId} {
-        allow read: if signedIn()
-          && get(/databases/$(database)/documents/noteGroups/$(groupId)).data.members.hasAny([request.auth.uid]);
-        allow create, update, delete: if signedIn()
-          && get(/databases/$(database)/documents/noteGroups/$(groupId)).data.members.hasAny([request.auth.uid]);
+        function isGroupMember() {
+          return signedIn()
+            && get(/databases/$(database)/documents/noteGroups/$(groupId)).data.members.hasAny([request.auth.uid]);
+        }
+        function isGroupOwner() {
+          return signedIn()
+            && get(/databases/$(database)/documents/noteGroups/$(groupId)).data.ownerUid == request.auth.uid;
+        }
+
+        allow read: if isGroupMember();
+        // Group members may create their own notes inside a group (uid must
+        // match the caller, groupId must match the path, and the payload must
+        // pass the same schema validation as personal notes).
+        allow create: if isGroupMember() && groupNoteValid(groupId);
+        // Updates: only the original author may edit their own note. This
+        // prevents members from overwriting each other.
+        allow update: if isGroupMember()
+          && groupNoteValid(groupId)
+          && resource.data.uid == request.auth.uid;
+        // Deletes: author or group owner.
+        allow delete: if isGroupMember()
+          && (resource.data.uid == request.auth.uid || isGroupOwner());
       }
     }
 
+    // `/usernames/{username}` is publicly readable so unauthenticated clients
+    // can resolve a username → uid at login time. The doc must therefore
+    // contain NO PII: never store the user's recovery email here. The auth
+    // email is stored privately under /users/{uid}/private/profile.
     match /usernames/{username} {
       allow get: if true;
       allow list: if false;
       allow create: if signedIn()
-                    && request.resource.data.uid == request.auth.uid
+                    && usernameDocValid()
                     && request.resource.data.username == username;
       allow update: if signedIn()
                     && resource.data.uid == request.auth.uid
-                    && request.resource.data.uid == request.auth.uid;
+                    && usernameDocValid()
+                    && request.resource.data.username == username;
       allow delete: if false;
     }
 
     match /authAttempts/{attemptId} {
+      // Server-side only (Cloud Function rate limiter writes via Admin SDK,
+      // which bypasses rules).
       allow read, write: if false;
     }
 

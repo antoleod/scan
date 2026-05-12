@@ -3,6 +3,7 @@ import type { BarcodeType } from 'expo-camera';
 
 import { defaultSettings } from './settings';
 import { historyKey, normalizeHistoryType } from './history';
+import { sanitizeUserRegexPattern } from './validation';
 
 export const APP_BACKUP_VERSION = 1 as const;
 
@@ -125,7 +126,17 @@ function sanitizeTemplateRule(value: unknown): TemplateRule | null {
   const type = asString(value.type, '').trim();
   if (!name || !type) return null;
 
-  const regexRules = isRecord(value.regexRules) ? (value.regexRules as Record<string, string>) : {};
+  // Imported templates can carry user-supplied regex per field. Reject any
+  // entry that contains a ReDoS-shaped or oversized pattern; the field is
+  // dropped silently rather than blocking the entire template, so legitimate
+  // rules in the same template still apply.
+  const rawRegexRules = isRecord(value.regexRules) ? (value.regexRules as Record<string, unknown>) : {};
+  const regexRules: Record<string, string> = {};
+  for (const [field, pattern] of Object.entries(rawRegexRules)) {
+    if (typeof pattern !== 'string') continue;
+    const safe = sanitizeUserRegexPattern(pattern, '');
+    if (safe) regexRules[field] = safe;
+  }
   const mappingRules = isRecord(value.mappingRules) ? (value.mappingRules as Record<string, string>) : {};
   const samplePayloads = Array.isArray(value.samplePayloads)
     ? value.samplePayloads.filter((entry): entry is string => typeof entry === 'string')
@@ -177,10 +188,19 @@ function sanitizeSettings(value: unknown): AppSettings {
         ...defaultSettings.smartNotes!.detectionEnabled,
         ...(isRecord((source.smartNotes as Record<string, unknown>)?.detectionEnabled) ? (source.smartNotes as Record<string, unknown>).detectionEnabled as Record<string, unknown> : {}),
       },
-      regex: {
-        ...defaultSettings.smartNotes!.regex,
-        ...(isRecord((source.smartNotes as Record<string, unknown>)?.regex) ? (source.smartNotes as Record<string, unknown>).regex as Record<string, unknown> : {}),
-      },
+      regex: (() => {
+        // Validate imported regex patterns before persisting them. A hostile
+        // backup file could otherwise plant a catastrophic-backtracking
+        // pattern that freezes every smart-note render.
+        const importedRegex = (isRecord((source.smartNotes as Record<string, unknown>)?.regex)
+          ? (source.smartNotes as Record<string, unknown>).regex as Record<string, unknown>
+          : {}) as { ip?: unknown; hostname?: unknown; pi?: unknown };
+        return {
+          ip: sanitizeUserRegexPattern(importedRegex.ip, defaultSettings.smartNotes!.regex.ip),
+          hostname: sanitizeUserRegexPattern(importedRegex.hostname, defaultSettings.smartNotes!.regex.hostname),
+          pi: sanitizeUserRegexPattern(importedRegex.pi, defaultSettings.smartNotes!.regex.pi),
+        };
+      })(),
       offices: Array.isArray((source.smartNotes as Record<string, unknown>)?.offices)
         ? ((source.smartNotes as Record<string, unknown>).offices as unknown[]).map((entry) => asString(entry, '').trim()).filter(Boolean)
         : defaultSettings.smartNotes!.offices,

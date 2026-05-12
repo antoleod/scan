@@ -214,7 +214,15 @@ function mergeTemplatesByNewest(local: NoteTemplate[], incoming: NoteTemplate[])
   return Array.from(map.values()).sort((a, b) => tsMillis(b.updatedAt) - tsMillis(a.updatedAt));
 }
 
-export function NotesTab({ palette, settings }: { palette: Palette; settings: AppSettings }) {
+export function NotesTab({
+  palette,
+  settings,
+  onPatchSettings,
+}: {
+  palette: Palette;
+  settings: AppSettings;
+  onPatchSettings?: (next: Partial<AppSettings>) => Promise<void> | void;
+}) {
   const uiLang = detectUiLang();
   const t = UI_COPY[uiLang];
   const { user } = useAuth();
@@ -517,7 +525,7 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
           // Update text on existing draft note
           const updatedNotes = await updateNoteText(draftNoteIdRef.current, draftTextValue);
           setNotes(updatedNotes);
-        } else if (draftTextValue.trim().length > 0 || draftImages.length > 0) {
+        } else if ((settings.notesFeatures?.autoSaveDraft ?? true) && (draftTextValue.trim().length > 0 || draftImages.length > 0)) {
           const result = await addRichNoteUnique(draftTextValue, activeCategory, draftImages, groupId, true, false);
           if (result.inserted && result.notes[0]) {
             draftNoteIdRef.current = result.notes[0].id;
@@ -863,7 +871,8 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
       return;
     }
 
-    const result = await addRichNoteUnique(draftTextValue, activeCategory, draftImages, groupId, false, true);
+    const autoDetectEnabled = settings.notesFeatures?.autoDetectSmartType ?? true;
+    const result = await addRichNoteUnique(draftTextValue, activeCategory, draftImages, groupId, false, autoDetectEnabled);
     setNotes(result.notes);
     if (result.inserted) {
       showToast(draftIsSecret ? 'Secret note saved' : 'Note saved');
@@ -876,9 +885,15 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
       }
 
       // Detect smart workflows (medication, shopping, reminder, task)
-      if (draftTextValue.trim().length > 0) {
+      if (autoDetectEnabled && draftTextValue.trim().length > 0) {
         const detection = detectSmartWorkflow(draftTextValue);
-        if (detection.type !== 'none' && detection.type !== 'shopping' && detection.confidence >= 0.65) {
+        const allowMedication = settings.notesFeatures?.detectMedication ?? true;
+        const allowReminder = settings.notesFeatures?.detectReminder ?? true;
+        const typeAllowed =
+          (detection.type === 'medication' && allowMedication) ||
+          (detection.type === 'reminder' && allowReminder) ||
+          (detection.type === 'task');
+        if (detection.type !== 'none' && detection.type !== 'shopping' && typeAllowed && detection.confidence >= 0.65) {
           setDetectedWorkflow(detection);
         }
       }
@@ -1095,19 +1110,23 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
       ? `${draftTextValue}\n\n--- Extracted text ---\n${ocrText}`
       : ocrText;
     setDraftText(updatedText);
-    const shoppingAnalysis = analyzeShoppingListCandidate(ocrText);
-    if (shoppingAnalysis.isCandidate && shoppingAnalysis.parsedItems.length >= 3) {
-      openShoppingWorkflowFromDraft(shoppingAnalysis);
-      showToast('OCR routed to shopping review');
+    if (settings.notesFeatures?.detectShopping ?? true) {
+      const shoppingAnalysis = analyzeShoppingListCandidate(ocrText);
+      if (shoppingAnalysis.isCandidate && shoppingAnalysis.parsedItems.length >= 3) {
+        openShoppingWorkflowFromDraft(shoppingAnalysis);
+        showToast('OCR routed to shopping review');
+      }
     }
   }
 
   async function handleOcrReplaceText(ocrText: string) {
     setDraftText(ocrText);
-    const shoppingAnalysis = analyzeShoppingListCandidate(ocrText);
-    if (shoppingAnalysis.isCandidate && shoppingAnalysis.parsedItems.length >= 3) {
-      openShoppingWorkflowFromDraft(shoppingAnalysis);
-      showToast('OCR routed to shopping review');
+    if (settings.notesFeatures?.detectShopping ?? true) {
+      const shoppingAnalysis = analyzeShoppingListCandidate(ocrText);
+      if (shoppingAnalysis.isCandidate && shoppingAnalysis.parsedItems.length >= 3) {
+        openShoppingWorkflowFromDraft(shoppingAnalysis);
+        showToast('OCR routed to shopping review');
+      }
     }
   }
 
@@ -2034,6 +2053,7 @@ export function NotesTab({ palette, settings }: { palette: Palette; settings: Ap
             settings={settings}
             onSendToNote={sendClipboardToNote}
             onSendToTemplate={sendClipboardToTemplate}
+            onPatchSettings={onPatchSettings}
           />
         ) : null}
       </View>

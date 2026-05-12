@@ -76,6 +76,83 @@ export const sanitizeNoteText = (
 };
 
 /**
+ * Heuristic check for catastrophic-backtracking ("ReDoS") patterns.
+ * Returns true if the pattern looks dangerous and should be rejected.
+ *
+ * This is intentionally conservative — false positives reject patterns that
+ * may be safe in practice, but false negatives let attackers freeze the JS
+ * engine via a crafted backup file or shared template. Since we never trust
+ * untrusted regex on hot paths, prefer rejection.
+ */
+export const isProbablyCatastrophicRegex = (pattern: string): boolean => {
+    if (typeof pattern !== 'string') return true;
+    if (pattern.length > 500) return true;
+
+    // Strip char classes [...] so quantifiers inside them are not flagged.
+    // (Char classes don't cause exponential backtracking the way grouped
+    //  alternations do.)
+    const stripped = pattern.replace(/\[(?:\\.|[^\]\\])*\]/g, '[]');
+
+    // Nested quantifiers: (X+)+, (X*)*, (X+)*, (X*)+, (X{n,})+ etc.
+    // These are the canonical catastrophic-backtracking shape.
+    if (/\([^)]*[+*][^)]*\)\s*[+*?{]/.test(stripped)) return true;
+    if (/\([^)]*\{\d+,?\d*\}[^)]*\)\s*[+*?{]/.test(stripped)) return true;
+
+    // Alternation with overlapping branches inside a quantifier: (a|a)+, (a|ab)+
+    // We can't cheaply detect "overlap" in static analysis, so flag any
+    // alternation immediately followed by + or * or { as a precaution.
+    if (/\([^)]*\|[^)]*\)\s*[+*]/.test(stripped)) return true;
+
+    // Excessive repetition counts: {1000,}, {0,9999}
+    if (/\{\s*(\d{4,})\s*,?/.test(stripped)) return true;
+
+    return false;
+};
+
+/**
+ * Validate and compile a user-supplied regex with ReDoS protection. Returns
+ * `fallback` (compiled) when the pattern is missing, oversized, malformed, or
+ * heuristically dangerous. Callers must always pass a fallback that has been
+ * vetted by the developer.
+ */
+export const compileUserRegex = (
+    pattern: unknown,
+    flags: string,
+    fallback: RegExp,
+): RegExp => {
+    if (typeof pattern !== 'string' || !pattern) return fallback;
+    if (pattern.length > 500) return fallback;
+    if (isProbablyCatastrophicRegex(pattern)) return fallback;
+    try {
+        return new RegExp(pattern, flags);
+    } catch {
+        return fallback;
+    }
+};
+
+/**
+ * Sanitize a user-supplied regex pattern for storage. Returns the original
+ * string if it is safe to compile, otherwise the provided fallback. Used at
+ * backup import / settings load to neutralize tampered or hostile patterns
+ * before they reach hot rendering paths.
+ */
+export const sanitizeUserRegexPattern = (
+    pattern: unknown,
+    fallback: string,
+): string => {
+    if (typeof pattern !== 'string' || !pattern) return fallback;
+    if (pattern.length > 500) return fallback;
+    if (isProbablyCatastrophicRegex(pattern)) return fallback;
+    try {
+        // eslint-disable-next-line no-new
+        new RegExp(pattern);
+        return pattern;
+    } catch {
+        return fallback;
+    }
+};
+
+/**
  * Sanitize template regex pattern: validate regex compiles, enforce max length.
  * Returns { ok, value, error? } — ok=true if valid, value is the original pattern.
  */
@@ -90,6 +167,10 @@ export const sanitizeTemplatePattern = (
 
     if (pattern.length > MAX_LENGTH) {
         return { ok: false, error: `Template pattern exceeds ${MAX_LENGTH} characters` };
+    }
+
+    if (isProbablyCatastrophicRegex(pattern)) {
+        return { ok: false, error: 'Pattern contains nested quantifiers that can cause catastrophic backtracking. Simplify it (avoid forms like (a+)+ or (a|a)+).' };
     }
 
     // Try to compile the regex

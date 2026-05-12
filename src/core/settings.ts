@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AppSettings } from '../types';
+import { sanitizeUserRegexPattern } from './validation';
 
 const KEY = 'barra_settings';
 
@@ -21,6 +22,7 @@ export const defaultSettings: AppSettings = {
   staySignedIn: true,
   savePasswordEncrypted: false,
   clipboardCloudSync: false,
+  clipboardBackgroundCapture: false,
   showRawText: false,
   smartNotes: {
     offices: ['Spinelli', 'Kohl', 'Strasbourg'],
@@ -37,6 +39,13 @@ export const defaultSettings: AppSettings = {
       pi: String.raw`\b02PI[A-Z0-9]*\b`,
     },
   },
+  notesFeatures: {
+    autoDetectSmartType: true,
+    detectMedication: true,
+    detectShopping: true,
+    detectReminder: true,
+    autoSaveDraft: true,
+  },
 };
 
 export async function loadSettings(): Promise<AppSettings> {
@@ -48,6 +57,7 @@ export async function loadSettings(): Promise<AppSettings> {
       ...defaultSettings,
       ...rawParsed,
       clipboardCloudSync: rawParsed.clipboardCloudSync === true,
+      clipboardBackgroundCapture: rawParsed.clipboardBackgroundCapture === true,
       smartNotes: {
         ...defaultSettings.smartNotes,
         ...(rawParsed.smartNotes || {}),
@@ -56,12 +66,20 @@ export async function loadSettings(): Promise<AppSettings> {
           ...(rawParsed.smartNotes?.detectionEnabled || {}),
         },
         regex: {
-          ...defaultSettings.smartNotes!.regex,
-          ...(rawParsed.smartNotes?.regex || {}),
+          // ReDoS hardening: any patterns previously written to storage (or
+          // tampered with on the device) are re-validated on load. A hostile
+          // pattern is replaced with the built-in default.
+          ip: sanitizeUserRegexPattern(rawParsed.smartNotes?.regex?.ip, defaultSettings.smartNotes!.regex.ip),
+          hostname: sanitizeUserRegexPattern(rawParsed.smartNotes?.regex?.hostname, defaultSettings.smartNotes!.regex.hostname),
+          pi: sanitizeUserRegexPattern(rawParsed.smartNotes?.regex?.pi, defaultSettings.smartNotes!.regex.pi),
         },
         offices: Array.isArray(rawParsed.smartNotes?.offices)
           ? rawParsed.smartNotes!.offices.map((value) => String(value || '').trim()).filter(Boolean)
           : defaultSettings.smartNotes!.offices,
+      },
+      notesFeatures: {
+        ...defaultSettings.notesFeatures!,
+        ...(rawParsed.notesFeatures || {}),
       },
     } as AppSettings;
     const allowedThemes: AppSettings['theme'][] = ['dark', 'light', 'eu_blue', 'custom', 'parliament', 'noirGraphite', 'midnightSteel', 'obsidianGold'];

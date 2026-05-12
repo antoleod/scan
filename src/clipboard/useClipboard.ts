@@ -6,13 +6,19 @@ import {
   getClipboardEngineSnapshot,
   importClipboardScreenshot,
   importClipboardScreenshotFromManual,
+  setClipboardBackgroundCapture,
   startClipboardEngine,
   stopClipboardEngine,
   subscribeClipboardEntries,
 } from './ClipboardEngine';
 import type { ClipEntry, PermState } from '../core/clipboard.types';
 
-export function useClipboard() {
+type UseClipboardOptions = {
+  backgroundCapture?: boolean;
+};
+
+export function useClipboard(options: UseClipboardOptions = {}) {
+  const { backgroundCapture = false } = options;
   const [entries, setEntries] = useState<ClipEntry[]>(() => getClipboardEngineSnapshot().entries);
   const [permState, setPermState] = useState<PermState>(() => getClipboardEngineSnapshot().permState);
 
@@ -28,6 +34,7 @@ export function useClipboard() {
       const snapshot = getClipboardEngineSnapshot();
       setEntries(snapshot.entries);
       setPermState(snapshot.permState);
+      setClipboardBackgroundCapture(backgroundCapture);
     });
 
     return () => {
@@ -35,7 +42,12 @@ export function useClipboard() {
       unsub();
       stopClipboardEngine();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    setClipboardBackgroundCapture(backgroundCapture);
+  }, [backgroundCapture]);
 
   return useMemo(() => ({
     entries,

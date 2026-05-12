@@ -39,7 +39,7 @@ export function SecretPinModal({
       setError(null);
       setBusy(false);
     }
-  }, [visible]);
+  }, [visible, mode]);
 
   const triggerShake = () => {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => undefined);

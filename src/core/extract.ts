@@ -1,4 +1,5 @@
 ﻿import { TemplateRule } from '../types';
+import { isProbablyCatastrophicRegex } from './validation';
 
 function matchFirst(text: string, regex: RegExp): string {
   const m = text.match(regex);
@@ -12,6 +13,11 @@ export function extractFields(rawText: string, templates: TemplateRule[]): Recor
   for (const t of templates) {
     const out: Record<string, string> = {};
     for (const [field, pattern] of Object.entries(t.regexRules || {})) {
+      // Reject user-supplied patterns that look like catastrophic-backtracking
+      // ReDoS shapes (e.g., (a+)+, (a|a)+). Without this, an attacker who can
+      // ship a TemplateRule via import or shared-group sync could freeze the
+      // JS engine on every scan.
+      if (typeof pattern !== 'string' || isProbablyCatastrophicRegex(pattern)) continue;
       try {
         const value = matchFirst(text, new RegExp(pattern, 'im'));
         if (value) out[field] = value;

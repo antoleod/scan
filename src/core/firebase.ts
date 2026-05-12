@@ -171,10 +171,28 @@ function createAuthInstance(app: FirebaseApp): Auth {
       return getAuth(app);
     }
 
-    // RN uses platform defaults through initializeAuth when available.
-    return initializeAuth(app);
+    // React Native: persist the auth state to AsyncStorage so the user stays
+    // signed in across cold starts (otherwise every app launch requires a
+    // fresh login, and the 15-day session window in authContext.tsx is a
+    // no-op). `getReactNativePersistence` is exported from a sub-path that
+    // is RN-only — guarded so the web bundle never reaches this branch.
+    let rnPersistence: unknown;
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const authPkg = require('firebase/auth') as { getReactNativePersistence?: (storage: unknown) => unknown };
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+      if (typeof authPkg.getReactNativePersistence === 'function' && AsyncStorage) {
+        rnPersistence = authPkg.getReactNativePersistence(AsyncStorage);
+      }
+    } catch {
+      // Fall through to default if the helper or storage module is missing.
+    }
+
+    return rnPersistence
+      ? initializeAuth(app, { persistence: rnPersistence } as Parameters<typeof initializeAuth>[1])
+      : initializeAuth(app);
   } catch {
-    // Auth ya inicializado en hot-reload o entorno mixto.
     return getAuth(app);
   }
 }
@@ -315,6 +333,10 @@ export async function upsertUserPrivateProfile(
   );
 }
 
+// The synthetic auth-email domain used when a user registers with only a
+// username (no real email). Kept in sync with RegisterForm.tsx + core/auth.ts.
+const SYNTHETIC_EMAIL_DOMAIN = 'MyKit.tech';
+
 export async function upsertUsernameIndex(
   username: string,
   uid: string,
@@ -324,11 +346,25 @@ export async function upsertUsernameIndex(
   const rt = await initFirebaseRuntime();
   if (!rt.enabled || !rt.db) return;
   const lower = username.toLowerCase().trim();
+
+  // Public `/usernames/{name}` doc — readable by unauthenticated callers for
+  // login resolution. It MUST NOT contain PII (real email, recovery email,
+  // phone, etc.). For synthetic-email accounts the client re-derives the
+  // address from the username; recovery-email accounts must enter their
+  // recovery address directly at sign-in / password-reset.
   await setDoc(
     doc(rt.db, 'usernames', lower),
-    { username: lower, uid, authEmail, authEmailSource, updatedAt: serverTimestamp() },
+    { username: lower, uid, authEmailSource, updatedAt: serverTimestamp() },
     { merge: true },
   );
+
+  // Private mirror under /users/{uid}/private/profile holds the actual
+  // authEmail. Readable only by the owning user.
+  await setDoc(
+    doc(rt.db, 'users', uid, 'private', 'profile'),
+    { username: lower, authEmail, authEmailSource, updatedAt: serverTimestamp() },
+    { merge: true },
+  ).catch(() => undefined);
 }
 
 export async function resolveUsernameToAuthEmail(
@@ -336,13 +372,23 @@ export async function resolveUsernameToAuthEmail(
 ): Promise<{ authEmail: string; authEmailSource: AuthEmailSource } | null> {
   const rt = await initFirebaseRuntime();
   if (!rt.enabled || !rt.db) return null;
-  const snap = await getDoc(doc(rt.db, 'usernames', username.toLowerCase().trim()));
+  const lower = username.toLowerCase().trim();
+  const snap = await getDoc(doc(rt.db, 'usernames', lower));
   if (!snap.exists()) return null;
-  const data = snap.data();
-  return {
-    authEmail: String(data?.authEmail || ''),
-    authEmailSource: data?.authEmailSource === 'recoveryEmail' ? 'recoveryEmail' : 'internalUsername',
-  };
+  const data = snap.data() || {};
+  const source: AuthEmailSource =
+    data.authEmailSource === 'recoveryEmail' ? 'recoveryEmail'
+    : data.authEmailSource === 'googleOAuth' ? 'googleOAuth'
+    : 'internalUsername';
+
+  // Only the synthetic-email path can safely be resolved without a private
+  // lookup, because the address is fully derived from the (public) username.
+  // For real-email accounts we return only the source so the UI can prompt
+  // the user to enter their recovery email directly.
+  if (source === 'internalUsername') {
+    return { authEmail: `${lower}@${SYNTHETIC_EMAIL_DOMAIN}`, authEmailSource: source };
+  }
+  return { authEmail: '', authEmailSource: source };
 }
 
 // ─── Google OAuth ──────────────────────────────────────────────────
@@ -600,9 +646,12 @@ function sanitizeNoteForFirestore(note: NoteItem): Record<string, unknown> {
     payload.hasLocalImage = true;
     if (note.imageMimeType !== undefined) payload.imageMimeType = note.imageMimeType;
   }
-  // Filter out data URIs from attachments — only sync real URLs.
+  // Only sync http(s) URLs. An allowlist is safer than the old `data:`
+  // blocklist, which still let `javascript:`, `file:`, and other unexpected
+  // schemes propagate through Firestore to other devices, where a future
+  // renderer might dereference them.
   const safeAttachments = (note.attachments || []).filter(
-    (a) => typeof a === 'string' && a.trim() && !a.startsWith('data:'),
+    (a) => typeof a === 'string' && /^https?:\/\//i.test(a.trim()),
   );
   if (safeAttachments.length > 0) payload.attachments = safeAttachments;
   if (safeAttachments.length === 0 && (note.attachments?.length ?? 0) > 0) {
@@ -1227,9 +1276,55 @@ export async function fetchClipboardFromFirebase(): Promise<ClipEntry[]> {
   }
 }
 
+/**
+ * Heuristic: does this clipboard content look like a credential or other
+ * secret that must never be persisted to the cloud? When this returns true,
+ * the entry stays local-only.
+ *
+ * The clipboard is one of the most sensitive surfaces in the app — users
+ * routinely paste passwords, MFA codes, API tokens, JWTs, and card numbers
+ * into it. An account takeover would otherwise expose the entire history.
+ */
+export function clipboardContentLooksSensitive(text: string): boolean {
+  if (typeof text !== 'string') return true;
+  const trimmed = text.trim();
+  if (!trimmed) return false;
+
+  // OTP / 2FA / backup codes (4-10 pure digits)
+  if (/^\d{4,10}$/.test(trimmed)) return true;
+  // Backup-code style: groups of digits separated by space or dash
+  if (/^[\d -]{8,}$/.test(trimmed) && /\d{4,}/.test(trimmed)) {
+    const onlyDigits = trimmed.replace(/[^0-9]/g, '');
+    if (onlyDigits.length >= 13 && onlyDigits.length <= 19) return true; // card-like
+  }
+
+  // JSON Web Token: three dot-separated base64url segments, first starts with "ey"
+  if (/^ey[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}$/.test(trimmed)) return true;
+
+  // Common API-token prefixes (GitHub, Slack, OpenAI/Anthropic-shaped, AWS, Stripe, ...)
+  if (/^(?:gh[pousr]_|github_pat_|sk-[A-Za-z0-9-]{16,}|sk_live_|sk_test_|pk_live_|pk_test_|xox[bpaors]-|AKIA[0-9A-Z]{16}|ASIA[0-9A-Z]{16}|AIza[0-9A-Za-z_-]{20,}|ya29\.)/.test(trimmed)) {
+    return true;
+  }
+
+  // High-entropy short single-token string (looks like a password / API key).
+  // 12-128 chars, no whitespace, contains at least one each of lower / upper /
+  // digit, plus optional symbol. This catches manually-typed strong passwords.
+  if (trimmed.length >= 12 && trimmed.length <= 128 && !/\s/.test(trimmed)
+      && /[a-z]/.test(trimmed) && /[A-Z]/.test(trimmed) && /\d/.test(trimmed)) {
+    return true;
+  }
+
+  return false;
+}
+
 export async function upsertClipboardEntryInFirebase(entry: ClipEntry): Promise<void> {
   if (entry.kind !== 'text') return; // never sync images to Firestore
   if (!(await isClipboardCloudSyncEnabled())) return;
+  // Privacy: keep credentials local-only.
+  if (clipboardContentLooksSensitive(entry.content)) {
+    await diag.info('clipboard.skipSync.sensitive', { len: entry.content.length });
+    return;
+  }
   const rt = await initFirebaseRuntime();
   if (!rt.enabled || !rt.auth || !rt.db) return;
   const user = rt.auth.currentUser;
@@ -1273,6 +1368,11 @@ export async function syncClipboardWithFirebase(localTextEntries: ClipEntry[]): 
   // Push local entries that are newer or missing on remote
   const toWrite = localTextEntries.slice(0, CLIPBOARD_SYNC_LIMIT);
   for (const entry of toWrite) {
+    // Privacy: skip credentials / OTPs / API tokens so they stay local-only.
+    if (clipboardContentLooksSensitive(entry.content)) {
+      remoteMap.delete(entry.id);
+      continue;
+    }
     const remote = remoteMap.get(entry.id);
     if (!remote || remote.capturedAt < entry.capturedAt) {
       await setDoc(

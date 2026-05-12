@@ -85,9 +85,14 @@ export default function ForgotPasswordForm({ onSwitchToLogin }: ForgotPasswordFo
           }
 
           if (resolved.authEmailSource === 'recoveryEmail') {
-            await sendPasswordReset(resolved.authEmail);
-            setSuccess('Password reset email sent.');
-            setSuccessType('email');
+            // The recovery email is not stored in the public username index
+            // (PII protection). Ask the user to enter it directly so the reset
+            // is sent to a verified address.
+            setError(
+              'For your account, please enter your recovery email directly to receive the reset link.'
+            );
+            setLoading(false);
+            return;
           } else {
             setError(
               'This account has no recovery email. Try "Passwordless login" or sign in and add one in Profile settings.'

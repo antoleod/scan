@@ -247,6 +247,28 @@ class ClipboardEngine {
   private nativePollTimer: ReturnType<typeof setInterval> | null = null;
   private appStateSub: { remove: () => void } | null = null;
   private lastNativeText = '';
+  private backgroundCaptureEnabled = false;
+
+  /** Toggle background capture: when on, polling keeps running while the app/tab
+   *  is hidden (web) or in the background (native), with best-effort delivery. */
+  setBackgroundCaptureEnabled(value: boolean) {
+    const next = Boolean(value);
+    if (next === this.backgroundCaptureEnabled) return;
+    this.backgroundCaptureEnabled = next;
+    this.syncPolling();
+    if (Platform.OS !== 'web') {
+      if (next) {
+        // Keep the native poll running even when AppState is not active
+        this.startNativePolling();
+      } else if (AppState.currentState !== 'active') {
+        this.stopNativePolling();
+      }
+    }
+  }
+
+  isBackgroundCaptureEnabled() {
+    return this.backgroundCaptureEnabled;
+  }
 
   async ensureReady() {
     if (!this.loadPromise) {
@@ -275,7 +297,7 @@ class ClipboardEngine {
       if (state === 'active') {
         void this.captureFromNative('focus');
         this.startNativePolling();
-      } else {
+      } else if (!this.backgroundCaptureEnabled) {
         this.stopNativePolling();
       }
     };
@@ -820,7 +842,8 @@ class ClipboardEngine {
   }
 
   private async pollClipboard() {
-    if (typeof document === 'undefined' || document.visibilityState !== 'visible') return;
+    if (typeof document === 'undefined') return;
+    if (document.visibilityState !== 'visible' && !this.backgroundCaptureEnabled) return;
     if (this.permState !== 'granted') return;
     try {
       const text = normalizeText(await readClipboardText());
@@ -918,4 +941,14 @@ export async function importClipboardScreenshotFromManual(payload: ManualImageIn
 /** Call this once the user has authenticated so Firebase sync can be re-established. */
 export async function reinitClipboardFirebaseSync(): Promise<void> {
   return engine.reinitFirebaseSync();
+}
+
+/** Toggle whether clipboard polling keeps running while the app/tab is hidden
+ *  or backgrounded. Best-effort: the OS/browser may still throttle background work. */
+export function setClipboardBackgroundCapture(value: boolean): void {
+  engine.setBackgroundCaptureEnabled(value);
+}
+
+export function getClipboardBackgroundCapture(): boolean {
+  return engine.isBackgroundCaptureEnabled();
 }

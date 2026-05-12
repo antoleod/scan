@@ -50,8 +50,19 @@ export interface AppSettings {
   savePasswordEncrypted: boolean;
   /** Off by default: clipboard stays on-device only. */
   clipboardCloudSync: boolean;
+  /** Force clipboard capture to keep running while the app/tab is in the background. */
+  clipboardBackgroundCapture: boolean;
   showRawText: boolean;
   smartNotes?: SmartNoteSettings;
+  notesFeatures?: NotesFeatureSettings;
+}
+
+export interface NotesFeatureSettings {
+  autoDetectSmartType: boolean;
+  detectMedication: boolean;
+  detectShopping: boolean;
+  detectReminder: boolean;
+  autoSaveDraft: boolean;
 }
 
 export interface SmartNoteSettings {

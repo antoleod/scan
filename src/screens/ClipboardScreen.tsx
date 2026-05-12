@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Image, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
+import { Image, Modal, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 import { mainAppStyles } from '../components/mainApp/styles';
@@ -26,6 +26,7 @@ type Props = {
   settings?: AppSettings;
   onSendToNote?: (entry: ClipEntry) => Promise<void> | void;
   onSendToTemplate?: (entry: ClipEntry) => Promise<void> | void;
+  onPatchSettings?: (next: Partial<AppSettings>) => Promise<void> | void;
 };
 
 function chunk<T>(items: T[], columns: number): T[][] {
@@ -205,11 +206,12 @@ function ClipSmartBody({
   );
 }
 
-export function ClipboardScreen({ palette, settings, onSendToNote, onSendToTemplate }: Props) {
+export function ClipboardScreen({ palette, settings, onSendToNote, onSendToTemplate, onPatchSettings }: Props) {
   const { width } = useWindowDimensions();
   const isDesktop = width >= 1024;
   const desktopColumns = width >= 1600 ? 3 : width >= 1200 ? 2 : 1;
-  const { entries, permState, captureNow, capturePastedText, importScreenshot } = useClipboard();
+  const backgroundCapture = settings?.clipboardBackgroundCapture === true;
+  const { entries, permState, captureNow, capturePastedText, importScreenshot } = useClipboard({ backgroundCapture });
   const [searchText, setSearchText] = useState('');
   const [dateFilter, setDateFilter] = useState<string | null>(null);
   const [calendarOpen, setCalendarOpen] = useState(false);
@@ -380,6 +382,25 @@ export function ClipboardScreen({ palette, settings, onSendToNote, onSendToTempl
             Live capture is enabled. Long-press entries to select them for bulk delete.
           </Text>
         )}
+        {onPatchSettings ? (
+          <View style={[styles.bgCaptureRow, { borderColor: palette.border, backgroundColor: backgroundCapture ? `${palette.accent}10` : 'transparent' }]}>
+            <View style={{ flex: 1, paddingRight: 10 }}>
+              <Text style={{ color: palette.fg, fontSize: 12, fontWeight: '800' }}>
+                Force background capture
+              </Text>
+              <Text style={{ color: palette.muted, fontSize: 10, lineHeight: 14, marginTop: 2 }}>
+                Keep capturing clipboard history while the app or tab is in the background.
+                Best-effort — the OS/browser may still throttle hidden tabs.
+              </Text>
+            </View>
+            <Switch
+              value={backgroundCapture}
+              onValueChange={(value) => { void onPatchSettings({ clipboardBackgroundCapture: value }); }}
+              trackColor={{ true: palette.accent, false: palette.border }}
+              thumbColor={backgroundCapture ? '#fff' : undefined}
+            />
+          </View>
+        ) : null}
       </View>
 
       {filteredClipboard.length === 0 ? (
@@ -562,4 +583,5 @@ const styles = StyleSheet.create({
   previewImage: { width: '100%', height: 260, borderRadius: 10, backgroundColor: '#000' },
   previewActions: { marginTop: 14, flexDirection: 'row', gap: 10 },
   previewBtn: { flex: 1, minHeight: 44, borderRadius: 10, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  bgCaptureRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, borderWidth: 1, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 8, marginTop: 2 },
 });

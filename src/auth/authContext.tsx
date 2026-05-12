@@ -1,6 +1,7 @@
 import React, { createContext, useEffect, useMemo, useState } from 'react';
 import { Linking, Platform } from 'react-native';
 import { User } from 'firebase/auth';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { loadLastAuthTimestamp, saveLastAuthTimestamp, clearLastAuthTimestamp, saveBiometricEmail, loadBiometricEmail, clearBiometricEmail, saveBiometricEnabled, loadBiometricEnabled } from '../core/auth-storage';
 import { diag } from '../core/diagnostics';
@@ -9,6 +10,7 @@ import { loadSettings } from '../core/settings';
 import { getBiometricStatus, authenticateWithBiometrics, type BiometricStatus } from '../core/biometrics';
 import { clearQueue } from '../core/offlineQueue';
 import { clearNotesChecksum } from '../core/syncChecksum';
+import { clearAppLocalStorage, clearCacheStorage, purgeAllRelatedIndexedDB } from '../core/dataSync';
 
 import { getFirebaseGuardState, login, logout, register, sendPasswordReset, loginWithGoogle as loginWithGoogleService, sendMagicLink as sendMagicLinkService, verifyMagicLink as verifyMagicLinkService } from './authService';
 import type { LoginOptions, RegisterProfile } from './authTypes';
@@ -46,7 +48,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           // Extract the full URL from the deep link
           let fullUrl = url;
           if (url.includes('mykit://')) {
-            fullUrl = url.replace('mykit://', window.location.origin + '/?');
+            // `window` is undefined on React Native. Guard so this handler
+            // doesn't throw on iOS/Android, where the deep link arrives via
+            // Linking.getInitialURL / addEventListener.
+            const origin = Platform.OS === 'web' && typeof window !== 'undefined'
+              ? window.location.origin
+              : '';
+            fullUrl = origin
+              ? url.replace('mykit://', origin + '/?')
+              : url.replace('mykit://', 'mykit/?');
           } else if (url.includes('__/auth/action')) {
             // Already a valid Firebase auth URL
             fullUrl = url;
@@ -56,8 +66,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           const storedEmail = Platform.OS !== 'web' ? await loadBiometricEmail() : null;
 
           if (fullUrl && storedEmail) {
-            // Only attempt verification if we have both URL and email
-            await diag.info('auth.deeplink.magic', { url: fullUrl.substring(0, 50) });
+            // PII hygiene: log only that a magic link arrived, not its content
+            // (the URL embeds the user's email and an oobCode short-lived
+            // token).
+            await diag.info('auth.deeplink.magic', { hasUrl: true });
           }
         } catch (error) {
           await diag.warn('auth.deeplink.error', { message: String(error) });
@@ -193,7 +205,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const sendResetPasswordEmail = async (email: string) => {
     await sendPasswordReset(email);
-    await diag.info('auth.reset.sent', { email });
+    // PII hygiene: never persist the full email to local diagnostics — those
+    // logs can be shared by the user with support and would leak the address.
+    await diag.info('auth.reset.sent', { emailDomain: (email.split('@')[1] || '').toLowerCase() || 'n/a' });
   };
 
   const loginWithGoogleWrapper = async () => {
@@ -213,7 +227,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const sendMagicLinkWrapper = async (email: string) => {
     const redirectUrl = Platform.OS === 'web' ? window.location.origin : 'mykit://auth';
     await sendMagicLinkService(email, redirectUrl);
-    await diag.info('auth.magiclink.sent', { email: email.split('@')[0] });
+    await diag.info('auth.magiclink.sent', { emailDomain: (email.split('@')[1] || '').toLowerCase() || 'n/a' });
   };
 
   const verifyMagicLinkWrapper = async (email: string, url: string) => {
@@ -246,6 +260,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await logout();
     await clearBiometricEmail();
     await saveBiometricEnabled(false);
+
+    // Privacy: wipe per-user local data so the next user (or attacker with
+    // physical access) cannot recover the previous session's history, notes,
+    // medication metadata, or clipboard contents. Theme/UI prefs are
+    // intentionally left intact (not per-user PII).
+    try {
+      await AsyncStorage.multiRemove([
+        '@barra_history',
+        '@barra_notes_v1',
+        '@MyKit_clipboard_v2',
+        '@barra_templates',
+        '@barra_pending_captures',
+        '@barra_deleted_history',
+        '@barra_deleted_notes',
+        '@barra_last_identifier_v1',
+        '@barra_diag_logs',
+      ]);
+    } catch { /* best-effort */ }
+
+    if (Platform.OS === 'web') {
+      try { clearAppLocalStorage(); } catch { /* best-effort */ }
+      try { await clearCacheStorage(); } catch { /* best-effort */ }
+      try { await purgeAllRelatedIndexedDB(); } catch { /* best-effort */ }
+    }
+
     setUser(null);
     setIsGuest(false);
     setIsBiometricLocked(false);

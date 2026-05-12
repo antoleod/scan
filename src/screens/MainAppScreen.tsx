@@ -687,12 +687,18 @@ function MainApp() {
                 const supported = await Linking.canOpenURL(payload);
                 if (supported) {
                   await Linking.openURL(payload);
-                  await diag.info('url.opened', { url: payload });
+                  // Log only the origin so secrets in path/query (OAuth tokens,
+                  // session IDs from QR codes) do not land in shareable logs.
+                  let origin = 'invalid-url';
+                  try { origin = new URL(payload).origin; } catch { /* leave as invalid-url */ }
+                  await diag.info('url.opened', { origin });
                 } else {
                   Alert.alert('Error', `Cannot open this URL: ${payload}`);
                 }
               } catch (e) {
-                await diag.error('url.open.error', { message: String(e), url: payload });
+                let origin = 'invalid-url';
+                try { origin = new URL(payload).origin; } catch { /* leave as invalid-url */ }
+                await diag.error('url.open.error', { message: String(e), origin });
                 Alert.alert('Error', `Could not open the link: ${String(e)}`);
               }
             },
@@ -1792,7 +1798,7 @@ function MainApp() {
               onRefresh={() => syncNow(false)}
             />
           ) : activeTab === 'notes' ? (
-            <NotesTab palette={palette} settings={settings} />
+            <NotesTab palette={palette} settings={settings} onPatchSettings={patchSettings} />
           ) : (
             <SettingsTab
               palette={palette}

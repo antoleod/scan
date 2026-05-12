@@ -101,26 +101,67 @@ exports.joinSharedNoteGroupByInvite = onCall({ region: REGION }, async (request)
     };
 });
 
+// Persistent rate limiter keyed on (uid OR ip) backed by Firestore so it
+// applies across Cloud Function instances. Falls back open only on internal
+// errors; never on absence of a record.
+async function allowPersistent(bucket, key, max, windowMs) {
+  const now = Date.now();
+  const docRef = db.collection("authAttempts").doc(`${bucket}__${key}`);
+  try {
+    return await db.runTransaction(async (tx) => {
+      const snap = await tx.get(docRef);
+      const data = snap.exists ? snap.data() : { hits: [] };
+      const hits = (Array.isArray(data.hits) ? data.hits : []).filter(
+        (t) => typeof t === "number" && now - t < windowMs,
+      );
+      if (hits.length >= max) {
+        tx.set(docRef, { hits, updatedAt: now }, { merge: true });
+        return false;
+      }
+      hits.push(now);
+      tx.set(docRef, { hits, updatedAt: now }, { merge: true });
+      return true;
+    });
+  } catch (err) {
+    logger.warn("rate-limit transaction failed", { err: String(err) });
+    return false; // fail closed
+  }
+}
+
 exports.pinSession = onCall({ region: REGION }, async (request) => {
-    const key = request.rawRequest?.ip || request.auth?.uid || "anon";
-    if (!allow(`pin:${key}`, 25, 60_000)) {
-      throw new HttpsError("resource-exhausted", "Too many attempts. Try again later.");
+    // Require an authenticated caller. The PIN flow is only used by a signed-in
+    // session to re-authenticate (e.g., after a biometric lock); brand-new
+    // sign-in must use the standard Firebase auth flow.
+    if (!request.auth?.uid) {
+      throw new HttpsError("unauthenticated", "Authentication unavailable.");
+    }
+
+    const callerUid = request.auth.uid;
+    const ip = request.rawRequest?.ip || "ip-unknown";
+
+    if (!(await allowPersistent("pin-uid", callerUid, 5, 60_000))) {
+      throw new HttpsError("resource-exhausted", "Authentication unavailable.");
+    }
+    if (!(await allowPersistent("pin-ip", ip, 25, 60_000))) {
+      throw new HttpsError("resource-exhausted", "Authentication unavailable.");
     }
 
     const username = String(request.data?.username || "").trim().toLowerCase();
-    const pin = request.data?.pin;
+    const rawPin = request.data?.pin;
     const sanitizedUsername = username.replace(/[^a-z0-9]/g, "");
-    if (!sanitizedUsername || pin === undefined || pin === null) {
-      throw new HttpsError("invalid-argument", "Invalid username or PIN.");
+    const pin = typeof rawPin === "string" ? rawPin : String(rawPin ?? "");
+    // Enforce a real password length; never pad/zero-fill. Firebase auth
+    // already requires >= 6 chars on registration, so this matches the floor.
+    if (!sanitizedUsername || !/^[A-Za-z0-9]{6,}$/.test(pin)) {
+      throw new HttpsError("permission-denied", "Authentication unavailable.");
     }
 
     const email = `${sanitizedUsername}${FAKE_DOMAIN}`;
-    const password = String(pin).padEnd(6, "0");
 
     const apiKey = process.env.FIREBASE_WEB_API_KEY || "";
     if (!apiKey) {
       logger.error("pinSession missing FIREBASE_WEB_API_KEY env");
-      throw new HttpsError("failed-precondition", "Server configuration error.");
+      throw new HttpsError("unavailable", "Authentication unavailable.");
     }
 
     const url = `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${apiKey}`;
@@ -129,16 +170,20 @@ exports.pinSession = onCall({ region: REGION }, async (request) => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         email,
-        password,
+        password: pin,
         returnSecureToken: true,
       }),
     });
     const json = await res.json().catch(() => ({}));
     if (!res.ok || !json.localId) {
-      throw new HttpsError(
-        "permission-denied",
-        "Invalid credentials.",
-      );
+      throw new HttpsError("permission-denied", "Authentication unavailable.");
+    }
+
+    // The PIN flow only mints a custom token for the *currently signed-in*
+    // user. This blocks the brute-force-then-takeover path where a different
+    // username's credentials could be guessed and used to swap identity.
+    if (json.localId !== callerUid) {
+      throw new HttpsError("permission-denied", "Authentication unavailable.");
     }
 
     const customToken = await admin.auth().createCustomToken(json.localId);

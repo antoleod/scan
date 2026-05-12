@@ -1,14 +1,22 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, Linking, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import * as Clipboard from 'expo-clipboard';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { AppSettings, type PersistenceMode } from '../../../types';
 import { BARCODE_FORMAT_OPTIONS, type BarcodeFormat } from '../../../core/barcode';
 import { canInstallPwa, detectBrowserInstallSupport, getManualInstallInstructions, getPwaInstallDiagnostics, subscribePwaInstallAvailability, triggerPwaInstall } from '../../../core/pwa';
 import { createSharedNoteGroup, fetchSharedGroupsForCurrentUser, joinSharedNoteGroup, type SharedNoteGroup } from '../../../core/firebase';
 import { useAppTheme } from '../../../constants/theme';
-import { loadNotes, removeNote, type NoteItem } from '../../../core/notes';
+import { addRichNoteUnique, loadNotes, removeNote, setNoteSecret, type NoteItem } from '../../../core/notes';
+import { clearPin, hasPin } from '../../../core/secretPin';
+import { SecretPinModal } from '../../SecretPinModal';
 import { Toast, useToast } from '../../Toast';
+
+const SECTION_STATE_KEY = '@MyKit_settings_sections_v1';
+
+type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
 
 type Palette = { bg: string; fg: string; accent: string; muted: string; card: string; border: string };
 
@@ -66,18 +74,116 @@ function mergeMemorableWords(first: string, second: string) {
   return `${left}${right}`;
 }
 
-function SectionCard({ title, subtitle, accent, subtitleColor, cardBackground, cardBorder, children, defaultOpen = false }: { title: string; subtitle?: string; accent: string; subtitleColor: string; cardBackground: string; cardBorder: string; children: React.ReactNode; defaultOpen?: boolean }) {
-  const [open, setOpen] = useState(defaultOpen);
+function useSectionState(sectionIds: string[], initial?: Record<string, boolean>) {
+  const [state, setState] = useState<Record<string, boolean>>(() => {
+    const seed: Record<string, boolean> = {};
+    for (const id of sectionIds) seed[id] = Boolean(initial?.[id]);
+    return seed;
+  });
+  const [hydrated, setHydrated] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    AsyncStorage.getItem(SECTION_STATE_KEY).then((raw) => {
+      if (cancelled) return;
+      if (raw) {
+        try {
+          const parsed = JSON.parse(raw) as Record<string, boolean>;
+          setState((prev) => {
+            const merged: Record<string, boolean> = { ...prev };
+            for (const id of sectionIds) {
+              if (typeof parsed[id] === 'boolean') merged[id] = parsed[id];
+            }
+            return merged;
+          });
+        } catch {}
+      }
+      setHydrated(true);
+    });
+    return () => { cancelled = true; };
+  }, [sectionIds.join('|')]);
+
+  const persist = useCallback((next: Record<string, boolean>) => {
+    setState(next);
+    AsyncStorage.setItem(SECTION_STATE_KEY, JSON.stringify(next)).catch(() => undefined);
+  }, []);
+
+  const toggle = useCallback((id: string) => {
+    setState((prev) => {
+      const next = { ...prev, [id]: !prev[id] };
+      AsyncStorage.setItem(SECTION_STATE_KEY, JSON.stringify(next)).catch(() => undefined);
+      return next;
+    });
+  }, []);
+
+  const setAll = useCallback((open: boolean) => {
+    const next: Record<string, boolean> = {};
+    for (const id of sectionIds) next[id] = open;
+    persist(next);
+  }, [sectionIds.join('|'), persist]);
+
+  const openCount = useMemo(() => Object.values(state).filter(Boolean).length, [state]);
+
+  return { state, toggle, setAll, openCount, hydrated, total: sectionIds.length };
+}
+
+function SectionCard({
+  open,
+  onToggle,
+  title,
+  subtitle,
+  icon,
+  badge,
+  badgeTone,
+  accent,
+  subtitleColor,
+  cardBackground,
+  cardBorder,
+  children,
+}: {
+  open: boolean;
+  onToggle: () => void;
+  title: string;
+  subtitle?: string;
+  icon?: IoniconName;
+  badge?: string;
+  badgeTone?: 'success' | 'warn' | 'info' | 'muted';
+  accent: string;
+  subtitleColor: string;
+  cardBackground: string;
+  cardBorder: string;
+  children: React.ReactNode;
+}) {
+  const badgeColors: Record<NonNullable<typeof badgeTone>, { bg: string; fg: string }> = {
+    success: { bg: 'rgba(34,197,94,0.16)', fg: '#22c55e' },
+    warn:    { bg: 'rgba(245,158,11,0.16)', fg: '#f59e0b' },
+    info:    { bg: 'rgba(0,212,255,0.16)',  fg: '#00D4FF' },
+    muted:   { bg: 'rgba(148,163,184,0.16)',fg: '#94a3b8' },
+  };
+  const badgePalette = badge ? badgeColors[badgeTone ?? 'muted'] : null;
+
   return (
     <View style={[styles.sectionCard, { borderLeftColor: accent, backgroundColor: cardBackground, borderColor: cardBorder }]}>
-      <Pressable onPress={() => setOpen((v) => !v)} style={({ pressed }) => [styles.sectionHeader, { opacity: pressed ? 0.8 : 1 }]}>
-        <View style={{ flex: 1 }}>
-          <Text style={[styles.sectionTitle, { color: accent }]}>{title}</Text>
-          {subtitle ? <Text style={[styles.sectionSubtitle, { color: subtitleColor }]}>{subtitle}</Text> : null}
+      <Pressable onPress={onToggle} style={({ pressed }) => [styles.sectionHeader, { opacity: pressed ? 0.8 : 1 }]}>
+        {icon ? (
+          <View style={[styles.sectionIcon, { backgroundColor: `${accent}1f`, borderColor: `${accent}55` }]}>
+            <Ionicons name={icon} size={14} color={accent} />
+          </View>
+        ) : null}
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <View style={styles.sectionTitleRow}>
+            <Text style={[styles.sectionTitle, { color: accent }]} numberOfLines={1}>{title}</Text>
+            {badgePalette ? (
+              <View style={[styles.sectionBadge, { backgroundColor: badgePalette.bg }]}>
+                <Text style={[styles.sectionBadgeText, { color: badgePalette.fg }]}>{badge}</Text>
+              </View>
+            ) : null}
+          </View>
+          {subtitle ? <Text style={[styles.sectionSubtitle, { color: subtitleColor }]} numberOfLines={2}>{subtitle}</Text> : null}
         </View>
         <Ionicons name={open ? 'chevron-down' : 'chevron-forward'} size={16} color={accent} />
       </Pressable>
-      {open ? children : null}
+      {open ? <View style={styles.sectionBody}>{children}</View> : null}
     </View>
   );
 }
@@ -152,7 +258,7 @@ export function SettingsTab({
   const { width } = useWindowDimensions();
   const isDesktop = width >= 1024;
   const { setThemeName } = useAppTheme();
-  const { show: showToast } = useToast();
+  const { toast, show: showToast, hide: hideToast } = useToast();
   const [passPhrase, setPassPhrase] = useState('');
   const [passwordMode, setPasswordMode] = useState<'phrases' | 'seed'>('phrases');
   const [phraseCount, setPhraseCount] = useState(2);
@@ -170,7 +276,200 @@ export function SettingsTab({
   const [reviewLoading, setReviewLoading] = useState(false);
   const [reviewDeleting, setReviewDeleting] = useState(false);
   const [reviewSelected, setReviewSelected] = useState<Set<string>>(new Set());
+  const [pinModalVisible, setPinModalVisible] = useState(false);
+  const [pinModalMode, setPinModalMode] = useState<'setup' | 'unlock'>('setup');
+  const [pinFlow, setPinFlow] = useState<'note-secret' | 'set' | 'change-unlock' | 'change-set' | 'remove-unlock' | null>(null);
+  const [pendingSecretNoteId, setPendingSecretNoteId] = useState<string | null>(null);
+  const [pinExists, setPinExists] = useState(false);
 
+  const SECTION_IDS = useMemo<string[]>(() => [
+    'password',
+    'theme',
+    'scan',
+    'notes-features',
+    'smart-notes',
+    'security',
+    'clipboard',
+    'shared-groups',
+    'pwa',
+    'barcode',
+    'cleanup',
+    'data-sync',
+    'advanced',
+  ], []);
+  const DEFAULT_OPEN = useMemo<Record<string, boolean>>(() => ({
+    password: true,
+    theme: true,
+    'notes-features': true,
+    security: true,
+    pwa: Platform.OS === 'web',
+    'smart-notes': true,
+  }), []);
+  const { state: sectionOpen, toggle: toggleSection, setAll: setAllSections, openCount, total: totalSections } = useSectionState(SECTION_IDS, DEFAULT_OPEN);
+
+  useEffect(() => {
+    let cancelled = false;
+    const refresh = () => hasPin().then((value) => { if (!cancelled) setPinExists(value); }).catch(() => undefined);
+    refresh();
+    return () => { cancelled = true; };
+  }, []);
+
+  const refreshPinStatus = useCallback(async () => {
+    try { setPinExists(await hasPin()); } catch { setPinExists(false); }
+  }, []);
+
+  const reopenPinModal = useCallback((mode: 'setup' | 'unlock') => {
+    setPinModalVisible(false);
+    setTimeout(() => {
+      setPinModalMode(mode);
+      setPinModalVisible(true);
+    }, 220);
+  }, []);
+
+  const startSetPin = useCallback(() => {
+    setPinFlow('set');
+    setPinModalMode('setup');
+    setPinModalVisible(true);
+  }, []);
+
+  const startChangePin = useCallback(() => {
+    setPinFlow('change-unlock');
+    setPinModalMode('unlock');
+    setPinModalVisible(true);
+  }, []);
+
+  const startRemovePin = useCallback(() => {
+    Alert.alert(
+      'Remove PIN',
+      'Private notes will lose their PIN protection. Continue?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Continue',
+          style: 'destructive',
+          onPress: () => {
+            setPinFlow('remove-unlock');
+            setPinModalMode('unlock');
+            setPinModalVisible(true);
+          },
+        },
+      ],
+    );
+  }, []);
+
+  const copyPassword = useCallback(async () => {
+    if (!passPhrase) return;
+    try {
+      await Clipboard.setStringAsync(passPhrase);
+      showToast('Password copied', 'success');
+    } catch {
+      showToast('Copy failed', 'error');
+    }
+  }, [passPhrase, showToast]);
+
+  const savePasswordAsPrivateNote = useCallback(async () => {
+    if (!passPhrase) return;
+    try {
+      const noteText = `Password: ${passPhrase}`;
+      const result = await addRichNoteUnique(noteText, 'work', [], undefined, false, false);
+      if (!result.inserted || !result.notes[0]) {
+        showToast('Note already exists', 'info');
+        return;
+      }
+      const newNoteId = result.notes[0].id;
+      const has = await hasPin();
+      if (has) {
+        await setNoteSecret(newNoteId, true);
+        showToast('Saved as private note', 'success');
+      } else {
+        setPendingSecretNoteId(newNoteId);
+        setPinFlow('note-secret');
+        setPinModalMode('setup');
+        setPinModalVisible(true);
+      }
+    } catch {
+      showToast('Failed to save note', 'error');
+    }
+  }, [passPhrase, showToast]);
+
+  const handlePinSuccess = useCallback(async () => {
+    const flow = pinFlow;
+    setPinModalVisible(false);
+
+    if (flow === 'note-secret') {
+      if (pendingSecretNoteId) {
+        try {
+          await setNoteSecret(pendingSecretNoteId, true);
+          showToast('Saved as private note', 'success');
+        } catch {
+          showToast('Failed to lock note', 'error');
+        }
+      }
+      setPendingSecretNoteId(null);
+      setPinFlow(null);
+      await refreshPinStatus();
+      return;
+    }
+
+    if (flow === 'set') {
+      showToast('PIN configured', 'success');
+      setPinFlow(null);
+      await refreshPinStatus();
+      return;
+    }
+
+    if (flow === 'change-unlock') {
+      setPinFlow('change-set');
+      reopenPinModal('setup');
+      return;
+    }
+
+    if (flow === 'change-set') {
+      showToast('PIN changed', 'success');
+      setPinFlow(null);
+      await refreshPinStatus();
+      return;
+    }
+
+    if (flow === 'remove-unlock') {
+      try {
+        await clearPin();
+        showToast('PIN removed', 'success');
+      } catch {
+        showToast('Failed to remove PIN', 'error');
+      }
+      setPinFlow(null);
+      await refreshPinStatus();
+      return;
+    }
+  }, [pinFlow, pendingSecretNoteId, refreshPinStatus, reopenPinModal, showToast]);
+
+  const handlePinCancel = useCallback(() => {
+    const flow = pinFlow;
+    setPinModalVisible(false);
+    setPinFlow(null);
+    if (flow === 'note-secret') {
+      setPendingSecretNoteId(null);
+      showToast('Note saved without lock', 'info');
+    }
+  }, [pinFlow, showToast]);
+
+  const notesFeatures = settings.notesFeatures ?? {
+    autoDetectSmartType: true,
+    detectMedication: true,
+    detectShopping: true,
+    detectReminder: true,
+    autoSaveDraft: true,
+  };
+
+  const patchNotesFeatures = useCallback((partial: Partial<NonNullable<AppSettings['notesFeatures']>>) => {
+    onPatchSettings({
+      notesFeatures: {
+        ...notesFeatures,
+        ...partial,
+      },
+    });
+  }, [notesFeatures, onPatchSettings]);
 
   const openReviewPanel = useCallback(async () => {
     setReviewOpen(true);
@@ -308,7 +607,44 @@ export function SettingsTab({
           <Text style={[styles.pageSubtitle, { color: palette.muted }]}>Centered and compact configuration workspace.</Text>
         </View>
 
-        <SectionCard title="Password generator" subtitle="Top priority tool." accent={palette.accent} subtitleColor={palette.muted} cardBackground={palette.card} cardBorder={palette.border} defaultOpen>
+        <View style={[styles.toolbar, { backgroundColor: palette.card, borderColor: palette.border }]}>
+          <View style={styles.toolbarLeft}>
+            <View style={[styles.toolbarPill, { borderColor: `${activeAccent}55`, backgroundColor: `${activeAccent}14` }]}>
+              <Ionicons name="options-outline" size={12} color={activeAccent} />
+              <Text style={[styles.toolbarPillText, { color: activeAccent }]}>{openCount}/{totalSections} OPEN</Text>
+            </View>
+          </View>
+          <View style={styles.toolbarRight}>
+            <Pressable
+              onPress={() => setAllSections(true)}
+              style={({ pressed }) => [styles.toolbarBtn, { borderColor: palette.border, opacity: pressed ? 0.75 : 1 }]}
+              accessibilityLabel="Expand all sections"
+            >
+              <Ionicons name="chevron-down" size={13} color={palette.fg} />
+              <Text style={[styles.toolbarBtnText, { color: palette.fg }]}>Expand</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => setAllSections(false)}
+              style={({ pressed }) => [styles.toolbarBtn, { borderColor: palette.border, opacity: pressed ? 0.75 : 1 }]}
+              accessibilityLabel="Collapse all sections"
+            >
+              <Ionicons name="chevron-up" size={13} color={palette.fg} />
+              <Text style={[styles.toolbarBtnText, { color: palette.fg }]}>Collapse</Text>
+            </Pressable>
+          </View>
+        </View>
+
+        <SectionCard
+          open={sectionOpen['password']}
+          onToggle={() => toggleSection('password')}
+          title="Password generator"
+          subtitle="Generate, copy and save as private note."
+          icon="key-outline"
+          accent={palette.accent}
+          subtitleColor={palette.muted}
+          cardBackground={palette.card}
+          cardBorder={palette.border}
+        >
           <View style={styles.modeRow}>
               {[
                 { key: 'phrases', label: 'Phrases' },
@@ -354,10 +690,42 @@ export function SettingsTab({
             </View>
           ) : null}
           <Pressable onPress={generatePassword} style={[styles.bulkButton, { backgroundColor: activeAccent }]}><Text style={[styles.bulkButtonText, { color: '#111' }]}>Generate</Text></Pressable>
-          {passPhrase ? <View style={[styles.passwordResult, { borderColor: palette.border, backgroundColor: palette.card }]}><Text style={[styles.passwordResultText, { color: palette.fg }]}>{passPhrase}</Text></View> : null}
+          {passPhrase ? (
+            <View style={[styles.passwordResult, { borderColor: palette.border, backgroundColor: palette.card }]}>
+              <Text style={[styles.passwordResultText, { color: palette.fg }]} selectable>{passPhrase}</Text>
+              <View style={styles.passwordActionsRow}>
+                <Pressable
+                  onPress={copyPassword}
+                  style={({ pressed }) => [styles.passwordActionBtn, { backgroundColor: activeAccent, opacity: pressed ? 0.8 : 1 }]}
+                >
+                  <Ionicons name="copy-outline" size={14} color="#111" />
+                  <Text style={[styles.passwordActionText, { color: '#111' }]}>Copy</Text>
+                </Pressable>
+                <Pressable
+                  onPress={savePasswordAsPrivateNote}
+                  style={({ pressed }) => [styles.passwordActionBtn, { backgroundColor: 'transparent', borderWidth: 1, borderColor: activeAccent, opacity: pressed ? 0.8 : 1 }]}
+                >
+                  <Ionicons name="lock-closed-outline" size={14} color={activeAccent} />
+                  <Text style={[styles.passwordActionText, { color: activeAccent }]}>Save as private note</Text>
+                </Pressable>
+              </View>
+            </View>
+          ) : null}
         </SectionCard>
 
-        <SectionCard title="Theme selector" subtitle="Animated active border." accent={palette.accent} subtitleColor={palette.muted} cardBackground={palette.card} cardBorder={palette.border} defaultOpen>
+        <SectionCard
+          open={sectionOpen['theme']}
+          onToggle={() => toggleSection('theme')}
+          title="Theme selector"
+          subtitle="Animated active border."
+          icon="color-palette-outline"
+          badge={themeOptions.find((t) => t.key === settings.theme)?.label.toUpperCase()}
+          badgeTone="info"
+          accent={palette.accent}
+          subtitleColor={palette.muted}
+          cardBackground={palette.card}
+          cardBorder={palette.border}
+        >
           <View style={[styles.themeGrid, isDesktop ? styles.themeGridDesktop : null]}> 
             {themeOptions.map((item) => (
               <ThemeCard
@@ -376,13 +744,86 @@ export function SettingsTab({
           {settings.theme === 'custom' ? <TextInput style={[styles.input, { borderColor: palette.border, color: palette.fg, backgroundColor: palette.card }]} placeholder="#00D4FF" placeholderTextColor={palette.muted} value={settings.customAccent} onChangeText={(value) => onPatchSettings({ customAccent: value })} /> : null}
         </SectionCard>
 
-        <SectionCard title="Scan options" subtitle="Core behavior." accent={palette.accent} subtitleColor={palette.muted} cardBackground={palette.card} cardBorder={palette.border}>
+        <SectionCard
+          open={sectionOpen['scan']}
+          onToggle={() => toggleSection('scan')}
+          title="Scan options"
+          subtitle="Core behavior."
+          icon="scan-outline"
+          accent={palette.accent}
+          subtitleColor={palette.muted}
+          cardBackground={palette.card}
+          cardBorder={palette.border}
+        >
           <View style={styles.toggleRow}><Text style={[styles.toggleLabel, { color: palette.fg }]}>Auto detect</Text><Switch value={settings.autoDetect} onValueChange={(value) => onPatchSettings({ autoDetect: value, scanProfile: value ? 'auto' : settings.scanProfile })} /></View>
           <View style={styles.toggleRow}><Text style={[styles.toggleLabel, { color: palette.fg }]}>Open URL</Text><Switch value={settings.openUrls ?? true} onValueChange={(value) => onPatchSettings({ openUrls: value })} /></View>
           <View style={styles.toggleRow}><Text style={[styles.toggleLabel, { color: palette.fg }]}>OCR correction</Text><Switch value={settings.ocrCorrection} onValueChange={(value) => onPatchSettings({ ocrCorrection: value })} /></View>
         </SectionCard>
 
-        <SectionCard title="Smart notes" subtitle="Entity detection and card rendering." accent={palette.accent} subtitleColor={palette.muted} cardBackground={palette.card} cardBorder={palette.border} defaultOpen>
+        <SectionCard
+          open={sectionOpen['notes-features']}
+          onToggle={() => toggleSection('notes-features')}
+          title="Notes features"
+          subtitle="Toggle workflows available in the Notes tab."
+          icon="document-text-outline"
+          badge={notesFeatures.autoDetectSmartType ? 'AUTO' : 'OFF'}
+          badgeTone={notesFeatures.autoDetectSmartType ? 'success' : 'muted'}
+          accent={palette.accent}
+          subtitleColor={palette.muted}
+          cardBackground={palette.card}
+          cardBorder={palette.border}
+        >
+          <View style={styles.toggleRow}>
+            <Text style={[styles.toggleLabel, { color: palette.fg }]}>Auto-detect smart workflows</Text>
+            <Switch
+              value={notesFeatures.autoDetectSmartType}
+              onValueChange={(value) => patchNotesFeatures({ autoDetectSmartType: value })}
+            />
+          </View>
+          <View style={styles.toggleRow}>
+            <Text style={[styles.toggleLabel, { color: notesFeatures.autoDetectSmartType ? palette.fg : palette.muted }]}>Detect medication</Text>
+            <Switch
+              disabled={!notesFeatures.autoDetectSmartType}
+              value={notesFeatures.detectMedication}
+              onValueChange={(value) => patchNotesFeatures({ detectMedication: value })}
+            />
+          </View>
+          <View style={styles.toggleRow}>
+            <Text style={[styles.toggleLabel, { color: notesFeatures.autoDetectSmartType ? palette.fg : palette.muted }]}>Detect shopping list</Text>
+            <Switch
+              disabled={!notesFeatures.autoDetectSmartType}
+              value={notesFeatures.detectShopping}
+              onValueChange={(value) => patchNotesFeatures({ detectShopping: value })}
+            />
+          </View>
+          <View style={styles.toggleRow}>
+            <Text style={[styles.toggleLabel, { color: notesFeatures.autoDetectSmartType ? palette.fg : palette.muted }]}>Detect reminder</Text>
+            <Switch
+              disabled={!notesFeatures.autoDetectSmartType}
+              value={notesFeatures.detectReminder}
+              onValueChange={(value) => patchNotesFeatures({ detectReminder: value })}
+            />
+          </View>
+          <View style={styles.toggleRow}>
+            <Text style={[styles.toggleLabel, { color: palette.fg }]}>Auto-save draft</Text>
+            <Switch
+              value={notesFeatures.autoSaveDraft}
+              onValueChange={(value) => patchNotesFeatures({ autoSaveDraft: value })}
+            />
+          </View>
+        </SectionCard>
+
+        <SectionCard
+          open={sectionOpen['smart-notes']}
+          onToggle={() => toggleSection('smart-notes')}
+          title="Smart notes"
+          subtitle="Entity detection and card rendering."
+          icon="sparkles-outline"
+          accent={palette.accent}
+          subtitleColor={palette.muted}
+          cardBackground={palette.card}
+          cardBorder={palette.border}
+        >
           <View style={styles.toggleRow}>
             <Text style={[styles.toggleLabel, { color: palette.fg }]}>IP detection</Text>
             <Switch
@@ -548,7 +989,106 @@ export function SettingsTab({
           </View>
         </SectionCard>
 
-        <SectionCard title="Shared groups" subtitle="Create/join note groups." accent={palette.accent} subtitleColor={palette.muted} cardBackground={palette.card} cardBorder={palette.border}>
+        <SectionCard
+          open={sectionOpen['security']}
+          onToggle={() => toggleSection('security')}
+          title="Security"
+          subtitle="PIN to unlock private notes."
+          icon="lock-closed-outline"
+          badge={pinExists ? 'CONFIGURED' : 'NOT SET'}
+          badgeTone={pinExists ? 'success' : 'warn'}
+          accent={palette.accent}
+          subtitleColor={palette.muted}
+          cardBackground={palette.card}
+          cardBorder={palette.border}
+        >
+          <View style={[styles.statusRow, { borderColor: palette.border, backgroundColor: `${palette.bg}80` }]}>
+            <Ionicons name={pinExists ? 'shield-checkmark' : 'shield-outline'} size={20} color={pinExists ? '#22c55e' : '#f59e0b'} />
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={[styles.statusTitle, { color: palette.fg }]}>
+                {pinExists ? 'Private notes are locked' : 'No PIN configured'}
+              </Text>
+              <Text style={[styles.statusSubtitle, { color: palette.muted }]}>
+                {pinExists ? '6-digit PIN protects every note marked as private.' : 'Set a 6-digit PIN to lock private notes.'}
+              </Text>
+            </View>
+          </View>
+          <View style={[styles.bulkGrid, isDesktop ? styles.bulkGridDesktop : null]}>
+            {!pinExists ? (
+              <Pressable
+                onPress={startSetPin}
+                style={({ pressed }) => [styles.bulkButton, styles.bulkGridItem, isDesktop ? styles.bulkGridItemDesktop : styles.bulkGridItemMobile, { backgroundColor: activeAccent, opacity: pressed ? 0.85 : 1 }]}
+              >
+                <Text style={[styles.bulkButtonText, { color: '#111' }]}>Set PIN</Text>
+              </Pressable>
+            ) : (
+              <>
+                <Pressable
+                  onPress={startChangePin}
+                  style={({ pressed }) => [styles.bulkButton, styles.bulkGridItem, isDesktop ? styles.bulkGridItemDesktop : styles.bulkGridItemMobile, { backgroundColor: activeAccent, opacity: pressed ? 0.85 : 1 }]}
+                >
+                  <Text style={[styles.bulkButtonText, { color: '#111' }]}>Change PIN</Text>
+                </Pressable>
+                <Pressable
+                  onPress={startRemovePin}
+                  style={({ pressed }) => [styles.bulkButton, styles.bulkGridItem, isDesktop ? styles.bulkGridItemDesktop : styles.bulkGridItemMobile, { backgroundColor: '#b91c1c', opacity: pressed ? 0.85 : 1 }]}
+                >
+                  <Text style={[styles.bulkButtonText, { color: '#fff' }]}>Remove PIN</Text>
+                </Pressable>
+              </>
+            )}
+          </View>
+          <Text style={[styles.helperLine, { color: palette.muted }]}>Stored hashed in {Platform.OS === 'web' ? 'AsyncStorage' : 'SecureStore'}. Removing the PIN unlocks all private notes.</Text>
+        </SectionCard>
+
+        <SectionCard
+          open={sectionOpen['clipboard']}
+          onToggle={() => toggleSection('clipboard')}
+          title="Clipboard"
+          subtitle="Cloud sync and capture behavior."
+          icon="clipboard-outline"
+          badge={settings.clipboardCloudSync ? 'SYNCING' : 'LOCAL'}
+          badgeTone={settings.clipboardCloudSync ? 'success' : 'muted'}
+          accent={palette.accent}
+          subtitleColor={palette.muted}
+          cardBackground={palette.card}
+          cardBorder={palette.border}
+        >
+          <View style={styles.toggleRow}>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={[styles.toggleLabel, { color: palette.fg }]}>Cloud sync</Text>
+              <Text style={[styles.toggleHint, { color: palette.muted }]}>Mirror clipboard entries to Firestore across devices.</Text>
+            </View>
+            <Switch
+              value={settings.clipboardCloudSync}
+              onValueChange={(value) => onPatchSettings({ clipboardCloudSync: value })}
+            />
+          </View>
+          <View style={styles.toggleRow}>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={[styles.toggleLabel, { color: palette.fg }]}>Background capture</Text>
+              <Text style={[styles.toggleHint, { color: palette.muted }]}>Keep monitoring the clipboard while the app/tab is in the background.</Text>
+            </View>
+            <Switch
+              value={settings.clipboardBackgroundCapture}
+              onValueChange={(value) => onPatchSettings({ clipboardBackgroundCapture: value })}
+            />
+          </View>
+        </SectionCard>
+
+        <SectionCard
+          open={sectionOpen['shared-groups']}
+          onToggle={() => toggleSection('shared-groups')}
+          title="Shared groups"
+          subtitle="Create/join note groups."
+          icon="people-outline"
+          badge={groups.length > 0 ? `${groups.length}` : undefined}
+          badgeTone="info"
+          accent={palette.accent}
+          subtitleColor={palette.muted}
+          cardBackground={palette.card}
+          cardBorder={palette.border}
+        >
           <View style={{ flexDirection: 'row', gap: 8 }}>
             <TextInput
               style={[styles.input, { flex: 1, borderColor: palette.border, color: palette.fg, backgroundColor: palette.card }]}
@@ -588,7 +1128,19 @@ export function SettingsTab({
         </SectionCard>
 
         {Platform.OS === 'web' ? (
-          <SectionCard title="PWA" subtitle="Install and desktop mode." accent={palette.accent} subtitleColor={palette.muted} cardBackground={palette.card} cardBorder={palette.border} defaultOpen>
+          <SectionCard
+            open={sectionOpen['pwa']}
+            onToggle={() => toggleSection('pwa')}
+            title="PWA"
+            subtitle="Install and desktop mode."
+            icon="cloud-download-outline"
+            badge={pwaInstallAvailable ? 'READY' : undefined}
+            badgeTone="success"
+            accent={palette.accent}
+            subtitleColor={palette.muted}
+            cardBackground={palette.card}
+            cardBorder={palette.border}
+          >
             <Pressable
               disabled={installBusy}
               onPress={async () => {
@@ -639,7 +1191,19 @@ export function SettingsTab({
           </SectionCard>
         ) : null}
 
-        <SectionCard title="Barcode formats" subtitle="Available formats." accent={palette.accent} subtitleColor={palette.muted} cardBackground={palette.card} cardBorder={palette.border}>
+        <SectionCard
+          open={sectionOpen['barcode']}
+          onToggle={() => toggleSection('barcode')}
+          title="Barcode formats"
+          subtitle="Available formats."
+          icon="barcode-outline"
+          badge={barcodeOutputFormat}
+          badgeTone="info"
+          accent={palette.accent}
+          subtitleColor={palette.muted}
+          cardBackground={palette.card}
+          cardBorder={palette.border}
+        >
           <View style={[styles.formatGrid, isDesktop ? styles.formatGridDesktop : null]}> 
             {barcodeOptions.map((format) => {
               const selected = barcodeOutputFormat === format.name;
@@ -654,7 +1218,17 @@ export function SettingsTab({
           <Text style={[styles.helperLine, { color: palette.muted }]}>Active scan types: {visibleBarcodeTypes.join(', ') || 'none'}</Text>
         </SectionCard>
 
-        <SectionCard title="Notes cleanup" subtitle="Auto-clear and bulk cleanup for notes." accent={palette.accent} subtitleColor={palette.muted} cardBackground={palette.card} cardBorder={palette.border}>
+        <SectionCard
+          open={sectionOpen['cleanup']}
+          onToggle={() => toggleSection('cleanup')}
+          title="Auto-cleanup"
+          subtitle="Notes and history retention."
+          icon="trash-outline"
+          accent={palette.accent}
+          subtitleColor={palette.muted}
+          cardBackground={palette.card}
+          cardBorder={palette.border}
+        >
           <View style={{ gap: 10 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
               <View style={{ flex: 1, minWidth: 160 }}>
@@ -669,6 +1243,36 @@ export function SettingsTab({
                     <Pressable
                       key={days}
                       onPress={() => onPatchSettings({ notesAutoClearDays: days })}
+                      style={({ pressed }) => ({
+                        paddingHorizontal: 12,
+                        paddingVertical: 6,
+                        borderRadius: 8,
+                        borderWidth: 1,
+                        borderColor: active ? activeAccent : palette.border,
+                        backgroundColor: active ? activeAccent : palette.card,
+                        opacity: pressed ? 0.8 : 1,
+                      })}
+                    >
+                      <Text style={{ color: active ? '#111' : palette.muted, fontSize: 12, fontWeight: active ? '800' : '600' }}>{label}</Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+              <View style={{ flex: 1, minWidth: 160 }}>
+                <Text style={{ color: palette.fg, fontSize: 13, fontWeight: '600' }}>Auto-clear history older than</Text>
+                <Text style={{ color: palette.muted, fontSize: 11, marginTop: 2 }}>Applies to scan history entries only</Text>
+              </View>
+              <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+                {([0, 30, 90, 180, 365] as const).map((days) => {
+                  const active = (settings.historyAutoClearDays ?? 0) === days;
+                  const label = days === 0 ? 'Never' : days === 365 ? '1 year' : `${days}d`;
+                  return (
+                    <Pressable
+                      key={days}
+                      onPress={() => onPatchSettings({ historyAutoClearDays: days })}
                       style={({ pressed }) => ({
                         paddingHorizontal: 12,
                         paddingVertical: 6,
@@ -873,7 +1477,19 @@ export function SettingsTab({
           </View>
         </SectionCard>
 
-        <SectionCard title="Data + Sync" subtitle="Backup and synchronization." accent={palette.accent} subtitleColor={palette.muted} cardBackground={palette.card} cardBorder={palette.border}>
+        <SectionCard
+          open={sectionOpen['data-sync']}
+          onToggle={() => toggleSection('data-sync')}
+          title="Data + Sync"
+          subtitle="Backup and synchronization."
+          icon="cloud-upload-outline"
+          badge={persistenceMode === 'firebase' ? 'CLOUD' : 'LOCAL'}
+          badgeTone={persistenceMode === 'firebase' ? 'success' : 'muted'}
+          accent={palette.accent}
+          subtitleColor={palette.muted}
+          cardBackground={palette.card}
+          cardBorder={palette.border}
+        >
           <View style={[styles.bulkGrid, isDesktop ? styles.bulkGridDesktop : null]}> 
             <Pressable onPress={onExportCsv} style={({ pressed }) => [styles.bulkButton, styles.bulkGridItem, isDesktop ? styles.bulkGridItemDesktop : styles.bulkGridItemMobile, { backgroundColor: activeAccent, opacity: pressed ? 0.8 : 1 }]}><Text style={[styles.bulkButtonText, { color: '#111' }]}>Export CSV</Text></Pressable>
             <Pressable onPress={onExportBackup} style={({ pressed }) => [styles.bulkButton, styles.bulkGridItem, isDesktop ? styles.bulkGridItemDesktop : styles.bulkGridItemMobile, { backgroundColor: activeAccent, opacity: pressed ? 0.8 : 1 }]}><Text style={[styles.bulkButtonText, { color: '#111' }]}>Export backup</Text></Pressable>
@@ -890,6 +1506,109 @@ export function SettingsTab({
           {userEmail ? <Text style={{ color: palette.fg, marginTop: 2 }}>{userEmail}</Text> : null}
         </SectionCard>
 
+        <SectionCard
+          open={sectionOpen['advanced']}
+          onToggle={() => toggleSection('advanced')}
+          title="Advanced"
+          subtitle="Prefixes, URLs, and power-user toggles."
+          icon="construct-outline"
+          badge="EXPERT"
+          badgeTone="warn"
+          accent={palette.accent}
+          subtitleColor={palette.muted}
+          cardBackground={palette.card}
+          cardBorder={palette.border}
+        >
+          <Text style={[styles.controlLabel, { color: palette.muted }]}>PI full prefix</Text>
+          <TextInput
+            style={[styles.input, { borderColor: palette.border, color: palette.fg, backgroundColor: palette.card }]}
+            value={settings.fullPrefix}
+            onChangeText={(value) => onPatchSettings({ fullPrefix: value.toUpperCase() })}
+            placeholder="02PI20"
+            placeholderTextColor={palette.muted}
+            autoCapitalize="characters"
+            autoCorrect={false}
+          />
+          <Text style={[styles.controlLabel, { color: palette.muted }]}>PI short prefix</Text>
+          <TextInput
+            style={[styles.input, { borderColor: palette.border, color: palette.fg, backgroundColor: palette.card }]}
+            value={settings.shortPrefix}
+            onChangeText={(value) => onPatchSettings({ shortPrefix: value.toUpperCase() })}
+            placeholder="MUSTBRUN"
+            placeholderTextColor={palette.muted}
+            autoCapitalize="characters"
+            autoCorrect={false}
+          />
+          <Text style={[styles.controlLabel, { color: palette.muted }]}>ServiceNow base URL</Text>
+          <TextInput
+            style={[styles.input, { borderColor: palette.border, color: palette.fg, backgroundColor: palette.card }]}
+            value={settings.serviceNowBaseUrl}
+            onChangeText={(value) => onPatchSettings({ serviceNowBaseUrl: value.trim() })}
+            placeholder="https://your-instance.service-now.com"
+            placeholderTextColor={palette.muted}
+            autoCapitalize="none"
+            autoCorrect={false}
+            keyboardType="url"
+          />
+          <Text style={[styles.helperLine, { color: palette.muted, marginTop: 4 }]}>Used to open ticket URLs from scans and notes.</Text>
+
+          <View style={[styles.divider, { backgroundColor: palette.border }]} />
+
+          <View style={styles.toggleRow}>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={[styles.toggleLabel, { color: palette.fg }]}>Show raw text</Text>
+              <Text style={[styles.toggleHint, { color: palette.muted }]}>Display the unprocessed scan content in history.</Text>
+            </View>
+            <Switch
+              value={settings.showRawText}
+              onValueChange={(value) => onPatchSettings({ showRawText: value })}
+            />
+          </View>
+          <View style={styles.toggleRow}>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={[styles.toggleLabel, { color: palette.fg }]}>Stay signed in</Text>
+              <Text style={[styles.toggleHint, { color: palette.muted }]}>Keep the Firebase session active for 15 days.</Text>
+            </View>
+            <Switch
+              value={settings.staySignedIn}
+              onValueChange={(value) => onPatchSettings({ staySignedIn: value })}
+            />
+          </View>
+
+          <Text style={[styles.controlLabel, { color: palette.muted }]}>Laser speed</Text>
+          <View style={styles.modeRow}>
+            {(['slow', 'normal', 'fast'] as const).map((speed) => {
+              const active = settings.laserSpeed === speed;
+              return (
+                <Pressable
+                  key={speed}
+                  onPress={() => onPatchSettings({ laserSpeed: speed })}
+                  style={[styles.modeChip, { borderColor: active ? activeAccent : palette.border, backgroundColor: active ? 'rgba(255,216,77,0.16)' : palette.card }]}
+                >
+                  <Text style={[styles.modeChipText, { color: active ? activeAccent : palette.fg, textTransform: 'capitalize' }]}>{speed}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+
+          <Text style={[styles.controlLabel, { color: palette.muted }]}>Scan profile</Text>
+          <View style={styles.modeRow}>
+            {(['auto', 'pi_full', 'pi_short'] as const).map((profile) => {
+              const active = settings.scanProfile === profile;
+              const label = profile === 'auto' ? 'Auto' : profile === 'pi_full' ? 'PI Full' : 'PI Short';
+              return (
+                <Pressable
+                  key={profile}
+                  onPress={() => onPatchSettings({ scanProfile: profile, autoDetect: profile === 'auto' })}
+                  style={[styles.modeChip, { borderColor: active ? activeAccent : palette.border, backgroundColor: active ? 'rgba(255,216,77,0.16)' : palette.card }]}
+                >
+                  <Text style={[styles.modeChipText, { color: active ? activeAccent : palette.fg }]}>{label}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </SectionCard>
+
         <View style={styles.bottomLogout}>
           <Pressable onPress={onLogout} style={[styles.bulkButton, styles.bottomLogoutBtn, isDesktop ? styles.bottomLogoutBtnDesktop : null, { backgroundColor: palette.accent }]}>
             <Text style={[styles.bulkButtonText, { color: '#fff' }]}>Log off</Text>
@@ -897,6 +1616,14 @@ export function SettingsTab({
         </View>
         </View>
       </ScrollView>
+      <SecretPinModal
+        visible={pinModalVisible}
+        mode={pinModalMode}
+        palette={palette}
+        onSuccess={handlePinSuccess}
+        onCancel={handlePinCancel}
+      />
+      <Toast toast={toast} onHide={hideToast} />
     </View>
   );
 }
@@ -910,9 +1637,26 @@ const styles = StyleSheet.create({
   pageTitle: { fontSize: 22, fontWeight: '900', letterSpacing: -0.6 },
   pageSubtitle: { fontSize: 12, lineHeight: 16 },
   sectionCard: { gap: 12, padding: 14, borderRadius: 14, borderLeftWidth: 3, borderWidth: 1 },
-  sectionHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
+  sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  sectionIcon: { width: 28, height: 28, borderRadius: 8, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  sectionTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
   sectionTitle: { fontSize: 13, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 1.2, fontFamily: 'monospace' },
-  sectionSubtitle: { fontSize: 11, lineHeight: 15 },
+  sectionSubtitle: { fontSize: 11, lineHeight: 15, marginTop: 2 },
+  sectionBadge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999 },
+  sectionBadgeText: { fontSize: 9, fontWeight: '900', letterSpacing: 0.8, fontFamily: 'monospace' },
+  sectionBody: { gap: 12 },
+  toolbar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, paddingHorizontal: 10, paddingVertical: 8, borderWidth: 1, borderRadius: 12 },
+  toolbarLeft: { flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1 },
+  toolbarRight: { flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 0 },
+  toolbarPill: { flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 1, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
+  toolbarPillText: { fontSize: 10, fontWeight: '900', letterSpacing: 1, fontFamily: 'monospace' },
+  toolbarBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, borderWidth: 1, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 },
+  toolbarBtnText: { fontSize: 11, fontWeight: '800', letterSpacing: 0.5 },
+  toggleHint: { fontSize: 11, lineHeight: 15, marginTop: 2 },
+  statusRow: { flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1, borderRadius: 12, padding: 12 },
+  statusTitle: { fontSize: 13, fontWeight: '700' },
+  statusSubtitle: { fontSize: 11, lineHeight: 15, marginTop: 2 },
+  divider: { height: 1, marginVertical: 6, opacity: 0.6 },
   chevron: { fontWeight: '800', fontSize: 14 },
   themeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, width: '100%', minWidth: 0 },
   themeGridDesktop: { gap: 10 },
@@ -945,6 +1689,9 @@ const styles = StyleSheet.create({
   bottomLogoutBtnDesktop: { alignSelf: 'flex-end', minWidth: 220 },
   passwordResult: { borderWidth: 1, borderRadius: 12, padding: 12, gap: 10 },
   passwordResultText: { fontSize: 13, fontWeight: '800', letterSpacing: 0.4, lineHeight: 18 },
+  passwordActionsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  passwordActionBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 36, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10 },
+  passwordActionText: { fontSize: 11, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.6 },
   modeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   modeChip: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 8 },
   modeChipText: { fontSize: 11, fontWeight: '800' },

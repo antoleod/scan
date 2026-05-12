@@ -165,7 +165,7 @@ export async function loginWithGoogle(isMobile: boolean = false, idToken?: strin
 }
 
 export async function sendMagicLink(email: string, redirectUrl?: string): Promise<void> {
-  await diag.info('auth.magiclink.send', { email: email.split('@')[0] });
+  await diag.info('auth.magiclink.send', { emailDomain: (email.split('@')[1] || '').toLowerCase() || 'n/a' });
   try {
     const url = redirectUrl || (typeof window !== 'undefined' ? window.location.origin : 'mykit://auth');
     await sendMagicLinkEmail(email, url);
@@ -177,7 +177,7 @@ export async function sendMagicLink(email: string, redirectUrl?: string): Promis
 }
 
 export async function verifyMagicLink(email: string, url: string): Promise<User> {
-  await diag.info('auth.magiclink.verify', { email: email.split('@')[0] });
+  await diag.info('auth.magiclink.verify', { emailDomain: (email.split('@')[1] || '').toLowerCase() || 'n/a' });
   try {
     const user = await verifyMagicLinkFirebase(email, url);
     return user;
