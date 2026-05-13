@@ -1332,14 +1332,12 @@ function MainApp() {
       clearAppLocalStorage('note');
       await clearCacheStorage('note');
       await purgeIndexedDBByKeyword('note');
-      await diag.info('notes.hardDelete.success', {});
-      showToast('All notes deleted', 'success');
+      await diag.info('notes.hard_delete');
+      showToast('Notes permanently deleted from all storage layers', 'success');
     } catch (error) {
       showToast('Failed to delete notes', 'error');
       await diag.error('notes.hardDelete.error', { message: String(error) });
     }
-    await diag.info('notes.hard_delete');
-    showToast('Notes permanently deleted from all storage layers', 'success');
   }
 
   async function hardDeleteHistoryNow() {
@@ -1384,22 +1382,35 @@ function MainApp() {
     clearAppLocalStorage('clipboard');
     await purgeIndexedDBByKeyword('clipboard');
     // Also clear from Firebase so it doesn't sync back on next load
+    let remoteCleared = true;
     try {
       const { clearClipboardInFirebase } = await import('../core/clipboard');
       await clearClipboardInFirebase();
-    } catch { /* ignore if Firebase not configured */ }
+    } catch {
+      remoteCleared = false;
+    }
     await diag.info('clipboard.hard_delete');
-    showToast('Clipboard permanently deleted from all storage layers', 'success');
+    showToast(
+      remoteCleared
+        ? 'Clipboard permanently deleted — local and cloud'
+        : 'Local clipboard deleted — cloud delete failed',
+      remoteCleared ? 'success' : 'error',
+    );
   }
 
   async function hardDeleteTemplatesNow() {
-    // Do NOT call syncNow after this — same reason as hardDeleteNotesNow.
-    // hardDeleteAllTemplates already clears AsyncStorage AND calls clearTemplatesInFirebase.
-    await hardDeleteAllTemplates();
-    clearAppLocalStorage('template');
-    await purgeIndexedDBByKeyword('template');
-    await diag.info('templates.hard_delete');
-    showToast('Templates permanently deleted from all storage layers', 'success');
+    try {
+      // Do NOT call syncNow after this — same reason as hardDeleteNotesNow.
+      // hardDeleteAllTemplates already clears AsyncStorage AND calls clearTemplatesInFirebase.
+      await hardDeleteAllTemplates();
+      clearAppLocalStorage('template');
+      await purgeIndexedDBByKeyword('template');
+      await diag.info('templates.hard_delete');
+      showToast('Templates permanently deleted from all storage layers', 'success');
+    } catch (error) {
+      showToast('Failed to delete templates', 'error');
+      await diag.error('templates.hardDelete.error', { message: String(error) });
+    }
   }
 
   function resetEntryModal() {

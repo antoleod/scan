@@ -58,6 +58,7 @@ import { safeText } from '../../../utils/groceryDetection';
 import { ClipboardEntry } from '../../../core/clipboard.types';
 import { loadDeletedNoteKeys, markDeletedNoteKey, noteStorageKey } from '../../../core/noteDeletions';
 import { WorkflowMetadata } from '../../../core/notes';
+import { diag } from '../../../core/diagnostics';
 import { ClipboardScreen } from '../../../screens/ClipboardScreen';
 import { mainAppStyles } from '../styles';
 import { TabBar } from '../../TabBar';
@@ -222,6 +223,14 @@ function findInsertedNote(notes: NoteItem[], insertedId?: string): NoteItem | un
   return insertedId ? notes.find((note) => note.id === insertedId) : undefined;
 }
 
+function isPendingSync(note: NoteItem): boolean {
+  return !note.syncStatus ||
+    note.syncStatus === 'pending' ||
+    note.syncStatus === 'retrying' ||
+    note.syncStatus === 'offline' ||
+    note.syncStatus === 'failed';
+}
+
 export function NotesTab({
   palette,
   settings,
@@ -277,6 +286,8 @@ export function NotesTab({
 
   const draftAutoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const draftAutoSaveClearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const focusTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const mountedRef = useRef(true);
   const draftNoteIdRef = useRef<string | null>(null);
   const [searchText, setSearchText] = useState('');
   const [selectedNoteIds, setSelectedNoteIds] = useState<Set<string>>(new Set());
@@ -311,6 +322,14 @@ export function NotesTab({
   const autoCategory = useMemo(() => detectAutoCategory(draftTextValue), [draftTextValue]);
   const activeCategory = manualCategory || autoCategory;
 
+  const scheduleFocus = useCallback((fn: () => void, delayMs: number) => {
+    const timer = setTimeout(() => {
+      focusTimersRef.current = focusTimersRef.current.filter((item) => item !== timer);
+      if (mountedRef.current) fn();
+    }, delayMs);
+    focusTimersRef.current.push(timer);
+  }, []);
+
   function handleDraftTextChange(value: unknown) {
     if (typeof value === 'string') {
       setDraftText(value);
@@ -330,13 +349,20 @@ export function NotesTab({
 
   useEffect(() => {
     ensureWorkNotesAndEmailTemplates().then(({ notes: n, templates: t }) => {
+      if (!mountedRef.current) return;
       setNotes(n);
       setTemplates(t);
-    }).catch(() => undefined);
+    }).catch((error) => {
+      diag.warn('notes.tab.bootstrap.error', { message: String(error) }).catch(() => undefined);
+    });
     loadDeletedNoteKeys().then((keys) => {
+      if (!mountedRef.current) return;
       deletedNoteKeysRef.current = new Set([...deletedNoteKeysRef.current, ...keys]);
       setDeletedKeysLoaded(true);
-    }).catch(() => { setDeletedKeysLoaded(true); });
+    }).catch((error) => {
+      diag.warn('notes.tab.deleted_keys.load.error', { message: String(error) }).catch(() => undefined);
+      if (mountedRef.current) setDeletedKeysLoaded(true);
+    });
   }, []);
 
   // Real-time cross-device sync via Firestore onSnapshot.
@@ -356,7 +382,9 @@ export function NotesTab({
     }).then((u) => {
       if (!isMounted) { u(); return; }
       unsub = u;
-    }).catch(() => undefined);
+    }).catch((error) => {
+      diag.warn('notes.tab.subscribe.personal.error', { message: String(error) }).catch(() => undefined);
+    });
     return () => {
       isMounted = false;
       unsub?.();
@@ -366,13 +394,7 @@ export function NotesTab({
   // Auto-push notes to Firebase when they change locally (debounced, skips server-initiated updates).
   useEffect(() => {
     if (!user) return;
-    const hasUnpushedNotes = notes.some((item) =>
-      !item.syncStatus ||
-      item.syncStatus === 'pending' ||
-      item.syncStatus === 'retrying' ||
-      item.syncStatus === 'offline' ||
-      item.syncStatus === 'failed'
-    );
+    const hasUnpushedNotes = notes.some(isPendingSync);
     if (serverUpdateRef.current && !hasUnpushedNotes) {
       serverUpdateRef.current = false;
       return;
@@ -386,13 +408,7 @@ export function NotesTab({
       // notes are created rapidly and the second debounce fires with old state.
       const pendingIds = new Set(
         latestNotesRef.current
-          .filter((n) =>
-            !n.syncStatus ||
-            n.syncStatus === 'pending' ||
-            n.syncStatus === 'retrying' ||
-            n.syncStatus === 'offline' ||
-            n.syncStatus === 'failed'
-          )
+          .filter(isPendingSync)
           .map((n) => n.id),
       );
       try {
@@ -407,7 +423,8 @@ export function NotesTab({
           serverUpdateRef.current = true;   // prevents re-sync loop
           setNotes(updated);
         }
-      } catch {
+      } catch (error) {
+        diag.warn('notes.tab.sync.debounced.error', { message: String(error), pendingCount: pendingIds.size }).catch(() => undefined);
         setNotes((current) => current.map((item) => {
           if (!pendingIds.has(item.id)) return item;
           return {
@@ -434,7 +451,7 @@ export function NotesTab({
       const currentNotes = latestNotesRef.current;
       const currentTemplates = latestTemplatesRef.current;
       const pendingIds = new Set(
-        currentNotes.filter((n) => n.syncStatus === 'pending' || n.syncStatus === 'retrying' || n.syncStatus === 'offline' || n.syncStatus === 'failed').map((n) => n.id),
+        currentNotes.filter(isPendingSync).map((n) => n.id),
       );
       if (pendingIds.size === 0) return;
       try {
@@ -442,8 +459,8 @@ export function NotesTab({
         const updated = await markNotesSynced(pendingIds);
         serverUpdateRef.current = true;
         setNotes(updated);
-      } catch {
-        // network failure or auth issue
+      } catch (error) {
+        diag.warn('notes.tab.sync.online.error', { message: String(error), pendingCount: pendingIds.size }).catch(() => undefined);
       }
     };
     window.addEventListener('online', retryPendingSync);
@@ -459,7 +476,9 @@ export function NotesTab({
     subscribeToSharedGroups(setGroups).then((u) => {
       if (!isMounted) { u(); return; }
       groupsUnsub = u;
-    }).catch(() => undefined);
+    }).catch((error) => {
+      diag.warn('notes.tab.subscribe.groups.error', { message: String(error) }).catch(() => undefined);
+    });
     subscribeToSharedGroupNotes((sharedNotes) => {
       serverUpdateRef.current = true;
       sharedNotesRef.current = asSyncedRemoteNotes(sharedNotes);
@@ -469,13 +488,36 @@ export function NotesTab({
     }).then((u) => {
       if (!isMounted) { u(); return; }
       notesUnsub = u;
-    }).catch(() => undefined);
+    }).catch((error) => {
+      diag.warn('notes.tab.subscribe.shared_notes.error', { message: String(error) }).catch(() => undefined);
+    });
     return () => {
       isMounted = false;
       groupsUnsub?.();
       notesUnsub?.();
     };
   }, [user?.uid]);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      if (notesSyncTimerRef.current) {
+        clearTimeout(notesSyncTimerRef.current);
+        notesSyncTimerRef.current = null;
+      }
+      if (draftAutoSaveTimerRef.current) {
+        clearTimeout(draftAutoSaveTimerRef.current);
+        draftAutoSaveTimerRef.current = null;
+      }
+      if (draftAutoSaveClearTimerRef.current) {
+        clearTimeout(draftAutoSaveClearTimerRef.current);
+        draftAutoSaveClearTimerRef.current = null;
+      }
+      focusTimersRef.current.forEach((timer) => clearTimeout(timer));
+      focusTimersRef.current = [];
+    };
+  }, []);
 
   useEffect(() => {
     AsyncStorage.getItem(DRAFT_KEY).then((raw) => {
@@ -491,7 +533,9 @@ export function NotesTab({
       const category: NoteCategory | null =
         parsed?.category === 'general' || parsed?.category === 'work' ? parsed.category : null;
       setPendingDraft({ text, images, category, updatedAt: parsed?.updatedAt });
-    }).catch(() => undefined);
+    }).catch((error) => {
+      diag.warn('notes.tab.draft.restore.error', { message: String(error) }).catch(() => undefined);
+    });
   }, []);
 
   // Auto-save draft after 10 seconds of inactivity
@@ -546,7 +590,8 @@ export function NotesTab({
         draftAutoSaveClearTimerRef.current = setTimeout(() => {
           setDraftAutoSaveStatus('idle');
         }, 2000);
-      } catch {
+      } catch (error) {
+        diag.warn('notes.tab.draft.autosave.error', { message: String(error) }).catch(() => undefined);
         setDraftAutoSaveStatus('idle');
       }
     }, 10000); // 10 seconds
@@ -557,7 +602,7 @@ export function NotesTab({
         draftAutoSaveTimerRef.current = null;
       }
     };
-  }, [draftTextValue, draftImages, manualCategory, workspaceTab]);
+  }, [activeCategory, activeGroupId, draftImages, draftTextValue, manualCategory, settings.notesFeatures?.autoSaveDraft, workspaceTab]);
 
   // Real-time workflow detection while typing
   useEffect(() => {
@@ -1215,7 +1260,7 @@ export function NotesTab({
     setTemplateSubject(category === 'work' ? 'Work update' : 'General note');
     setTemplateBody(text);
     // Focus the 'to' field after the tab switches and re-renders
-    setTimeout(() => templateToInputRef.current?.focus(), 150);
+    scheduleFocus(() => templateToInputRef.current?.focus(), 150);
   }
 
   async function createQuickReminderFromNote(note: NoteItem) {
@@ -1325,7 +1370,9 @@ export function NotesTab({
   }
 
   async function deleteSelectedNotes() {
-    const count = selectedNoteIds.size;
+    const idsToDelete = Array.from(selectedNoteIds);
+    const count = idsToDelete.length;
+    if (count === 0) return;
     Alert.alert(
       'Delete notes',
       `Delete ${count} note${count > 1 ? 's' : ''}? This cannot be undone.`,
@@ -1334,7 +1381,7 @@ export function NotesTab({
         {
           text: 'Delete', style: 'destructive', onPress: async () => {
             let current = notes;
-            for (const id of selectedNoteIds) {
+            for (const id of idsToDelete) {
               current = await handleRemoveNote(id);
             }
             setNotes(current);
@@ -1707,7 +1754,7 @@ export function NotesTab({
                         setDraftImages(pendingDraft.images);
                         if (pendingDraft.category) setManualCategory(pendingDraft.category);
                         setPendingDraft(null);
-                        setTimeout(() => draftInputRef.current?.focus(), 80);
+                        scheduleFocus(() => draftInputRef.current?.focus(), 80);
                       }}
                       style={({ pressed }) => ({
                         paddingHorizontal: 12,
