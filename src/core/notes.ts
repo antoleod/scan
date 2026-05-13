@@ -229,6 +229,9 @@ async function pushNoteIfAuthenticated(note: NoteItem): Promise<boolean> {
     await updateNoteSyncStatus(note.id, 'pending');
 
     await upsertNoteInFirebase(note);
+    if (note.groupId) {
+      await upsertSharedGroupNote(note.groupId, note);
+    }
 
     // On success: set to synced (fire-and-forget)
     updateNoteSyncStatus(note.id, 'synced').catch(() => undefined);
@@ -276,6 +279,7 @@ function isDuplicateImage(notes: NoteItem[], base64: string) {
 
 function sameNoteContent(a: NoteItem, b: NoteItem) {
   if (a.kind !== b.kind) return false;
+  if ((a.groupId || '') !== (b.groupId || '')) return false;
   if (normalizeText(a.text).toLowerCase() !== normalizeText(b.text).toLowerCase()) return false;
   if ((a.imageBase64 || '') !== (b.imageBase64 || '')) return false;
   if ((a.imageMimeType || '') !== (b.imageMimeType || '')) return false;
@@ -303,7 +307,7 @@ function pushVersion(item: NoteItem): NoteItem {
 export async function addNoteUnique(
   text: string,
   category: NoteCategory = 'general',
-): Promise<{ notes: NoteItem[]; inserted: boolean }> {
+): Promise<{ notes: NoteItem[]; inserted: boolean; insertedId?: string }> {
   const trimmed = safeText(text).trim();
   if (!trimmed) return { notes: await loadNotes(), inserted: false };
   // N-1: lock covers the dedup check + first save so a concurrent addNoteUnique
@@ -342,7 +346,7 @@ export async function addNoteUnique(
     await saveNotes(mapped);
     return normalizeNotes(mapped);
   });
-  return { notes: finalNotes, inserted: true };
+  return { notes: finalNotes, inserted: true, insertedId: id };
 }
 
 export async function addRichNoteUnique(
@@ -352,7 +356,7 @@ export async function addRichNoteUnique(
   groupId?: string,
   draft?: boolean,
   autoDetectSmartType: boolean = true,
-): Promise<{ notes: NoteItem[]; inserted: boolean }> {
+): Promise<{ notes: NoteItem[]; inserted: boolean; insertedId?: string }> {
   const textStr = text && typeof text === 'string' ? text : '';
   const trimmed = textStr.trim();
   const normalizedAttachments = attachments.map((item) => String(item || '').trim()).filter(Boolean).slice(0, 8);
@@ -400,11 +404,6 @@ export async function addRichNoteUnique(
   if (lockResult !== null) return lockResult;
   const id = newNote!.id;
   const synced = await pushNoteIfAuthenticated(newNote!);
-  if (safeText(groupId).trim()) {
-    await upsertSharedGroupNote(safeText(groupId).trim(), newNote!).catch((error) =>
-      diag.warn('notes.push.shared.error', { message: String(error), noteId: id }),
-    );
-  }
   // N-1: second lock — fresh read for sync-status update.
   const finalNotes = await withNotesSaveLock(async () => {
     const fresh = await loadNotes();
@@ -414,10 +413,10 @@ export async function addRichNoteUnique(
     await saveNotes(mapped);
     return normalizeNotes(mapped);
   });
-  return { notes: finalNotes, inserted: true };
+  return { notes: finalNotes, inserted: true, insertedId: id };
 }
 
-export async function addImageNoteUnique(dataUri: string, title = 'Screenshot capture'): Promise<{ notes: NoteItem[]; inserted: boolean }> {
+export async function addImageNoteUnique(dataUri: string, title = 'Screenshot capture'): Promise<{ notes: NoteItem[]; inserted: boolean; insertedId?: string }> {
   const value = String(dataUri || '').trim();
   if (!value.startsWith('data:image/')) {
     return { notes: await loadNotes(), inserted: false };
@@ -467,7 +466,7 @@ export async function addImageNoteUnique(dataUri: string, title = 'Screenshot ca
     await saveNotes(mapped);
     return normalizeNotes(mapped);
   });
-  return { notes: finalNotes, inserted: true };
+  return { notes: finalNotes, inserted: true, insertedId: id };
 }
 
 export async function removeNote(id: string): Promise<NoteItem[]> {
@@ -1100,7 +1099,13 @@ export async function markNotesSynced(noteIds: ReadonlySet<string>): Promise<Not
     const updated = current.map((n) =>
       // C-4: also transition 'retrying' → 'synced'; previously only 'pending' was
       // handled, causing notes stuck in 'retrying' to trigger perpetual re-sync loops.
-      noteIds.has(n.id) && (n.syncStatus === 'pending' || n.syncStatus === 'retrying')
+      noteIds.has(n.id) && (
+        !n.syncStatus ||
+        n.syncStatus === 'pending' ||
+        n.syncStatus === 'retrying' ||
+        n.syncStatus === 'offline' ||
+        n.syncStatus === 'failed'
+      )
         ? { ...n, syncStatus: 'synced' as const }
         : n,
     );
@@ -1110,8 +1115,11 @@ export async function markNotesSynced(noteIds: ReadonlySet<string>): Promise<Not
 }
 
 export async function clearNotes(): Promise<void> {
+  const current = await loadNotes();
+  for (const n of current) {
+    await markDeletedNoteKey(noteStorageKey(n.id, n.groupId ? 'group' : 'personal', n.groupId));
+  }
   await AsyncStorage.setItem(NOTES_KEY, JSON.stringify([]));
-  await clearDeletedNoteKeys();
   try {
     await clearNotesInFirebase();
   } catch (error) {

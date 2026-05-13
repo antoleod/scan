@@ -188,6 +188,10 @@ function sortNotes(items: NoteItem[]): NoteItem[] {
   return [...items].sort((a, b) => (a.pinned === b.pinned ? tsMillis(b.updatedAt) - tsMillis(a.updatedAt) : a.pinned ? -1 : 1));
 }
 
+function asSyncedRemoteNotes(items: NoteItem[]): NoteItem[] {
+  return items.map((item) => ({ ...item, syncStatus: 'synced' as const }));
+}
+
 function mergeNotesByNewest(localNotes: NoteItem[], serverNotes: NoteItem[], sharedNotes: NoteItem[], deletedKeys: Set<string>): NoteItem[] {
   const map = new Map<string, NoteItem>();
   for (const item of [...localNotes, ...serverNotes, ...sharedNotes]) {
@@ -212,6 +216,10 @@ function mergeTemplatesByNewest(local: NoteTemplate[], incoming: NoteTemplate[])
     if (!prev || tsMillis(item.updatedAt) >= tsMillis(prev.updatedAt)) map.set(item.id, item);
   }
   return Array.from(map.values()).sort((a, b) => tsMillis(b.updatedAt) - tsMillis(a.updatedAt));
+}
+
+function findInsertedNote(notes: NoteItem[], insertedId?: string): NoteItem | undefined {
+  return insertedId ? notes.find((note) => note.id === insertedId) : undefined;
 }
 
 export function NotesTab({
@@ -338,7 +346,7 @@ export function NotesTab({
     let isMounted = true;
     subscribeToNotes(({ notes: serverNotes, templates: serverTemplates }) => {
       serverUpdateRef.current = true;
-      serverNotesRef.current = serverNotes;
+      serverNotesRef.current = asSyncedRemoteNotes(serverNotes);
       setNotes((current) => {
         return mergeNotesByNewest(current, serverNotesRef.current, sharedNotesRef.current, deletedNoteKeysRef.current);
       });
@@ -454,7 +462,7 @@ export function NotesTab({
     }).catch(() => undefined);
     subscribeToSharedGroupNotes((sharedNotes) => {
       serverUpdateRef.current = true;
-      sharedNotesRef.current = sharedNotes;
+      sharedNotesRef.current = asSyncedRemoteNotes(sharedNotes);
       setNotes((current) => {
         return mergeNotesByNewest(current, serverNotesRef.current, sharedNotesRef.current, deletedNoteKeysRef.current);
       });
@@ -527,8 +535,9 @@ export function NotesTab({
           setNotes(updatedNotes);
         } else if ((settings.notesFeatures?.autoSaveDraft ?? true) && (draftTextValue.trim().length > 0 || draftImages.length > 0)) {
           const result = await addRichNoteUnique(draftTextValue, activeCategory, draftImages, groupId, true, false);
-          if (result.inserted && result.notes[0]) {
-            draftNoteIdRef.current = result.notes[0].id;
+          const createdNote = findInsertedNote(result.notes, result.insertedId);
+          if (result.inserted && createdNote) {
+            draftNoteIdRef.current = createdNote.id;
             setNotes(result.notes);
           }
         }
@@ -878,8 +887,9 @@ export function NotesTab({
       showToast(draftIsSecret ? 'Secret note saved' : 'Note saved');
       setFilter('all');
 
-      if (draftIsSecret && result.notes[0]) {
-        const updated = await setNoteSecret(result.notes[0].id, true);
+      const createdNote = findInsertedNote(result.notes, result.insertedId);
+      if (draftIsSecret && createdNote) {
+        const updated = await setNoteSecret(createdNote.id, true);
         setNotes(updated);
         setDraftIsSecret(false);
       }
@@ -1025,7 +1035,11 @@ export function NotesTab({
     setNotes(result.notes);
     if (result.inserted) {
       setFilter('all');
-      const createdNote = result.notes[0];
+      const createdNote = findInsertedNote(result.notes, result.insertedId);
+      if (!createdNote) {
+        showToast('Failed to create medication follow-up');
+        return;
+      }
 
       const focus = cycleMeds[0];
       const workflowMeta: WorkflowMetadata = {
@@ -2282,7 +2296,7 @@ export function NotesTab({
             try {
               setNotes(result.notes);
               if (result.inserted) {
-                const createdNote = result.notes[0];
+                const createdNote = findInsertedNote(result.notes, result.insertedId);
                 if (!createdNote) {
                   showToast('Failed to create shopping list', 'error');
                   return;
