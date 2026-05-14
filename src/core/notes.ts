@@ -39,6 +39,8 @@ export type NoteColor = 'default' | 'amber' | 'mint' | 'sky' | 'rose';
 export type { SmartWorkflowType } from './smartNoteWorkflows';
 export type { SmartNoteLabel } from './noteIntelligence';
 
+const AUTO_NOTE_COLORS: NoteColor[] = ['amber', 'mint', 'sky', 'rose'];
+
 // Simple version format for backward compatibility with existing notes
 export type SimpleNoteVersion = {
   id: string;
@@ -140,6 +142,10 @@ function safeText(value: unknown): string {
   return typeof value === 'string' ? value : value == null ? '' : String(value);
 }
 
+function randomNoteColor(): NoteColor {
+  return AUTO_NOTE_COLORS[Math.floor(Math.random() * AUTO_NOTE_COLORS.length)] || 'default';
+}
+
 function normalizeText(value: unknown) {
   return safeText(value).trim().replace(/\s+/g, ' ');
 }
@@ -194,8 +200,7 @@ export async function loadNotes(): Promise<NoteItem[]> {
             item?.syncStatus === 'pending' ||
             item?.syncStatus === 'retrying' ||
             item?.syncStatus === 'failed' ||
-            item?.syncStatus === 'offline' ||
-            item?.syncStatus === 'synced'
+            item?.syncStatus === 'offline'
           ) ? item.syncStatus : undefined,
         }))
         .filter((item) => {
@@ -328,6 +333,7 @@ export async function addNoteUnique(
       kind: 'text',
       category,
       text: trimmed,
+      color: randomNoteColor(),
       pinned: false,
       createdAt: now,
       updatedAt: now,
@@ -389,7 +395,7 @@ export async function addRichNoteUnique(
       category,
       text: trimmed || 'Attachment note',
       groupId: safeText(groupId).trim() || undefined,
-      color: 'default',
+      color: randomNoteColor(),
       archived: false,
       attachments: normalizedAttachments.length ? normalizedAttachments : undefined,
       pinned: false,
@@ -448,7 +454,7 @@ export async function addImageNoteUnique(dataUri: string, title = 'Screenshot ca
       kind: 'image',
       category: 'general',
       text: title,
-      color: 'default',
+      color: randomNoteColor(),
       archived: false,
       imageBase64: base64,
       imageMimeType: mimeType,

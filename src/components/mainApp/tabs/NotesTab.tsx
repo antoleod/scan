@@ -192,7 +192,7 @@ function sortNotes(items: NoteItem[]): NoteItem[] {
 }
 
 function asSyncedRemoteNotes(items: NoteItem[]): NoteItem[] {
-  return items.map((item) => ({ ...item, syncStatus: 'synced' as const }));
+  return items.map((item) => ({ ...item, syncStatus: undefined }));
 }
 
 function mergeNotesByNewest(localNotes: NoteItem[], serverNotes: NoteItem[], sharedNotes: NoteItem[], deletedKeys: Set<string>): NoteItem[] {
@@ -226,8 +226,7 @@ function findInsertedNote(notes: NoteItem[], insertedId?: string): NoteItem | un
 }
 
 function isPendingSync(note: NoteItem): boolean {
-  return !note.syncStatus ||
-    note.syncStatus === 'pending' ||
+  return note.syncStatus === 'pending' ||
     note.syncStatus === 'retrying' ||
     note.syncStatus === 'offline' ||
     note.syncStatus === 'failed';

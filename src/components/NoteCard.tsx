@@ -455,21 +455,19 @@ export function NoteCard({
                     </Text>
                   </View>
                 ) : null}
-                {note.syncStatus ? (
+                {note.syncStatus && note.syncStatus !== 'synced' ? (
                   <View style={{
                     borderRadius: 3,
                     paddingHorizontal: 5,
                     paddingVertical: 1,
                     backgroundColor:
-                      note.syncStatus === 'synced' ? '#22c55e18'
-                      : note.syncStatus === 'failed' ? '#ef444418'
+                      note.syncStatus === 'failed' ? '#ef444418'
                       : note.syncStatus === 'offline' ? '#94a3b818'
                       : '#f59e0b18',
                   }}>
                     <Text style={{
                       color:
-                        note.syncStatus === 'synced' ? '#22c55e'
-                        : note.syncStatus === 'failed' ? '#ef4444'
+                        note.syncStatus === 'failed' ? '#ef4444'
                         : note.syncStatus === 'offline' ? '#94a3b8'
                         : '#f59e0b',
                       fontSize: 8,
@@ -477,9 +475,7 @@ export function NoteCard({
                       letterSpacing: 0.3,
                       textTransform: 'uppercase',
                     }}>
-                      {note.syncStatus === 'synced'
-                        ? 'Synced'
-                        : note.syncStatus === 'failed'
+                      {note.syncStatus === 'failed'
                         ? 'Sync failed'
                         : note.syncStatus === 'offline'
                         ? 'Saved offline'
