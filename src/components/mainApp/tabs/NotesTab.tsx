@@ -2382,7 +2382,7 @@ export function NotesTab({
             setDetectedWorkflow(null);
             return;
           }
-          addRichNoteUnique(shoppingNote, 'shopping', [], groupId, false, false).then(async (result) => {
+          addRichNoteUnique(shoppingNote, 'shopping', [], groupId, false, true).then(async (result) => {
             try {
               setNotes(result.notes);
               if (result.inserted) {

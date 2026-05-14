@@ -78,19 +78,19 @@ function CategoryHeader({
   return (
     <View
       style={{
-        marginTop: 12,
-        marginBottom: 8,
+        marginTop: 8,
+        marginBottom: 4,
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 8,
-        paddingHorizontal: 4,
+        gap: 6,
+        paddingHorizontal: 2,
       }}
     >
-      <Text style={{ fontSize: 18 }}>{emoji}</Text>
+      <Text style={{ fontSize: 14 }}>{emoji}</Text>
       <Text
         style={{
           flex: 1,
-          fontSize: 12,
+          fontSize: 10,
           fontWeight: '700',
           textTransform: 'uppercase',
           letterSpacing: 0.5,
@@ -101,15 +101,15 @@ function CategoryHeader({
       </Text>
       <View
         style={{
-          paddingHorizontal: 8,
-          paddingVertical: 2,
+          paddingHorizontal: 6,
+          paddingVertical: 1,
           borderRadius: 999,
           backgroundColor: `${CART}15`,
           borderWidth: 1,
           borderColor: `${CART}30`,
         }}
       >
-        <Text style={{ fontSize: 10, fontWeight: '700', color: CART }}>
+        <Text style={{ fontSize: 9, fontWeight: '700', color: CART }}>
           {count}
         </Text>
       </View>
@@ -187,15 +187,15 @@ function ItemRowV2({
   }, [item.id, item.note, noteEdit, onUpdateNote]);
 
   return (
-    <Animated.View style={{ transform: [{ scale }], marginBottom: 6 }}>
+    <Animated.View style={{ transform: [{ scale }], marginBottom: 4 }}>
       <View
         style={{
           flexDirection: 'row',
           alignItems: 'center',
-          gap: 8,
-          paddingVertical: 8,
-          paddingHorizontal: 10,
-          borderRadius: 8,
+          gap: 6,
+          paddingVertical: 5,
+          paddingHorizontal: 8,
+          borderRadius: 7,
           borderWidth: 1,
           borderColor: done ? DONE_BORDER : palette.border,
           backgroundColor: done ? DONE_BG : 'transparent',
@@ -228,8 +228,8 @@ function ItemRowV2({
           onPress={handleCheck}
           hitSlop={10}
           style={{
-            width: 18,
-            height: 18,
+            width: 16,
+            height: 16,
             borderRadius: 4,
             borderWidth: 2,
             borderColor: done ? CART : palette.textDim,
@@ -243,7 +243,7 @@ function ItemRowV2({
         </Pressable>
 
         {/* Label + Tags + Suggested Qty */}
-        <View style={{ flex: 1, gap: 4 }}>
+          <View style={{ flex: 1, gap: 2 }}>
           {editMode ? (
             <TextInput
               value={nameEdit}
@@ -252,7 +252,7 @@ function ItemRowV2({
               placeholder="Item name"
               autoFocus
               style={{
-                fontSize: 13,
+                fontSize: 12,
                 fontWeight: '600',
                 color: palette.textBody,
                 borderRadius: 6,
@@ -278,13 +278,13 @@ function ItemRowV2({
           )}
 
           {/* Tag badges + Suggested quantity */}
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, flexWrap: 'wrap' }}>
             {item.tags.map((tag) => (
               <View
                 key={tag}
                 style={{
-                  paddingHorizontal: 6,
-                  paddingVertical: 2,
+                  paddingHorizontal: 5,
+                  paddingVertical: 1,
                   borderRadius: 4,
                   backgroundColor: `${palette.accent}20`,
                   borderWidth: 0.5,
@@ -293,7 +293,7 @@ function ItemRowV2({
               >
                 <Text
                   style={{
-                    fontSize: 9,
+                    fontSize: 8,
                     fontWeight: '600',
                     color: palette.accent,
                     textTransform: 'lowercase',
@@ -311,8 +311,8 @@ function ItemRowV2({
                   onEditQty(item.id);
                 }}
                 style={({ pressed }) => ({
-                  paddingHorizontal: 6,
-                  paddingVertical: 2,
+                  paddingHorizontal: 5,
+                  paddingVertical: 1,
                   borderRadius: 4,
                   backgroundColor: pressed ? '#FCD34D22' : '#FCD34D0d',
                   borderWidth: 0.5,
@@ -321,7 +321,7 @@ function ItemRowV2({
               >
                 <Text
                   style={{
-                    fontSize: 9,
+                    fontSize: 8,
                     fontWeight: '500',
                     color: '#D97706',
                     textTransform: 'lowercase',
@@ -1444,9 +1444,11 @@ export function ShoppingListBlockV2({
   const total = filteredItems.length;
   const pct = total === 0 ? 0 : Math.round((done / total) * 100);
   const hasChecked = done > 0;
+  const compactMode = items.length > 6;
+  const listMaxHeight = compactMode ? 280 : undefined;
 
   return (
-    <View style={{ gap: 12 }}>
+    <View style={{ gap: 8 }}>
       {/* Favorites Quick-Add Chips */}
       {favorites.length > 0 && (
         <View style={{ paddingHorizontal: 4 }}>
@@ -1489,15 +1491,140 @@ export function ShoppingListBlockV2({
         </View>
       )}
 
+      {/* Header with progress */}
+      <View style={{ gap: 6 }}>
+        <View
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            paddingHorizontal: 2,
+          }}
+        >
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <Ionicons name="cart-outline" size={13} color={CART} />
+            <Text
+              style={{
+                fontSize: 10,
+                fontWeight: '800',
+                letterSpacing: 0.5,
+                color: CART,
+              }}
+            >
+              SHOPPING LIST
+            </Text>
+          </View>
+          <Text style={{ fontSize: 10, fontWeight: '600', color: palette.textDim }}>
+            {done}/{total}
+          </Text>
+        </View>
+
+        <View
+          style={{
+            height: 3,
+            borderRadius: 99,
+            backgroundColor: `${CART}22`,
+            overflow: 'hidden',
+          }}
+        >
+          <View
+            style={{
+              width: `${pct}%`,
+              height: '100%',
+              borderRadius: 99,
+              backgroundColor: CART,
+            }}
+          />
+        </View>
+      </View>
+
+      {/* Toolbar */}
+      <View
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 6,
+          paddingHorizontal: 2,
+          flexWrap: 'wrap',
+        }}
+      >
+        <Pressable
+          onPress={() => setAddInputVisible(!addInputVisible)}
+          style={({ pressed }) => ({
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 4,
+            paddingHorizontal: 8,
+            paddingVertical: 4,
+            borderRadius: 7,
+            borderWidth: 1,
+            borderColor: `${CART}44`,
+            backgroundColor: pressed ? `${CART}22` : `${CART}0e`,
+          })}
+        >
+          <Ionicons name="add-circle-outline" size={11} color={CART} />
+          <Text style={{ color: CART, fontSize: 10, fontWeight: '700' }}>Add</Text>
+        </Pressable>
+
+        <Pressable
+          onPress={handleShare}
+          style={({ pressed }) => ({
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 4,
+            paddingHorizontal: 8,
+            paddingVertical: 4,
+            borderRadius: 7,
+            borderWidth: 1,
+            borderColor: `${palette.accent}44`,
+            backgroundColor: pressed ? `${palette.accent}22` : `${palette.accent}0e`,
+          })}
+        >
+          <Ionicons name="copy-outline" size={11} color={palette.accent} />
+          <Text style={{ color: palette.accent, fontSize: 10, fontWeight: '700' }}>Copy</Text>
+        </Pressable>
+
+        <Pressable
+          onPress={() => setEditMode(!editMode)}
+          style={({ pressed }) => ({
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 4,
+            paddingHorizontal: 8,
+            paddingVertical: 4,
+            borderRadius: 7,
+            borderWidth: 1,
+            borderColor: editMode ? CART : `#0EA5E944`,
+            backgroundColor: editMode ? `${CART}22` : `#0EA5E90e`,
+          })}
+        >
+          <Ionicons name={editMode ? 'checkmark-done' : 'pencil'} size={11} color={editMode ? CART : '#0EA5E9'} />
+          <Text style={{ color: editMode ? CART : '#0EA5E9', fontSize: 10, fontWeight: '700' }}>
+            {editMode ? 'Done' : 'Edit'}
+          </Text>
+        </Pressable>
+
+        <MenuButton
+          palette={palette}
+          onPrices={() => { /* TODO: implement prices */ }}
+          onShare={handleShare}
+          onEditRaw={() => { /* TODO: implement edit raw */ }}
+          onReset={handleResetAll}
+          onClearDone={handleClearDone}
+          onLoadTemplate={() => setTemplateModalVisible(true)}
+          hasChecked={hasChecked}
+        />
+      </View>
+
       {/* Search bar */}
-      <View style={{ paddingHorizontal: 4 }}>
+      <View style={{ paddingHorizontal: 2 }}>
         <View
           style={{
             flexDirection: 'row',
             alignItems: 'center',
             gap: 6,
-            paddingHorizontal: 10,
-            paddingVertical: 6,
+            paddingHorizontal: 8,
+            paddingVertical: 5,
             borderRadius: 8,
             borderWidth: 1,
             borderColor: palette.border,
@@ -1525,54 +1652,6 @@ export function ShoppingListBlockV2({
               <Ionicons name="close-circle" size={12} color={palette.textDim} />
             </Pressable>
           )}
-        </View>
-      </View>
-
-      {/* Header with progress */}
-      <View style={{ gap: 8 }}>
-        <View
-          style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            paddingHorizontal: 4,
-          }}
-        >
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-            <Ionicons name="cart-outline" size={14} color={CART} />
-            <Text
-              style={{
-                fontSize: 11,
-                fontWeight: '800',
-                letterSpacing: 0.5,
-                color: CART,
-              }}
-            >
-              SHOPPING LIST
-            </Text>
-          </View>
-          <Text style={{ fontSize: 10, fontWeight: '600', color: palette.textDim }}>
-            {done}/{total}
-          </Text>
-        </View>
-
-        {/* Progress bar */}
-        <View
-          style={{
-            height: 3,
-            borderRadius: 99,
-            backgroundColor: `${CART}22`,
-            overflow: 'hidden',
-          }}
-        >
-          <View
-            style={{
-              width: `${pct}%`,
-              height: '100%',
-              borderRadius: 99,
-              backgroundColor: CART,
-            }}
-          />
         </View>
       </View>
 
@@ -1687,7 +1766,12 @@ export function ShoppingListBlockV2({
       )}
 
       {/* Items by category */}
-      <ScrollView showsVerticalScrollIndicator={false} scrollEnabled={false}>
+      <ScrollView
+        showsVerticalScrollIndicator={compactMode}
+        scrollEnabled={compactMode}
+        nestedScrollEnabled
+        style={listMaxHeight ? { maxHeight: listMaxHeight } : undefined}
+      >
         {searchQuery.length > 0 && total === 0 ? (
           <View
             style={{
@@ -1739,89 +1823,6 @@ export function ShoppingListBlockV2({
           })
         )}
       </ScrollView>
-
-      {/* Toolbar */}
-      <View
-        style={{
-          flexDirection: 'row',
-          alignItems: 'center',
-          gap: 8,
-          paddingHorizontal: 4,
-        }}
-      >
-        <Pressable
-          onPress={() => setAddInputVisible(!addInputVisible)}
-          style={({ pressed }) => ({
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: 4,
-            paddingHorizontal: 10,
-            paddingVertical: 6,
-            borderRadius: 8,
-            borderWidth: 1,
-            borderColor: `${CART}44`,
-            backgroundColor: pressed ? `${CART}22` : `${CART}0e`,
-          })}
-        >
-          <Ionicons name="add-circle-outline" size={12} color={CART} />
-          <Text style={{ color: CART, fontSize: 11, fontWeight: '700' }}>
-            Add item
-          </Text>
-        </Pressable>
-
-        <Pressable
-          onPress={handleShare}
-          style={({ pressed }) => ({
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: 4,
-            paddingHorizontal: 10,
-            paddingVertical: 6,
-            borderRadius: 8,
-            borderWidth: 1,
-            borderColor: `${palette.accent}44`,
-            backgroundColor: pressed ? `${palette.accent}22` : `${palette.accent}0e`,
-          })}
-        >
-          <Ionicons name="copy-outline" size={12} color={palette.accent} />
-          <Text style={{ color: palette.accent, fontSize: 11, fontWeight: '700' }}>
-            Copy
-          </Text>
-        </Pressable>
-
-        <Pressable
-          onPress={() => setEditMode(!editMode)}
-          style={({ pressed }) => ({
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: 4,
-            paddingHorizontal: 10,
-            paddingVertical: 6,
-            borderRadius: 8,
-            borderWidth: 1,
-            borderColor: editMode ? CART : `#0EA5E944`,
-            backgroundColor: editMode ? `${CART}22` : `#0EA5E90e`,
-          })}
-        >
-          <Ionicons name={editMode ? 'checkmark-done' : 'pencil'} size={12} color={editMode ? CART : '#0EA5E9'} />
-          <Text style={{ color: editMode ? CART : '#0EA5E9', fontSize: 11, fontWeight: '700' }}>
-            {editMode ? 'Done' : 'Edit'}
-          </Text>
-        </Pressable>
-
-        <View style={{ flex: 1 }} />
-
-        <MenuButton
-          palette={palette}
-          onPrices={() => { /* TODO: implement prices */ }}
-          onShare={handleShare}
-          onEditRaw={() => { /* TODO: implement edit raw */ }}
-          onReset={handleResetAll}
-          onClearDone={handleClearDone}
-          onLoadTemplate={() => setTemplateModalVisible(true)}
-          hasChecked={hasChecked}
-        />
-      </View>
 
       {/* Quantity editor sheet */}
       <QtyEditorSheet
