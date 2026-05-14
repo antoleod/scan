@@ -135,50 +135,107 @@ export const ComposerSection = forwardRef<TextInput, {
       return groups.find((group) => group.id === activeGroupId)?.name || 'Personal';
     }, [activeGroupId, groups]);
 
-    const startDictation = () => {
+    const startDictation = async () => {
       if (Platform.OS !== 'web' || typeof window === 'undefined') {
-        setDictationMessage('Voice dictation is not available in this browser. You can use your device keyboard microphone.');
+        setDictationMessage('Voice dictation is only available in supported web browsers. Use your keyboard microphone here.');
         localInputRef.current?.focus();
         return;
       }
       const SpeechRecognition = (window as unknown as {
         SpeechRecognition?: new () => {
           lang: string;
+          continuous: boolean;
           interimResults: boolean;
           maxAlternatives: number;
           onresult: ((event: { results: ArrayLike<{ 0: { transcript: string } }> }) => void) | null;
-          onerror: (() => void) | null;
+          onstart?: (() => void) | null;
+          onend?: (() => void) | null;
+          onerror: ((event: { error?: string }) => void) | null;
           start: () => void;
         };
         webkitSpeechRecognition?: new () => {
           lang: string;
+          continuous: boolean;
           interimResults: boolean;
           maxAlternatives: number;
           onresult: ((event: { results: ArrayLike<{ 0: { transcript: string } }> }) => void) | null;
-          onerror: (() => void) | null;
+          onstart?: (() => void) | null;
+          onend?: (() => void) | null;
+          onerror: ((event: { error?: string }) => void) | null;
           start: () => void;
         };
       }).SpeechRecognition || (window as unknown as { webkitSpeechRecognition?: new () => any }).webkitSpeechRecognition;
 
       if (!SpeechRecognition) {
-        setDictationMessage('Voice dictation is not available in this browser. You can use your device keyboard microphone.');
+        setDictationMessage('Voice dictation needs Chrome or Edge on web. You can still use your device keyboard microphone.');
+        localInputRef.current?.focus();
+        return;
+      }
+
+      if (typeof window.isSecureContext === 'boolean' && !window.isSecureContext) {
+        setDictationMessage('Voice dictation needs HTTPS or localhost to access the microphone.');
+        localInputRef.current?.focus();
         return;
       }
 
       try {
+        if (navigator.mediaDevices?.getUserMedia) {
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          stream.getTracks().forEach((track) => track.stop());
+        }
+
         const recognition = new SpeechRecognition();
         recognition.lang = typeof navigator !== 'undefined' && navigator.language ? navigator.language : 'en-US';
+        recognition.continuous = false;
         recognition.interimResults = false;
         recognition.maxAlternatives = 1;
+        let heardSpeech = false;
+        let hadError = false;
+        recognition.onstart = () => setDictationMessage('Listening...');
         recognition.onresult = (event: any) => {
           const transcript = safeText(event.results?.[0]?.[0]?.transcript).trim();
           if (!transcript) return;
+          heardSpeech = true;
           onChangeText(draftTextValue.trim() ? `${draftTextValue}\n${transcript}` : transcript);
+          setDictationMessage(null);
         };
-        recognition.onerror = () => setDictationMessage('Voice dictation is not available in this browser. You can use your device keyboard microphone.');
+        recognition.onerror = (event: { error?: string }) => {
+          hadError = true;
+          const error = event.error || 'unknown';
+          if (error === 'not-allowed' || error === 'service-not-allowed') {
+            setDictationMessage('Microphone permission is blocked. Allow microphone access in the browser and try again.');
+            return;
+          }
+          if (error === 'audio-capture') {
+            setDictationMessage('No microphone was detected. Check your input device and try again.');
+            return;
+          }
+          if (error === 'no-speech') {
+            setDictationMessage('No speech detected. Tap Dictate and speak again.');
+            return;
+          }
+          if (error === 'network') {
+            setDictationMessage('Voice dictation service is unavailable right now. Check the connection or try again later.');
+            return;
+          }
+          if (error !== 'aborted') {
+            setDictationMessage(`Voice dictation stopped: ${error}.`);
+          }
+        };
+        recognition.onend = () => {
+          if (!heardSpeech && !hadError) {
+            setDictationMessage('No speech detected. Tap Dictate and speak again.');
+          }
+        };
         recognition.start();
-      } catch {
-        setDictationMessage('Voice dictation is not available in this browser. You can use your device keyboard microphone.');
+      } catch (error) {
+        const name = error instanceof Error ? error.name : '';
+        if (name === 'NotAllowedError' || name === 'SecurityError') {
+          setDictationMessage('Microphone permission is blocked. Allow microphone access in the browser and try again.');
+        } else {
+          setDictationMessage('Voice dictation could not start. Use Chrome or Edge, then allow microphone access.');
+        }
+        localInputRef.current?.focus();
       }
     };
 
