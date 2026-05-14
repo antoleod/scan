@@ -234,6 +234,11 @@ async function updateNoteSyncStatus(noteId: string, status: NoteItem['syncStatus
 
 async function pushNoteIfAuthenticated(note: NoteItem): Promise<boolean> {
   try {
+    const rt = getFirebaseRuntime();
+    if (!rt?.enabled || !rt.auth || !rt.db || !rt.auth.currentUser) {
+      return true;
+    }
+
     // Set pending status before attempting sync
     await updateNoteSyncStatus(note.id, 'pending');
 
@@ -247,6 +252,10 @@ async function pushNoteIfAuthenticated(note: NoteItem): Promise<boolean> {
     return true;
   } catch (error) {
     await diag.warn('notes.push.note.error', { message: String(error), noteId: note.id });
+    const message = String(error || '').toLowerCase();
+    if (message.includes('firebase is not configured') || message.includes('no authenticated session')) {
+      return true;
+    }
     // Leave as 'pending' since we're enqueuing for retry
     const rt = getFirebaseRuntime();
     const uid = rt?.auth?.currentUser?.uid;

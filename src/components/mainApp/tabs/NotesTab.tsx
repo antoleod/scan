@@ -228,8 +228,12 @@ function findInsertedNote(notes: NoteItem[], insertedId?: string): NoteItem | un
 function isPendingSync(note: NoteItem): boolean {
   return note.syncStatus === 'pending' ||
     note.syncStatus === 'retrying' ||
-    note.syncStatus === 'offline' ||
-    note.syncStatus === 'failed';
+    note.syncStatus === 'offline';
+}
+
+function isLocalOnlySyncError(error: unknown): boolean {
+  const message = String(error || '').toLowerCase();
+  return message.includes('firebase is not configured') || message.includes('no authenticated session');
 }
 
 export function NotesTab({
@@ -432,7 +436,11 @@ export function NotesTab({
           if (!pendingIds.has(item.id)) return item;
           return {
             ...item,
-            syncStatus: (Platform.OS === 'web' && typeof navigator !== 'undefined' && navigator.onLine === false) ? 'offline' as const : 'failed' as const,
+            syncStatus: isLocalOnlySyncError(error)
+              ? undefined
+              : (Platform.OS === 'web' && typeof navigator !== 'undefined' && navigator.onLine === false)
+              ? 'offline' as const
+              : 'failed' as const,
           };
         }));
       }
