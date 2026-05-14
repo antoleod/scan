@@ -43,6 +43,7 @@ import {
   snoozeMedication,
   dismissMedication,
   reactivateMedication,
+  type SmartNoteLabel,
   type WorkflowStatus,
   type MedicationCycleEntry,
 } from '../../../core/notes';
@@ -54,6 +55,7 @@ import { checkDueReminders, dismissReminder, snoozeReminder, scheduleReminder, t
 import { flushQueue } from '../../../core/offlineQueue';
 import { detectSearchKind } from '../../../core/smartSearch';
 import { analyzeShoppingListCandidate, parseShoppingList, shoppingListToText, type ShoppingListCandidateAnalysis } from '../../../core/shoppingList';
+import { detectSmartNoteLabel } from '../../../core/noteIntelligence';
 import { safeText } from '../../../utils/groceryDetection';
 import { ClipboardEntry } from '../../../core/clipboard.types';
 import { loadDeletedNoteKeys, markDeletedNoteKey, noteStorageKey } from '../../../core/noteDeletions';
@@ -255,6 +257,7 @@ export function NotesTab({
   const draftTextValue = String(draftText || '');
   const [draftImages, setDraftImages] = useState<string[]>([]);
   const [manualCategory, setManualCategory] = useState<NoteCategory | null>(null);
+  const [manualSmartLabel, setManualSmartLabel] = useState<SmartNoteLabel | null>(null);
   const [detectedWorkflow, setDetectedWorkflow] = useState<SmartWorkflowDetection | null>(null);
   const [dueReminders, setDueReminders] = useState<MedicationReminder[]>([]);
   const [filter, setFilter] = useState<NoteFilter>('all');
@@ -281,7 +284,7 @@ export function NotesTab({
   const [workflowModalType, setWorkflowModalType] = useState<SmartWorkflowType | null>(null);
   const [workflowModalData, setWorkflowModalData] = useState<Record<string, unknown>>({});
   const [draftAutoSaveStatus, setDraftAutoSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
-  const [pendingDraft, setPendingDraft] = useState<{ text: string; images: string[]; category: NoteCategory | null; updatedAt?: number } | null>(null);
+  const [pendingDraft, setPendingDraft] = useState<{ text: string; images: string[]; category: NoteCategory | null; smartLabel?: SmartNoteLabel | null; updatedAt?: number } | null>(null);
   const { toast, show: showToast, hide: hideToast } = useToast();
 
   const draftAutoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -321,6 +324,7 @@ export function NotesTab({
 
   const autoCategory = useMemo(() => detectAutoCategory(draftTextValue), [draftTextValue]);
   const activeCategory = manualCategory || autoCategory;
+  const activeSmartLabel = manualSmartLabel || detectSmartNoteLabel(draftTextValue).label;
 
   const scheduleFocus = useCallback((fn: () => void, delayMs: number) => {
     const timer = setTimeout(() => {
@@ -532,7 +536,10 @@ export function NotesTab({
       if (!text && images.length === 0) return;
       const category: NoteCategory | null =
         parsed?.category === 'general' || parsed?.category === 'work' ? parsed.category : null;
-      setPendingDraft({ text, images, category, updatedAt: parsed?.updatedAt });
+      const smartLabel = ['contact', 'developer', 'money', 'travel', 'legal', 'home', 'idea', 'general'].includes(String(parsed?.smartLabel || ''))
+        ? parsed.smartLabel as SmartNoteLabel
+        : null;
+      setPendingDraft({ text, images, category, smartLabel, updatedAt: parsed?.updatedAt });
     }).catch((error) => {
       diag.warn('notes.tab.draft.restore.error', { message: String(error) }).catch(() => undefined);
     });
@@ -568,7 +575,7 @@ export function NotesTab({
         // 1) Local snapshot for crash recovery
         await AsyncStorage.setItem(
           DRAFT_KEY,
-          JSON.stringify({ text: draftTextValue, images: draftImages, category: manualCategory, updatedAt: Date.now() })
+          JSON.stringify({ text: draftTextValue, images: draftImages, category: manualCategory, smartLabel: manualSmartLabel, updatedAt: Date.now() })
         );
 
         // 2) Persist as a real Note with draft:true so it appears in the Draft filter
@@ -578,7 +585,7 @@ export function NotesTab({
           const updatedNotes = await updateNoteText(draftNoteIdRef.current, draftTextValue);
           setNotes(updatedNotes);
         } else if ((settings.notesFeatures?.autoSaveDraft ?? true) && (draftTextValue.trim().length > 0 || draftImages.length > 0)) {
-          const result = await addRichNoteUnique(draftTextValue, activeCategory, draftImages, groupId, true, false);
+          const result = await addRichNoteUnique(draftTextValue, activeCategory, draftImages, groupId, true, false, activeSmartLabel);
           const createdNote = findInsertedNote(result.notes, result.insertedId);
           if (result.inserted && createdNote) {
             draftNoteIdRef.current = createdNote.id;
@@ -602,7 +609,7 @@ export function NotesTab({
         draftAutoSaveTimerRef.current = null;
       }
     };
-  }, [activeCategory, activeGroupId, draftImages, draftTextValue, manualCategory, settings.notesFeatures?.autoSaveDraft, workspaceTab]);
+  }, [activeCategory, activeGroupId, activeSmartLabel, draftImages, draftTextValue, manualCategory, manualSmartLabel, settings.notesFeatures?.autoSaveDraft, workspaceTab]);
 
   // Real-time workflow detection while typing
   useEffect(() => {
@@ -926,12 +933,13 @@ export function NotesTab({
       setDraftText('');
       setDraftImages([]);
       setManualCategory(null);
+      setManualSmartLabel(null);
       setDraftAutoSaveStatus('idle');
       return;
     }
 
     const autoDetectEnabled = settings.notesFeatures?.autoDetectSmartType ?? true;
-    const result = await addRichNoteUnique(draftTextValue, activeCategory, draftImages, groupId, false, autoDetectEnabled);
+    const result = await addRichNoteUnique(draftTextValue, activeCategory, draftImages, groupId, false, autoDetectEnabled, activeSmartLabel);
     setNotes(result.notes);
     if (result.inserted) {
       showToast(draftIsSecret ? 'Secret note saved' : 'Note saved');
@@ -970,17 +978,26 @@ export function NotesTab({
       setDraftText('');
       setDraftImages([]);
       setManualCategory(null);
+      setManualSmartLabel(null);
       setDraftAutoSaveStatus('idle');
     }
   }
 
   function openShoppingWorkflowFromDraft(analysis?: ShoppingListCandidateAnalysis) {
+    const workflowItems = Array.isArray(detectedWorkflow?.extracted?.items)
+      ? (detectedWorkflow.extracted.items as Array<{ text?: unknown; label?: unknown }>)
+          .map((item) => String(item.text || item.label || '').trim())
+          .filter(Boolean)
+      : [];
     const model = analysis?.parsedItems?.length
       ? { items: analysis.parsedItems }
+      : workflowItems.length
+      ? parseShoppingList(workflowItems.join('\n'))
       : parseShoppingList(draftTextValue);
     const items = model.items.filter((item) => String(item.label || '').trim());
-    if (items.length < 3) {
-      showToast('Add at least 3 items');
+    const minimumItems = analysis?.isCandidate || workflowItems.length >= 2 ? 2 : 3;
+    if (items.length < minimumItems) {
+      showToast(`Add at least ${minimumItems} items`);
       return;
     }
     setWorkflowModalData({
@@ -1618,6 +1635,7 @@ export function NotesTab({
                 draftText={draftTextValue}
                 draftImages={draftImages}
                 activeCategory={activeCategory}
+                activeSmartLabel={manualSmartLabel}
                 isSecret={draftIsSecret}
                 autoSaveStatus={draftAutoSaveStatus}
                 onToggleSecret={async () => {
@@ -1659,6 +1677,7 @@ export function NotesTab({
                 onPasteImage={() => pasteImageFromClipboardToDraft().catch(() => undefined)}
                 onSave={() => saveDraftAsNote().catch(() => undefined)}
                 onSetCategory={setManualCategory}
+                onSetSmartLabel={setManualSmartLabel}
                 onQuickTemplateMedication={(medicationText) => {
                   const medicationTemplateText = String(medicationText || '');
                   const meds = medicationTemplateText
@@ -1758,6 +1777,7 @@ export function NotesTab({
                         setDraftText(pendingDraft.text);
                         setDraftImages(pendingDraft.images);
                         if (pendingDraft.category) setManualCategory(pendingDraft.category);
+                        if (pendingDraft.smartLabel) setManualSmartLabel(pendingDraft.smartLabel);
                         setPendingDraft(null);
                         scheduleFocus(() => draftInputRef.current?.focus(), 80);
                       }}
@@ -1780,6 +1800,9 @@ export function NotesTab({
                           draft.category || detectAutoCategory(draft.text),
                           draft.images,
                           groupId,
+                          false,
+                          true,
+                          draft.smartLabel || detectSmartNoteLabel(draft.text).label,
                         );
                         setNotes(result.notes);
                         await AsyncStorage.removeItem(DRAFT_KEY);
@@ -2378,6 +2401,7 @@ export function NotesTab({
                 setDraftText('');
                 setDraftImages([]);
                 setManualCategory(null);
+                setManualSmartLabel(null);
                 setDraftAutoSaveStatus('idle');
                 if (draftAutoSaveTimerRef.current) {
                   clearTimeout(draftAutoSaveTimerRef.current);

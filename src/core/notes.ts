@@ -15,6 +15,7 @@ import { clearDeletedNoteKeys, loadDeletedNoteKeys, markDeletedNoteKey, noteStor
 import { enqueueOperation } from './offlineQueue';
 import type { SmartWorkflowType } from './smartNoteWorkflows';
 import { detectSmartTypeFromContent } from './smartNoteWorkflows';
+import { detectSmartNoteLabel, type SmartNoteLabel } from './noteIntelligence';
 
 const NOTES_KEY = '@barra_notes_v1';
 const TEMPLATES_KEY = '@barra_note_templates_v1';
@@ -36,6 +37,7 @@ export type NoteKind = 'text' | 'image';
 export type NoteCategory = 'general' | 'work' | 'health' | 'shopping';
 export type NoteColor = 'default' | 'amber' | 'mint' | 'sky' | 'rose';
 export type { SmartWorkflowType } from './smartNoteWorkflows';
+export type { SmartNoteLabel } from './noteIntelligence';
 
 // Simple version format for backward compatibility with existing notes
 export type SimpleNoteVersion = {
@@ -107,6 +109,7 @@ export interface NoteItem {
   updatedAt: number;
   deletedAt?: number;
   smartType?: SmartWorkflowType;
+  smartLabel?: SmartNoteLabel;
   workflowStatus?: WorkflowStatus;
   workflowMetadata?: WorkflowMetadata;
   syncStatus?: 'pending' | 'retrying' | 'failed' | 'offline' | 'synced';
@@ -184,6 +187,7 @@ export async function loadNotes(): Promise<NoteItem[]> {
           updatedAt: Number(item?.updatedAt || Date.now()),
           deletedAt: typeof item?.deletedAt === 'number' ? Number(item.deletedAt) : undefined,
           smartType: (['none', 'medication', 'shopping', 'reminder', 'task'].includes(String(item?.smartType || 'none')) ? item.smartType : 'none') as SmartWorkflowType,
+          smartLabel: (['contact', 'developer', 'money', 'travel', 'legal', 'home', 'idea', 'general'].includes(String(item?.smartLabel || '')) ? item.smartLabel : undefined) as SmartNoteLabel | undefined,
           workflowStatus: (['draft', 'active', 'snoozed', 'completed', 'dismissed'].includes(String(item?.workflowStatus || '')) ? item.workflowStatus : undefined) as WorkflowStatus | undefined,
           workflowMetadata: typeof item?.workflowMetadata === 'object' ? item.workflowMetadata : undefined,
           syncStatus: (
@@ -356,6 +360,7 @@ export async function addRichNoteUnique(
   groupId?: string,
   draft?: boolean,
   autoDetectSmartType: boolean = true,
+  smartLabelOverride?: SmartNoteLabel,
 ): Promise<{ notes: NoteItem[]; inserted: boolean; insertedId?: string }> {
   const textStr = text && typeof text === 'string' ? text : '';
   const trimmed = textStr.trim();
@@ -372,6 +377,7 @@ export async function addRichNoteUnique(
       // Silently fail detection, continue without smartType
     }
   }
+  const smartLabel = smartLabelOverride || (trimmed ? detectSmartNoteLabel(trimmed).label : undefined);
 
   // N-1: lock covers the dedup check + first save.
   let newNote: NoteItem | undefined;
@@ -390,6 +396,7 @@ export async function addRichNoteUnique(
       createdAt: Date.now(),
       updatedAt: Date.now(),
       smartType,
+      smartLabel,
     };
     if (hasDuplicateNote(current, candidate)) {
       return { notes: current, inserted: false } as const;

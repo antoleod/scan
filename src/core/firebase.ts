@@ -668,6 +668,7 @@ function sanitizeNoteForFirestore(note: NoteItem): Record<string, unknown> {
   }
   if (note.title !== undefined) payload.title = note.title;
   if (note.smartType) payload.smartType = note.smartType;
+  if (note.smartLabel) payload.smartLabel = note.smartLabel;
   if (note.workflowStatus) payload.workflowStatus = note.workflowStatus;
   if (note.workflowMetadata) payload.workflowMetadata = note.workflowMetadata;
   if (note.isSecret !== undefined) payload.isSecret = note.isSecret;

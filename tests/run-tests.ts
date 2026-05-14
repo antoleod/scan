@@ -10,6 +10,7 @@ import { detectGroceryItem, formatShoppingList, isLikelyShoppingList, searchGroc
 import { analyzeShoppingListCandidate, isShoppingList, parseShoppingList } from "../src/core/shoppingList";
 import { findProductAlias, getAllShoppingDictionaries, isConnector, isKnownUnit, isNarrativeBlocker } from "../src/core/shoppingDictionary";
 import { detectSmartTypeFromContent } from "../src/core/smartNoteWorkflows";
+import { detectSmartNoteLabel } from "../src/core/noteIntelligence";
 import { createTrieFromWords } from "../src/utils/trie";
 import { AppError, AuthError, SyncError, ValidationError, toAppError, isRetryable } from "../src/core/errors";
 import { sanitizeScanInput, sanitizeNoteText, sanitizeTemplatePattern } from "../src/core/validation";
@@ -78,6 +79,12 @@ run("extractFields fallback captures email and phone", () => {
 
   assert.equal(fields.email, "maria@example.com");
   assert.equal(fields.phoneNumber, "+34 600 111 222");
+});
+
+run("smart note labels detect contact developer and money notes", () => {
+  assert.equal(detectSmartNoteLabel("Call Maria +34 600 111 222 maria@example.com").label, "contact");
+  assert.equal(detectSmartNoteLabel("Fix API bug then deploy React frontend").label, "developer");
+  assert.equal(detectSmartNoteLabel("Invoice paid 125.50 EUR by bank transfer").label, "money");
 });
 
 run("auth routing redirects anonymous root visits to login", () => {

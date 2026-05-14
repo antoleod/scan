@@ -6,6 +6,7 @@ import { QuickTemplatesModal } from './QuickTemplatesModal';
 import { safeText } from '../utils/groceryDetection';
 import { analyzeShoppingListCandidate, type ShoppingListCandidateAnalysis } from '../core/shoppingList';
 import { detectSmartWorkflow } from '../core/smartNoteWorkflows';
+import { detectSmartNoteLabel, getSmartNoteLabelMeta, type SmartNoteLabel } from '../core/noteIntelligence';
 import { ThemedActionIconButton } from './ThemedActionIconButton';
 
 type Palette = {
@@ -35,6 +36,7 @@ export const ComposerSection = forwardRef<TextInput, {
   draftText: string;
   draftImages: string[];
   activeCategory: NoteCategory;
+  activeSmartLabel?: SmartNoteLabel | null;
   onChangeGroup: (groupId: string) => void;
   onChangeText: (value: string) => void;
   onGenerate: () => void;
@@ -44,10 +46,11 @@ export const ComposerSection = forwardRef<TextInput, {
   onPasteImage: () => void;
   onSave: () => void;
   onSetCategory: (category: NoteCategory) => void;
+  onSetSmartLabel?: (label: SmartNoteLabel | null) => void;
   onQuickTemplateMedication?: (medication: string) => void;
   onQuickTemplateShopping?: (items: string) => void;
   onQuickTemplateReminder?: () => void;
-  onConvertShoppingCandidate?: (analysis: ShoppingListCandidateAnalysis) => void;
+  onConvertShoppingCandidate?: (analysis?: ShoppingListCandidateAnalysis) => void;
   onRemoveImage?: (index: number) => void;
   onOcrAppendText?: (text: string) => void;
   onOcrReplaceText?: (text: string) => void;
@@ -65,6 +68,7 @@ export const ComposerSection = forwardRef<TextInput, {
       draftText,
       draftImages,
       activeCategory,
+      activeSmartLabel,
       onChangeGroup,
       onChangeText,
       onGenerate,
@@ -74,6 +78,7 @@ export const ComposerSection = forwardRef<TextInput, {
       onPasteImage,
       onSave,
       onSetCategory,
+      onSetSmartLabel,
       onQuickTemplateMedication,
       onQuickTemplateShopping,
       onQuickTemplateReminder,
@@ -111,6 +116,16 @@ export const ComposerSection = forwardRef<TextInput, {
       && onConvertShoppingCandidate,
     );
     const contextualWorkflow = useMemo(() => detectSmartWorkflow(draftTextValue), [draftTextValue]);
+    const smartLabelDetection = useMemo(() => detectSmartNoteLabel(draftTextValue), [draftTextValue]);
+    const resolvedSmartLabel = activeSmartLabel || smartLabelDetection.label;
+    const smartLabelMeta = getSmartNoteLabelMeta(resolvedSmartLabel);
+    const showSmartLabelSuggestion = Boolean(
+      onSetSmartLabel
+      && draftTextValue.trim().length >= 6
+      && smartLabelDetection.label !== 'general'
+      && !activeSmartLabel
+      && smartLabelDetection.confidence < 0.76,
+    );
     const showContextualActions = Boolean(draftTextValue.trim().length >= 6 && contextualWorkflow.type !== 'none' && contextualWorkflow.confidence >= 0.65);
 
     // Ctrl+Enter / Cmd+Enter → save (only when there's something to save)
@@ -526,7 +541,7 @@ export const ComposerSection = forwardRef<TextInput, {
             ) : null}
             {contextualWorkflow.type === 'shopping' ? (
               <Pressable
-                onPress={() => shoppingAnalysis && onConvertShoppingCandidate?.(shoppingAnalysis)}
+                onPress={() => onConvertShoppingCandidate?.(shoppingAnalysis || undefined)}
                 style={({ pressed }) => ({ minHeight: 32, paddingHorizontal: 10, borderRadius: 999, backgroundColor: '#22c55e22', justifyContent: 'center', opacity: pressed ? 0.82 : 1 })}
               >
                 <Text style={{ color: '#22c55e', fontSize: 12, fontWeight: '700' }}>Convert to Shopping</Text>
@@ -535,6 +550,27 @@ export const ComposerSection = forwardRef<TextInput, {
             {contextualWorkflow.type === 'reminder' ? (
               <Pressable onPress={() => onQuickTemplateReminder?.()} style={({ pressed }) => ({ minHeight: 32, paddingHorizontal: 10, borderRadius: 999, backgroundColor: '#f59e0b22', justifyContent: 'center', opacity: pressed ? 0.82 : 1 })}>
                 <Text style={{ color: '#f59e0b', fontSize: 12, fontWeight: '700' }}>Create Reminder</Text>
+              </Pressable>
+            ) : null}
+          </View>
+        ) : null}
+
+        {draftTextValue.trim().length >= 6 && resolvedSmartLabel !== 'general' ? (
+          <View style={{ marginTop: 8, padding: 10, borderRadius: 10, borderWidth: 1, borderColor: `${smartLabelMeta.color}55`, backgroundColor: `${smartLabelMeta.color}12`, flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <Text style={{ color: smartLabelMeta.color, fontSize: 12, fontWeight: '800' }}>{smartLabelMeta.title}</Text>
+            <Text style={{ color: palette.textMuted, fontSize: 12, flex: 1, minWidth: 160 }}>
+              {showSmartLabelSuggestion ? 'Suggested label. Choose another if needed.' : 'Smart label will be saved with this note.'}
+            </Text>
+            {showSmartLabelSuggestion ? ([smartLabelDetection.label, ...smartLabelDetection.alternatives, 'general'] as SmartNoteLabel[]).map((label) => {
+              const meta = getSmartNoteLabelMeta(label);
+              return (
+                <Pressable key={label} onPress={() => onSetSmartLabel?.(label)} style={({ pressed }) => ({ minHeight: 30, paddingHorizontal: 10, borderRadius: 999, borderWidth: 1, borderColor: `${meta.color}66`, justifyContent: 'center', opacity: pressed ? 0.75 : 1 })}>
+                  <Text style={{ color: meta.color, fontSize: 11, fontWeight: '800' }}>{meta.title}</Text>
+                </Pressable>
+              );
+            }) : activeSmartLabel ? (
+              <Pressable onPress={() => onSetSmartLabel?.(null)} style={({ pressed }) => ({ minHeight: 30, paddingHorizontal: 10, borderRadius: 999, borderWidth: 1, borderColor: palette.border, justifyContent: 'center', opacity: pressed ? 0.75 : 1 })}>
+                <Text style={{ color: palette.textMuted, fontSize: 11, fontWeight: '800' }}>Auto</Text>
               </Pressable>
             ) : null}
           </View>

@@ -13,6 +13,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { detectNoteEntities, buildSmartNoteModel, segmentNoteText, parseServiceNowFields, buildRedactedText, SmartNoteEntities, SmartNoteModel, ServiceNowField, ServiceNowModel, NoteSegment, SENSITIVE_FIELD_KEYS } from '../core/smartNotes';
 import { isShoppingList, parseShoppingList } from '../core/shoppingList';
+import { detectSmartNoteLabel, getSmartNoteLabelMeta } from '../core/noteIntelligence';
 import { ShoppingListBlock } from './ShoppingListBlock';
 import { MedicationCard } from './MedicationCard';
 import { NoteListBlock } from './NoteListBlock';
@@ -322,6 +323,8 @@ export function NoteCard({
   const model = useMemo(() => buildSmartNoteModel(noteText, smart), [noteText, smart]);
   const sfModel = useMemo(() => parseServiceNowFields(noteText), [noteText]);
   const isShopping = useMemo(() => note.smartType === 'shopping' || note.category === 'shopping' || isShoppingList(noteText), [note.category, note.smartType, noteText]);
+  const smartLabel = note.smartLabel || detectSmartNoteLabel(noteText).label;
+  const smartLabelMeta = getSmartNoteLabelMeta(smartLabel);
   const previousShoppingItems = useMemo(() => (
     note.workflowMetadata?.checklistItems?.map((item) => ({
       id: item.id,
@@ -438,6 +441,13 @@ export function NoteCard({
                     </Text>
                   </View>
                 )}
+                {smartLabel && smartLabel !== 'general' ? (
+                  <View style={{ borderRadius: 3, paddingHorizontal: 5, paddingVertical: 1, backgroundColor: `${smartLabelMeta.color}18` }}>
+                    <Text style={{ color: smartLabelMeta.color, fontSize: 8, fontWeight: '700', letterSpacing: 0.3, textTransform: 'uppercase' }}>
+                      {smartLabelMeta.title}
+                    </Text>
+                  </View>
+                ) : null}
                 {note.archived ? (
                   <View style={{ borderRadius: 3, paddingHorizontal: 5, paddingVertical: 1, backgroundColor: 'transparent' }}>
                     <Text style={{ color: palette.textMuted, fontSize: 8, fontWeight: '700', letterSpacing: 0.3, textTransform: 'uppercase' }}>
