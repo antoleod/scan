@@ -25,7 +25,7 @@ import {
   collection,
   deleteDoc,
   doc,
-  getDocs,
+  getDocsFromServer,
   getFirestore,
   getDoc,
   onSnapshot,
@@ -61,6 +61,13 @@ function tsMillis(val: unknown): number {
   if (val && typeof (val as any).toMillis === 'function') return (val as any).toMillis();
   const n = Number(val);
   return Number.isFinite(n) && n > 0 ? n : Date.now();
+}
+
+function isTransientLocalNote(note: NoteItem): boolean {
+  return note.syncStatus === 'pending' ||
+    note.syncStatus === 'retrying' ||
+    note.syncStatus === 'offline' ||
+    note.syncStatus === 'failed';
 }
 
 const OPTIONAL_FIREBASE_ENV = [
@@ -472,7 +479,7 @@ export async function syncScansWithFirebase(local: ScanRecord[]) {
     pushed += 1;
   }
 
-  const snap = await getDocs(query(scansRef));
+  const snap = await getDocsFromServer(query(scansRef));
   const server: ScanRecord[] = [];
   snap.forEach((d) => {
     const x = d.data() as ScanRecord;
@@ -495,7 +502,7 @@ export async function deleteScanFromFirebase(scan: ScanRecord): Promise<void> {
   if (!user) throw new Error('No authenticated session to delete scan.');
 
   const scansRef = collection(rt.db, 'users', user.uid, 'scans');
-  const snap = await getDocs(query(scansRef));
+  const snap = await getDocsFromServer(query(scansRef));
   const targetKey = `${String(scan.codeValue || scan.codeNormalized || '').trim()}::${normalizeScanType(scan.type)}`;
   await markDeletedHistoryKey(targetKey);
   const deletions: Promise<unknown>[] = [];
@@ -534,6 +541,7 @@ export async function subscribeToScans(
     firestoreUnsub = onSnapshot(
       query(scansRef),
       (snap) => {
+        if (snap.metadata.fromCache) return;
         const scans: ScanRecord[] = [];
         snap.forEach((d) => {
           const x = d.data() as ScanRecord;
@@ -588,6 +596,7 @@ export async function subscribeToNotes(
     notesUnsub = onSnapshot(
       query(notesRef),
       (snap) => {
+        if (snap.metadata.fromCache) return;
         latestNotes = snap.docs.map((d) => {
           const data = d.data() as NoteItem;
           // Handle workflowMetadata stored as JSON string (legacy) or object (new)
@@ -611,6 +620,7 @@ export async function subscribeToNotes(
     templatesUnsub = onSnapshot(
       query(templatesRef),
       (snap) => {
+        if (snap.metadata.fromCache) return;
         latestTemplates = snap.docs.map((d) => ({ ...(d.data() as NoteTemplate), id: d.id }));
         templatesReady = true;
         if (notesReady && templatesReady) callback({ notes: latestNotes, templates: latestTemplates });
@@ -756,7 +766,7 @@ export async function syncNotesWithFirebase(localNotes: NoteItem[], localTemplat
   const deletedKeys = await loadDeletedNoteKeys();
 
   // Read server state first so we can merge (newest updatedAt wins).
-  const notesSnapBefore = await getDocs(query(notesRef));
+  const notesSnapBefore = await getDocsFromServer(query(notesRef));
   const serverNotesMap = new Map<string, NoteItem>();
   notesSnapBefore.forEach((d) => {
     const x = d.data() as NoteItem;
@@ -767,7 +777,7 @@ export async function syncNotesWithFirebase(localNotes: NoteItem[], localTemplat
     serverNotesMap.set(d.id, { ...x, id: d.id });
   });
 
-  const templatesSnapBefore = await getDocs(query(templatesRef));
+  const templatesSnapBefore = await getDocsFromServer(query(templatesRef));
   const serverTemplatesMap = new Map<string, NoteTemplate>();
   templatesSnapBefore.forEach((d) => {
     const x = d.data() as NoteTemplate;
@@ -786,6 +796,7 @@ export async function syncNotesWithFirebase(localNotes: NoteItem[], localTemplat
   for (const note of localNotesLimited) {
     const key = noteStorageKey(note.id, note.groupId ? 'group' : 'personal', note.groupId);
     if (deletedKeys.has(key) || note.deletedAt) continue;
+    if (!isTransientLocalNote(note)) continue;
     const serverNote = serverNotesMap.get(note.id);
     // Never overwrite a server-side tombstone with a local copy, even if local is newer.
     if (serverNote?.deletedAt) continue;
@@ -869,11 +880,6 @@ export async function syncNotesWithFirebase(localNotes: NoteItem[], localTemplat
   // serverNotesMap already contains all server notes from the first read above.
   // We pushed local-newer notes above, so the source of truth is: local wins if newer, server wins otherwise.
   const mergedNotesMap = new Map<string, NoteItem>();
-  for (const note of localNotesLimited) {
-    const key = noteStorageKey(note.id, note.groupId ? 'group' : 'personal', note.groupId);
-    if (note.deletedAt || deletedKeys.has(key)) continue;
-    mergedNotesMap.set(note.id, note);
-  }
   for (const [id, serverNote] of serverNotesMap.entries()) {
     const key = noteStorageKey(id, serverNote.groupId ? 'group' : 'personal', serverNote.groupId);
     if (serverNote.deletedAt || deletedKeys.has(key)) {
@@ -884,10 +890,12 @@ export async function syncNotesWithFirebase(localNotes: NoteItem[], localTemplat
     if (typeof serverNote.workflowMetadata === 'string') {
       try { serverNote.workflowMetadata = JSON.parse(serverNote.workflowMetadata); } catch { serverNote.workflowMetadata = undefined; }
     }
-    const existing = mergedNotesMap.get(id);
-    if (!existing || tsMillis(serverNote.updatedAt) >= tsMillis(existing.updatedAt)) {
-      mergedNotesMap.set(id, serverNote);
-    }
+    mergedNotesMap.set(id, serverNote);
+  }
+  for (const note of localNotesLimited) {
+    const key = noteStorageKey(note.id, note.groupId ? 'group' : 'personal', note.groupId);
+    if (note.deletedAt || deletedKeys.has(key) || !isTransientLocalNote(note)) continue;
+    if (!mergedNotesMap.has(note.id)) mergedNotesMap.set(note.id, note);
   }
   const serverNotes = Array.from(mergedNotesMap.values());
 
@@ -920,7 +928,7 @@ export async function fetchNotesFromFirebase() {
   const templatesRef = collection(rt.db, 'users', uid, 'noteTemplates');
   const deletedKeys = await loadDeletedNoteKeys();
 
-  const notesSnap = await getDocs(query(notesRef));
+  const notesSnap = await getDocsFromServer(query(notesRef));
   const serverNotes: NoteItem[] = [];
   notesSnap.forEach((d) => {
     const x = d.data() as NoteItem;
@@ -930,7 +938,7 @@ export async function fetchNotesFromFirebase() {
     }
   });
 
-  const templatesSnap = await getDocs(query(templatesRef));
+  const templatesSnap = await getDocsFromServer(query(templatesRef));
   const serverTemplates: NoteTemplate[] = [];
   templatesSnap.forEach((d) => {
     const x = d.data() as NoteTemplate;
@@ -967,7 +975,7 @@ export async function clearScansInFirebase(): Promise<void> {
   const user = rt.auth.currentUser;
   if (!user) return;
   const scansRef = collection(rt.db, 'users', user.uid, 'scans');
-  const snap = await getDocs(query(scansRef));
+  const snap = await getDocsFromServer(query(scansRef));
   for (const item of snap.docs) {
     await deleteDoc(doc(scansRef, item.id));
   }
@@ -979,9 +987,14 @@ export async function clearNotesInFirebase(): Promise<void> {
   const user = rt.auth.currentUser;
   if (!user) return;
   const notesRef = collection(rt.db, 'users', user.uid, 'notes');
-  const snap = await getDocs(query(notesRef));
+  const snap = await getDocsFromServer(query(notesRef));
   for (const item of snap.docs) {
-    await deleteDoc(doc(notesRef, item.id));
+    await setDoc(doc(notesRef, item.id), {
+      id: item.id,
+      deletedAt: Date.now(),
+      uid: user.uid,
+      updatedAtServer: serverTimestamp(),
+    }, { merge: true });
   }
 }
 
@@ -991,7 +1004,7 @@ export async function clearTemplatesInFirebase(): Promise<void> {
   const user = rt.auth.currentUser;
   if (!user) return;
   const templatesRef = collection(rt.db, 'users', user.uid, 'noteTemplates');
-  const snap = await getDocs(query(templatesRef));
+  const snap = await getDocsFromServer(query(templatesRef));
   for (const item of snap.docs) {
     await deleteDoc(doc(templatesRef, item.id));
   }
@@ -1056,7 +1069,7 @@ export async function fetchSharedGroupsForCurrentUser(): Promise<SharedNoteGroup
   const user = rt.auth.currentUser;
   if (!user) return [];
   const groupsRef = collection(rt.db, 'noteGroups');
-  const snap = await getDocs(query(groupsRef, where('members', 'array-contains', user.uid)));
+  const snap = await getDocsFromServer(query(groupsRef, where('members', 'array-contains', user.uid)));
   const groups: SharedNoteGroup[] = [];
   snap.forEach((d) => {
     groups.push({ ...(d.data() as SharedNoteGroup), id: d.id });
@@ -1073,6 +1086,7 @@ export async function subscribeToSharedGroups(
   if (!user) return () => {};
   const groupsRef = collection(rt.db, 'noteGroups');
   return onSnapshot(query(groupsRef, where('members', 'array-contains', user.uid)), (snap) => {
+    if (snap.metadata.fromCache) return;
     const groups: SharedNoteGroup[] = [];
     snap.forEach((d) => groups.push({ ...(d.data() as SharedNoteGroup), id: d.id }));
     callback(groups);
@@ -1110,6 +1124,7 @@ export async function subscribeToSharedGroupNotes(
 
     const groupsRef = collection(db, 'noteGroups');
     groupsUnsub = onSnapshot(query(groupsRef, where('members', 'array-contains', user.uid)), (groupsSnap) => {
+      if (groupsSnap.metadata.fromCache) return;
       const seen = new Set<string>();
       groupsSnap.forEach((d) => {
         const groupId = d.id;
@@ -1118,6 +1133,7 @@ export async function subscribeToSharedGroupNotes(
 
         const notesRef = collection(db, 'noteGroups', groupId, 'notes');
         const unsub = onSnapshot(query(notesRef), (notesSnap) => {
+          if (notesSnap.metadata.fromCache) return;
           const items = notesSnap.docs
             .map((docSnap) => {
               const raw = docSnap.data() as NoteItem;
@@ -1185,7 +1201,7 @@ export async function fetchSharedGroupNotesForCurrentUser(): Promise<NoteItem[]>
   const deletedKeys = await loadDeletedNoteKeys();
   const notes: NoteItem[] = [];
   for (const group of groups) {
-    const snap = await getDocs(query(collection(rt.db, 'noteGroups', group.id, 'notes')));
+    const snap = await getDocsFromServer(query(collection(rt.db, 'noteGroups', group.id, 'notes')));
     snap.forEach((d) => {
       const note = d.data() as NoteItem;
       const key = noteStorageKey(note.id || d.id, 'group', group.id);
@@ -1245,6 +1261,7 @@ export async function subscribeToClipboard(
     firestoreUnsub = onSnapshot(
       query(ref),
       (snap) => {
+        if (snap.metadata.fromCache) return;
         const entries = snap.docs
           .map((d) => ({ ...(d.data() as ClipEntry), id: d.id }))
           .filter((e) => e.kind === 'text' && e.content && e.id);
@@ -1268,7 +1285,7 @@ export async function fetchClipboardFromFirebase(): Promise<ClipEntry[]> {
   if (!user) return [];
   try {
     const ref = collection(rt.db, 'users', user.uid, 'clipboard');
-    const snap = await getDocs(query(ref));
+    const snap = await getDocsFromServer(query(ref));
     return snap.docs
       .map((d) => ({ ...(d.data() as ClipEntry), id: d.id }))
       .filter((e) => e.kind === 'text' && e.content && e.id);
@@ -1359,7 +1376,7 @@ export async function syncClipboardWithFirebase(localTextEntries: ClipEntry[]): 
   const ref = collection(rt.db, 'users', user.uid, 'clipboard');
 
   // Fetch remote state
-  const snap = await getDocs(query(ref));
+  const snap = await getDocsFromServer(query(ref));
   const remoteMap = new Map<string, ClipEntry>();
   snap.forEach((d) => {
     const e = { ...(d.data() as ClipEntry), id: d.id };
@@ -1417,7 +1434,7 @@ export async function clearClipboardInFirebase(): Promise<void> {
   const user = rt.auth.currentUser;
   if (!user) return;
   const ref = collection(rt.db, 'users', user.uid, 'clipboard');
-  const snap = await getDocs(query(ref));
+  const snap = await getDocsFromServer(query(ref));
   for (const item of snap.docs) {
     await deleteDoc(doc(ref, item.id));
   }

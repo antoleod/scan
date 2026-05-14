@@ -8,6 +8,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 
 import {
+  fetchNotesFromFirebase,
   subscribeToNotes,
   subscribeToSharedGroups,
   subscribeToSharedGroupNotes,
@@ -39,6 +40,8 @@ import {
   updateWorkflowStatus,
   updateNoteSmartType,
   markNotesSynced,
+  saveNotes as saveWorkNotes,
+  saveTemplates as saveWorkTemplates,
   markMedicationTaken,
   snoozeMedication,
   dismissMedication,
@@ -195,19 +198,29 @@ function asSyncedRemoteNotes(items: NoteItem[]): NoteItem[] {
   return items.map((item) => ({ ...item, syncStatus: undefined }));
 }
 
-function mergeNotesByNewest(localNotes: NoteItem[], serverNotes: NoteItem[], sharedNotes: NoteItem[], deletedKeys: Set<string>): NoteItem[] {
+function isTransientLocalNote(note: NoteItem): boolean {
+  return note.syncStatus === 'pending' ||
+    note.syncStatus === 'retrying' ||
+    note.syncStatus === 'offline';
+}
+
+function mergeNotesFromServerAuthoritative(localNotes: NoteItem[], serverNotes: NoteItem[], sharedNotes: NoteItem[], deletedKeys: Set<string>): NoteItem[] {
   const map = new Map<string, NoteItem>();
-  for (const item of [...localNotes, ...serverNotes, ...sharedNotes]) {
+  for (const item of [...serverNotes, ...sharedNotes]) {
     const key = noteKey(item);
     if (item.deletedAt || deletedKeys.has(key)) {
       map.delete(key);
       continue;
     }
-    const prev = map.get(key);
-    if (!prev || tsMillis(item.updatedAt) >= tsMillis(prev.updatedAt)) {
-      map.set(key, item);
-    }
+    map.set(key, item);
   }
+
+  for (const item of localNotes) {
+    const key = noteKey(item);
+    if (item.deletedAt || deletedKeys.has(key) || !isTransientLocalNote(item)) continue;
+    if (!map.has(key)) map.set(key, item);
+  }
+
   return sortNotes(Array.from(map.values()));
 }
 
@@ -226,9 +239,7 @@ function findInsertedNote(notes: NoteItem[], insertedId?: string): NoteItem | un
 }
 
 function isPendingSync(note: NoteItem): boolean {
-  return note.syncStatus === 'pending' ||
-    note.syncStatus === 'retrying' ||
-    note.syncStatus === 'offline';
+  return isTransientLocalNote(note);
 }
 
 function isLocalOnlySyncError(error: unknown): boolean {
@@ -357,8 +368,10 @@ export function NotesTab({
   useEffect(() => {
     ensureWorkNotesAndEmailTemplates().then(({ notes: n, templates: t }) => {
       if (!mountedRef.current) return;
-      setNotes(n);
-      setTemplates(t);
+      if (!user) {
+        setNotes(n);
+        setTemplates(t);
+      }
     }).catch((error) => {
       diag.warn('notes.tab.bootstrap.error', { message: String(error) }).catch(() => undefined);
     });
@@ -370,7 +383,32 @@ export function NotesTab({
       diag.warn('notes.tab.deleted_keys.load.error', { message: String(error) }).catch(() => undefined);
       if (mountedRef.current) setDeletedKeysLoaded(true);
     });
-  }, []);
+  }, [user?.uid]);
+
+  useEffect(() => {
+    if (!user || !deletedKeysLoaded) return;
+    let cancelled = false;
+    fetchNotesFromFirebase().then(({ serverNotes, serverTemplates }) => {
+      if (cancelled || !mountedRef.current) return;
+      serverUpdateRef.current = true;
+      const remoteNotes = asSyncedRemoteNotes(serverNotes);
+      serverNotesRef.current = remoteNotes;
+      setNotes((current) => {
+        const merged = mergeNotesFromServerAuthoritative(current, remoteNotes, sharedNotesRef.current, deletedNoteKeysRef.current);
+        saveWorkNotes(merged).catch((error) => {
+          diag.warn('notes.tab.server_bootstrap.save.error', { message: String(error) }).catch(() => undefined);
+        });
+        return merged;
+      });
+      setTemplates(serverTemplates);
+      saveWorkTemplates(serverTemplates).catch((error) => {
+        diag.warn('notes.tab.server_templates.save.error', { message: String(error) }).catch(() => undefined);
+      });
+    }).catch((error) => {
+      diag.warn('notes.tab.server_bootstrap.error', { message: String(error) }).catch(() => undefined);
+    });
+    return () => { cancelled = true; };
+  }, [user?.uid, deletedKeysLoaded]);
 
   // Real-time cross-device sync via Firestore onSnapshot.
   useEffect(() => {
@@ -381,10 +419,18 @@ export function NotesTab({
       serverUpdateRef.current = true;
       serverNotesRef.current = asSyncedRemoteNotes(serverNotes);
       setNotes((current) => {
-        return mergeNotesByNewest(current, serverNotesRef.current, sharedNotesRef.current, deletedNoteKeysRef.current);
+        const merged = mergeNotesFromServerAuthoritative(current, serverNotesRef.current, sharedNotesRef.current, deletedNoteKeysRef.current);
+        saveWorkNotes(merged).catch((error) => {
+          diag.warn('notes.tab.server_snapshot.save.error', { message: String(error) }).catch(() => undefined);
+        });
+        return merged;
       });
       setTemplates((current) => {
-        return mergeTemplatesByNewest(current, serverTemplates);
+        const merged = mergeTemplatesByNewest(current, serverTemplates);
+        saveWorkTemplates(merged).catch((error) => {
+          diag.warn('notes.tab.server_templates_snapshot.save.error', { message: String(error) }).catch(() => undefined);
+        });
+        return merged;
       });
     }).then((u) => {
       if (!isMounted) { u(); return; }
@@ -494,7 +540,11 @@ export function NotesTab({
       serverUpdateRef.current = true;
       sharedNotesRef.current = asSyncedRemoteNotes(sharedNotes);
       setNotes((current) => {
-        return mergeNotesByNewest(current, serverNotesRef.current, sharedNotesRef.current, deletedNoteKeysRef.current);
+        const merged = mergeNotesFromServerAuthoritative(current, serverNotesRef.current, sharedNotesRef.current, deletedNoteKeysRef.current);
+        saveWorkNotes(merged).catch((error) => {
+          diag.warn('notes.tab.shared_snapshot.save.error', { message: String(error) }).catch(() => undefined);
+        });
+        return merged;
       });
     }).then((u) => {
       if (!isMounted) { u(); return; }
