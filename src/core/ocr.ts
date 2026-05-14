@@ -1,6 +1,8 @@
 // Core OCR helper — reusable across components
 import { Platform } from 'react-native';
 
+declare const require: (moduleName: string) => any;
+
 export interface OcrResult {
   text: string;
   confidence?: number;
@@ -30,8 +32,9 @@ export async function extractTextFromImage(
   }
 
   try {
-    // @ts-ignore — tesseract.js uses CJS/ESM interop that TS may not resolve
-    const Tesseract = await import('tesseract.js');
+    // Metro can lose dynamic import chunks during OCR/HMR; a literal require is
+    // statically registered and avoids "Requiring unknown module <id>" at runtime.
+    const Tesseract = require('tesseract.js');
     const createWorker = Tesseract.createWorker ?? Tesseract.default?.createWorker;
     if (!createWorker) {
       throw new Error('Tesseract not available');

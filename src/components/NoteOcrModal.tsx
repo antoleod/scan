@@ -18,6 +18,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 
 import { detectNoteEntities } from '../core/smartNotes';
+import { blobToDataUrl, extractTextFromImage } from '../core/ocr';
 import { defaultSettings } from '../core/settings';
 import type { AppSettings } from '../types';
 import type { Palette } from '../theme/theme';
@@ -82,27 +83,9 @@ function buildNoteFromFields(rawText: string, fields: FieldState, settings: AppS
   return parts.join('\n').trim();
 }
 
-/** Load Tesseract worker lazily (tree-shaken, runs only when needed). */
 async function runOcr(imageUri: string, onProgress?: (p: number) => void): Promise<string> {
-  // On web the URI is a data URL or object URL — Tesseract accepts both.
-  // On native Tesseract.js is not fully supported, so we return a placeholder.
-  if (Platform.OS !== 'web') {
-    return '(OCR is only supported on web)';
-  }
-  // @ts-ignore — tesseract.js uses CJS/ESM interop that TS may not resolve
-  const Tesseract = await import('tesseract.js');
-  const createWorker = Tesseract.createWorker ?? Tesseract.default?.createWorker;
-  if (!createWorker) throw new Error('Tesseract not available');
-
-  const worker = await createWorker('eng+spa', 1, {
-    logger: (m: { status: string; progress: number }) => {
-      if (m.status === 'recognizing text') onProgress?.(Math.round(m.progress * 100));
-    },
-  });
-
-  const { data } = await worker.recognize(imageUri);
-  await worker.terminate();
-  return data.text ?? '';
+  const result = await extractTextFromImage(imageUri, { onProgress });
+  return result.text;
 }
 
 /** Pick an image and return its URI (data URL on web). */
@@ -214,12 +197,7 @@ export function NoteOcrModal({ visible, palette, settings, onClose, onCreateNote
         const imageType = item.types.find((t) => t.startsWith('image/'));
         if (!imageType) continue;
         const blob = await item.getType(imageType);
-        dataUrl = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => resolve(String(reader.result ?? ''));
-          reader.onerror = reject;
-          reader.readAsDataURL(blob);
-        });
+        dataUrl = await blobToDataUrl(blob);
         break;
       }
       if (!dataUrl) {
