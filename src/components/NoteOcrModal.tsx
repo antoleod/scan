@@ -38,6 +38,8 @@ interface Props {
   settings?: AppSettings;
   onClose: () => void;
   onCreateNote: (text: string) => void;
+  onAppendToDraft?: (text: string) => void;
+  onReplaceDraft?: (text: string) => void;
 }
 
 const FIELD_LABELS: { key: FieldKey; label: string; icon: string }[] = [
@@ -135,7 +137,7 @@ async function pickImage(): Promise<string | null> {
   return result.assets[0].uri;
 }
 
-export function NoteOcrModal({ visible, palette, settings, onClose, onCreateNote }: Props) {
+export function NoteOcrModal({ visible, palette, settings, onClose, onCreateNote, onAppendToDraft, onReplaceDraft }: Props) {
   const resolvedSettings = settings ?? defaultSettings;
   const bg = palette.bg;
   const fg = palette.fg;
@@ -241,6 +243,22 @@ export function NoteOcrModal({ visible, palette, settings, onClose, onCreateNote
     reset();
     onClose();
   }, [editedText, fields, resolvedSettings, onCreateNote, reset, onClose]);
+
+  const handleAppendToDraft = useCallback(() => {
+    const noteText = buildNoteFromFields(editedText, fields, resolvedSettings);
+    if (!noteText.trim() || !onAppendToDraft) return;
+    onAppendToDraft(noteText);
+    reset();
+    onClose();
+  }, [editedText, fields, resolvedSettings, onAppendToDraft, reset, onClose]);
+
+  const handleReplaceDraft = useCallback(() => {
+    const noteText = buildNoteFromFields(editedText, fields, resolvedSettings);
+    if (!noteText.trim() || !onReplaceDraft) return;
+    onReplaceDraft(noteText);
+    reset();
+    onClose();
+  }, [editedText, fields, resolvedSettings, onReplaceDraft, reset, onClose]);
 
   const entities = detectNoteEntities(editedText, resolvedSettings);
   const entityCounts: Record<FieldKey, number> = {
@@ -361,6 +379,26 @@ export function NoteOcrModal({ visible, palette, settings, onClose, onCreateNote
                     <Ionicons name="refresh-outline" size={16} color={muted} />
                     <Text style={[s.btnOutlineText, { color: muted }]}>Re-pick</Text>
                   </Pressable>
+                  {onAppendToDraft ? (
+                    <Pressable
+                      style={[s.btnOutline, { borderColor: border, flex: 1 }]}
+                      onPress={handleAppendToDraft}
+                      disabled={!buildNoteFromFields(editedText, fields, resolvedSettings).trim()}
+                    >
+                      <Ionicons name="add-outline" size={16} color={muted} />
+                      <Text style={[s.btnOutlineText, { color: muted }]}>Append</Text>
+                    </Pressable>
+                  ) : null}
+                  {onReplaceDraft ? (
+                    <Pressable
+                      style={[s.btnOutline, { borderColor: border, flex: 1 }]}
+                      onPress={handleReplaceDraft}
+                      disabled={!buildNoteFromFields(editedText, fields, resolvedSettings).trim()}
+                    >
+                      <Ionicons name="swap-horizontal-outline" size={16} color={muted} />
+                      <Text style={[s.btnOutlineText, { color: muted }]}>Replace</Text>
+                    </Pressable>
+                  ) : null}
                   <Pressable
                     style={[s.btn, { backgroundColor: accent, flex: 2 }]}
                     onPress={handleCreate}

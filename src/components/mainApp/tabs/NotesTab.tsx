@@ -894,6 +894,11 @@ export function NotesTab({
   }
 
   async function saveDraftAsNote() {
+    if (!draftTextValue.trim() && draftImages.length === 0) {
+      showToast('Add text or an image first');
+      return;
+    }
+
     const groupId = activeGroupId === 'personal' ? undefined : activeGroupId;
 
     // If there is already a draft note (created by auto-save), promote it
@@ -2258,6 +2263,14 @@ export function NotesTab({
           setNotes(result.notes);
           setFilter('all');
           showToast('Note created from image');
+        }}
+        onAppendToDraft={(text) => {
+          handleOcrAppendText(text).catch(() => undefined);
+          showToast('OCR text added to draft');
+        }}
+        onReplaceDraft={(text) => {
+          handleOcrReplaceText(text).catch(() => undefined);
+          showToast('OCR text replaced draft');
         }}
       />
 

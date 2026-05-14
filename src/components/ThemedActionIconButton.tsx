@@ -14,6 +14,10 @@ interface ThemedActionIconButtonProps {
   active?: boolean;
   disabled?: boolean;
   onPress: () => void;
+  onLongPress?: () => void;
+  delayLongPress?: number;
+  onHoverIn?: () => void;
+  onHoverOut?: () => void;
   palette: Palette;
   compact?: boolean;
   entranceDelay?: number;
@@ -26,6 +30,10 @@ export function ThemedActionIconButton({
   active = false,
   disabled = false,
   onPress,
+  onLongPress,
+  delayLongPress,
+  onHoverIn,
+  onHoverOut,
   palette,
   compact = false,
   entranceDelay = 0,
@@ -86,6 +94,10 @@ export function ThemedActionIconButton({
     >
       <Pressable
         onPress={onPress}
+        onLongPress={onLongPress}
+        delayLongPress={delayLongPress}
+        onHoverIn={onHoverIn}
+        onHoverOut={onHoverOut}
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
         disabled={disabled}

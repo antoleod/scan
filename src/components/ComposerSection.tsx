@@ -182,16 +182,6 @@ export const ComposerSection = forwardRef<TextInput, {
       }
     };
 
-    const actionItems = [
-      { key: 'media', label: 'Photo', icon: 'camera-plus-outline' as const, action: () => setMediaPickerVisible(true), active: draftImages.length > 0 },
-      { key: 'paste', label: 'Paste', icon: 'clipboard-text-outline' as const, action: onPasteImage, active: false },
-      { key: 'dictation', label: 'Dictate', icon: 'microphone-outline' as const, action: startDictation, active: false },
-      { key: 'ocr', label: 'OCR', icon: 'text-recognition' as const, action: onOcr ?? (() => {}), active: false },
-      { key: 'templates', label: 'Templates', icon: 'layers-outline' as const, action: () => setTemplatesModalVisible(true), active: false },
-      { key: 'save', label: 'Save', icon: 'content-save-outline' as const, action: onSave, active: false },
-      { key: 'generate', label: 'Generate', icon: 'auto-fix' as const, action: onGenerate, active: Boolean(generating) },
-    ];
-
     return (
       <View style={{ width: '100%' }}>
         <View
@@ -275,9 +265,7 @@ export const ComposerSection = forwardRef<TextInput, {
                   <Text style={{ color: palette.textBody, fontSize: 11, fontWeight: '600', textAlign: 'center' }}>Photo</Text>
                 </View>
               )}
-              <Pressable onHoverIn={() => setHoveredAction('media')} onHoverOut={() => setHoveredAction((current) => (current === 'media' ? null : current))}>
-                <ThemedActionIconButton icon="camera-plus-outline" label="Photo" accentColor="#FF6B35" active={draftImages.length > 0} onPress={() => setMediaPickerVisible(true)} palette={palette} compact={isCompact} entranceDelay={0} />
-              </Pressable>
+              <ThemedActionIconButton icon="camera-plus-outline" label="Photo" accentColor="#FF6B35" active={draftImages.length > 0} onPress={() => setMediaPickerVisible(true)} onHoverIn={() => setHoveredAction('media')} onHoverOut={() => setHoveredAction((current) => (current === 'media' ? null : current))} palette={palette} compact={isCompact} entranceDelay={0} />
             </View>
 
             <View style={{ alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
@@ -286,9 +274,7 @@ export const ComposerSection = forwardRef<TextInput, {
                   <Text style={{ color: palette.textBody, fontSize: 11, fontWeight: '600', textAlign: 'center' }}>Paste</Text>
                 </View>
               )}
-              <Pressable onHoverIn={() => setHoveredAction('paste')} onHoverOut={() => setHoveredAction((current) => (current === 'paste' ? null : current))}>
-                <ThemedActionIconButton icon="clipboard-text-outline" label="Paste" accentColor="#F59E0B" onPress={onPasteImage} palette={palette} compact={isCompact} entranceDelay={40} />
-              </Pressable>
+              <ThemedActionIconButton icon="clipboard-text-outline" label="Paste" accentColor="#F59E0B" onPress={onPasteImage} onHoverIn={() => setHoveredAction('paste')} onHoverOut={() => setHoveredAction((current) => (current === 'paste' ? null : current))} palette={palette} compact={isCompact} entranceDelay={40} />
             </View>
 
             <View style={{ alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
@@ -297,9 +283,7 @@ export const ComposerSection = forwardRef<TextInput, {
                   <Text style={{ color: palette.textBody, fontSize: 11, fontWeight: '600', textAlign: 'center' }}>Dictate</Text>
                 </View>
               )}
-              <Pressable onHoverIn={() => setHoveredAction('dictation')} onHoverOut={() => setHoveredAction((current) => (current === 'dictation' ? null : current))}>
-                <ThemedActionIconButton icon="microphone-outline" label="Dictate" accentColor="#00D4FF" onPress={startDictation} palette={palette} compact={isCompact} entranceDelay={80} />
-              </Pressable>
+              <ThemedActionIconButton icon="microphone-outline" label="Dictate" accentColor="#00D4FF" onPress={startDictation} onHoverIn={() => setHoveredAction('dictation')} onHoverOut={() => setHoveredAction((current) => (current === 'dictation' ? null : current))} palette={palette} compact={isCompact} entranceDelay={80} />
             </View>
 
             <View style={{ alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
@@ -308,9 +292,7 @@ export const ComposerSection = forwardRef<TextInput, {
                   <Text style={{ color: palette.textBody, fontSize: 11, fontWeight: '600', textAlign: 'center' }}>OCR</Text>
                 </View>
               )}
-              <Pressable onHoverIn={() => setHoveredAction('ocr')} onHoverOut={() => setHoveredAction((current) => (current === 'ocr' ? null : current))}>
-                <ThemedActionIconButton icon="text-recognition" label="OCR" accentColor="#4DA3FF" onPress={onOcr ?? (() => {})} palette={palette} compact={isCompact} entranceDelay={120} />
-              </Pressable>
+              <ThemedActionIconButton icon="text-recognition" label="OCR" accentColor="#4DA3FF" onPress={onOcr ?? (() => {})} onHoverIn={() => setHoveredAction('ocr')} onHoverOut={() => setHoveredAction((current) => (current === 'ocr' ? null : current))} palette={palette} compact={isCompact} entranceDelay={120} />
             </View>
 
             <View style={{ alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
@@ -319,9 +301,7 @@ export const ComposerSection = forwardRef<TextInput, {
                   <Text style={{ color: palette.textBody, fontSize: 11, fontWeight: '600', textAlign: 'center' }}>Templates</Text>
                 </View>
               )}
-              <Pressable onHoverIn={() => setHoveredAction('templates')} onHoverOut={() => setHoveredAction((current) => (current === 'templates' ? null : current))}>
-                <ThemedActionIconButton icon="layers-outline" label="Templates" accentColor="#A855F7" onPress={() => setTemplatesModalVisible(true)} palette={palette} compact={isCompact} entranceDelay={160} />
-              </Pressable>
+              <ThemedActionIconButton icon="layers-outline" label="Templates" accentColor="#A855F7" onPress={() => setTemplatesModalVisible(true)} onHoverIn={() => setHoveredAction('templates')} onHoverOut={() => setHoveredAction((current) => (current === 'templates' ? null : current))} palette={palette} compact={isCompact} entranceDelay={160} />
             </View>
 
             {onToggleSecret && (
@@ -331,23 +311,20 @@ export const ComposerSection = forwardRef<TextInput, {
                     <Text style={{ color: palette.textBody, fontSize: 11, fontWeight: '600', textAlign: 'center' }}>{isSecret ? 'Secret' : 'Lock'}</Text>
                   </View>
                 )}
-                <Pressable
-                  onHoverIn={() => setHoveredAction('secret')}
-                  onHoverOut={() => setHoveredAction((current) => (current === 'secret' ? null : current))}
+                <ThemedActionIconButton
+                  icon={isSecret ? 'lock' : 'lock-open-outline'}
+                  label={isSecret ? 'Secret' : 'Lock'}
+                  accentColor="#F59E0B"
+                  active={!!isSecret}
+                  onPress={onToggleSecret}
                   onLongPress={onLongPressSecret}
                   delayLongPress={3000}
-                >
-                  <ThemedActionIconButton
-                    icon={isSecret ? 'lock' : 'lock-open-outline'}
-                    label={isSecret ? 'Secret' : 'Lock'}
-                    accentColor="#F59E0B"
-                    active={!!isSecret}
-                    onPress={onToggleSecret}
-                    palette={palette}
-                    compact={isCompact}
-                    entranceDelay={180}
-                  />
-                </Pressable>
+                  onHoverIn={() => setHoveredAction('secret')}
+                  onHoverOut={() => setHoveredAction((current) => (current === 'secret' ? null : current))}
+                  palette={palette}
+                  compact={isCompact}
+                  entranceDelay={180}
+                />
               </View>
             )}
 
@@ -357,9 +334,7 @@ export const ComposerSection = forwardRef<TextInput, {
                   <Text style={{ color: palette.textBody, fontSize: 11, fontWeight: '600', textAlign: 'center' }}>Save</Text>
                 </View>
               )}
-              <Pressable onHoverIn={() => setHoveredAction('save')} onHoverOut={() => setHoveredAction((current) => (current === 'save' ? null : current))}>
-                <ThemedActionIconButton icon="content-save-outline" label="Save" accentColor="#7CFF6B" onPress={onSave} palette={palette} compact={isCompact} entranceDelay={200} />
-              </Pressable>
+              <ThemedActionIconButton icon="content-save-outline" label="Save" accentColor="#7CFF6B" onPress={onSave} onHoverIn={() => setHoveredAction('save')} onHoverOut={() => setHoveredAction((current) => (current === 'save' ? null : current))} palette={palette} compact={isCompact} entranceDelay={200} />
             </View>
 
             <View style={{ alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
@@ -368,9 +343,7 @@ export const ComposerSection = forwardRef<TextInput, {
                   <Text style={{ color: palette.textBody, fontSize: 11, fontWeight: '600', textAlign: 'center' }}>Generate</Text>
                 </View>
               )}
-              <Pressable onHoverIn={() => setHoveredAction('generate')} onHoverOut={() => setHoveredAction((current) => (current === 'generate' ? null : current))}>
-                <ThemedActionIconButton icon="auto-fix" label="Generate" accentColor="#EC4899" active={Boolean(generating)} onPress={onGenerate} palette={palette} compact={isCompact} entranceDelay={240} />
-              </Pressable>
+              <ThemedActionIconButton icon="auto-fix" label="Generate" accentColor="#EC4899" active={Boolean(generating)} onPress={onGenerate} onHoverIn={() => setHoveredAction('generate')} onHoverOut={() => setHoveredAction((current) => (current === 'generate' ? null : current))} palette={palette} compact={isCompact} entranceDelay={240} />
             </View>
           </View>
         </View>
