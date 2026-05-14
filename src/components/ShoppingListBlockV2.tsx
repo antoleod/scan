@@ -1567,24 +1567,6 @@ export function ShoppingListBlockV2({
         </Pressable>
 
         <Pressable
-          onPress={handleShare}
-          style={({ pressed }) => ({
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: 4,
-            paddingHorizontal: 8,
-            paddingVertical: 4,
-            borderRadius: 7,
-            borderWidth: 1,
-            borderColor: `${palette.accent}44`,
-            backgroundColor: pressed ? `${palette.accent}22` : `${palette.accent}0e`,
-          })}
-        >
-          <Ionicons name="copy-outline" size={11} color={palette.accent} />
-          <Text style={{ color: palette.accent, fontSize: 10, fontWeight: '700' }}>Copy</Text>
-        </Pressable>
-
-        <Pressable
           onPress={() => setEditMode(!editMode)}
           style={({ pressed }) => ({
             flexDirection: 'row',
@@ -1595,12 +1577,16 @@ export function ShoppingListBlockV2({
             borderRadius: 7,
             borderWidth: 1,
             borderColor: editMode ? CART : `#0EA5E944`,
-            backgroundColor: editMode ? `${CART}22` : `#0EA5E90e`,
+            backgroundColor: editMode ? `${CART}22` : pressed ? `#0EA5E922` : `#0EA5E90e`,
           })}
         >
-          <Ionicons name={editMode ? 'checkmark-done' : 'pencil'} size={11} color={editMode ? CART : '#0EA5E9'} />
+          <Ionicons
+            name={editMode ? 'checkmark-done' : 'swap-vertical-outline'}
+            size={11}
+            color={editMode ? CART : '#0EA5E9'}
+          />
           <Text style={{ color: editMode ? CART : '#0EA5E9', fontSize: 10, fontWeight: '700' }}>
-            {editMode ? 'Done' : 'Edit'}
+            {editMode ? 'Done' : 'Arrange'}
           </Text>
         </Pressable>
 
