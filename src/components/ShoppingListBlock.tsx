@@ -107,28 +107,29 @@ function ItemRow({
   }, [item.id, onToggle, scale]);
 
   const done = item.checked;
+  const quantityLabel = [item.quantity, item.unit].filter(Boolean).join(' ');
 
   return (
-    <Animated.View style={{ transform: [{ scale }], marginBottom: 4 }}>
+    <Animated.View style={{ transform: [{ scale }], marginBottom: 3 }}>
       <View style={{
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 6,
-        paddingVertical: 6,
-        paddingHorizontal: 10,
-        borderRadius: 10,
+        gap: 5,
+        paddingVertical: 4,
+        paddingHorizontal: 7,
+        borderRadius: 8,
         borderWidth: 1,
         borderColor: done ? DONE_BORDER : palette.border,
         backgroundColor: done ? DONE_BG : 'transparent',
       }}>
 
         {/* Reorder arrows */}
-        <View style={{ gap: 1 }}>
-          <Pressable onPress={() => onMoveUp(item.id)} hitSlop={6} style={{ opacity: index === 0 ? 0.2 : 0.7 }} disabled={index === 0}>
-            <Ionicons name="chevron-up" size={11} color={palette.textDim} />
+        <View style={{ gap: 0, width: 12, alignItems: 'center' }}>
+          <Pressable onPress={() => onMoveUp(item.id)} hitSlop={6} style={{ opacity: index === 0 ? 0.18 : 0.58 }} disabled={index === 0}>
+            <Ionicons name="chevron-up" size={10} color={palette.textDim} />
           </Pressable>
-          <Pressable onPress={() => onMoveDown(item.id)} hitSlop={6} style={{ opacity: index >= total - 1 ? 0.2 : 0.7 }} disabled={index >= total - 1}>
-            <Ionicons name="chevron-down" size={11} color={palette.textDim} />
+          <Pressable onPress={() => onMoveDown(item.id)} hitSlop={6} style={{ opacity: index >= total - 1 ? 0.18 : 0.58 }} disabled={index >= total - 1}>
+            <Ionicons name="chevron-down" size={10} color={palette.textDim} />
           </Pressable>
         </View>
 
@@ -137,14 +138,14 @@ function ItemRow({
           onPress={handleCheck}
           hitSlop={10}
           style={{
-            width: 20, height: 20, borderRadius: 6,
-            borderWidth: 2,
+            width: 18, height: 18, borderRadius: 5,
+            borderWidth: 1.5,
             borderColor: done ? CART : palette.textDim,
             backgroundColor: done ? CART : 'transparent',
             alignItems: 'center', justifyContent: 'center', flexShrink: 0,
           }}
         >
-          {done ? <Ionicons name="checkmark" size={12} color="#fff" /> : null}
+          {done ? <Ionicons name="checkmark" size={11} color="#fff" /> : null}
         </Pressable>
 
         {/* Label */}
@@ -154,12 +155,12 @@ function ItemRow({
           style={{
             flex: 1,
             color: done ? palette.textMuted : palette.textBody,
-            fontSize: 13,
-            lineHeight: 19,
+            fontSize: 12,
+            lineHeight: 17,
             textDecorationLine: done ? 'line-through' : 'none',
             opacity: done ? 0.55 : 1,
             paddingVertical: 0,
-            minHeight: 22,
+            minHeight: 20,
           }}
           multiline={false}
           returnKeyType="done"
@@ -171,10 +172,10 @@ function ItemRow({
         <TextInput
           value={item.quantity}
           onChangeText={(v) => onUpdate(item.id, { quantity: v })}
-          style={{ width: 38, color: done ? palette.textMuted : CART, fontSize: 12, fontWeight: '700', textAlign: 'right', opacity: done ? 0.45 : 1, paddingVertical: 0, minHeight: 22 }}
+          style={{ width: 30, color: done ? palette.textMuted : CART, fontSize: 11, fontWeight: '700', textAlign: 'right', opacity: done ? 0.45 : 1, paddingVertical: 0, minHeight: 20 }}
           keyboardType="decimal-pad"
           returnKeyType="done"
-          placeholder="qty"
+          placeholder={quantityLabel ? '' : 'qty'}
           placeholderTextColor={palette.textMuted}
         />
 
@@ -182,7 +183,7 @@ function ItemRow({
         <TextInput
           value={item.unit}
           onChangeText={(v) => onUpdate(item.id, { unit: v })}
-          style={{ width: 40, color: done ? palette.textMuted : palette.textDim, fontSize: 11, fontWeight: '600', opacity: done ? 0.45 : 1, paddingVertical: 0, minHeight: 22 }}
+          style={{ width: 28, color: done ? palette.textMuted : palette.textDim, fontSize: 10, fontWeight: '600', opacity: done ? 0.45 : 1, paddingVertical: 0, minHeight: 20 }}
           autoCapitalize="none"
           returnKeyType="done"
           placeholder="unit"
@@ -194,7 +195,7 @@ function ItemRow({
           <TextInput
             value={item.price ?? ''}
             onChangeText={(v) => onUpdate(item.id, { price: v })}
-            style={{ width: 46, color: done ? palette.textMuted : '#F59E0B', fontSize: 11, fontWeight: '700', textAlign: 'right', opacity: done ? 0.45 : 1, paddingVertical: 0, minHeight: 22 }}
+            style={{ width: 40, color: done ? palette.textMuted : '#F59E0B', fontSize: 10, fontWeight: '700', textAlign: 'right', opacity: done ? 0.45 : 1, paddingVertical: 0, minHeight: 20 }}
             keyboardType="decimal-pad"
             returnKeyType="done"
             placeholder="€"
@@ -203,8 +204,8 @@ function ItemRow({
         ) : null}
 
         {/* Delete */}
-        <Pressable onPress={() => onDelete(item.id)} hitSlop={10} style={({ pressed }) => ({ opacity: pressed ? 0.4 : 0.6, paddingLeft: 2 })}>
-          <Ionicons name="close-circle-outline" size={16} color={palette.textDim} />
+        <Pressable onPress={() => onDelete(item.id)} hitSlop={10} style={({ pressed }) => ({ opacity: pressed ? 0.35 : 0.52, paddingLeft: 1 })}>
+          <Ionicons name="close-circle-outline" size={15} color={palette.textDim} />
         </Pressable>
       </View>
     </Animated.View>
@@ -218,25 +219,25 @@ function Header({
 }: { done: number; total: number; subtotal: number | null; showPrice: boolean; palette: Palette }) {
   const pct = total === 0 ? 0 : Math.round((done / total) * 100);
   return (
-    <View style={{ gap: 5 }}>
+    <View style={{ gap: 4 }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 4 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
-          <Ionicons name="cart-outline" size={14} color={CART} />
-          <Text style={{ color: CART, fontSize: 11, fontWeight: '800', letterSpacing: 0.5 }}>SHOPPING LIST</Text>
+          <Ionicons name="cart-outline" size={13} color={CART} />
+          <Text style={{ color: CART, fontSize: 10, fontWeight: '800' }}>Shopping</Text>
         </View>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
           {showPrice && subtotal !== null && subtotal > 0 ? (
             <Text style={{ color: '#F59E0B', fontSize: 11, fontWeight: '700' }}>
               Σ {subtotal.toFixed(2)} €
             </Text>
           ) : null}
-          <Text style={{ color: palette.textDim, fontSize: 11, fontWeight: '600' }}>
-            {done}/{total} bought
+          <Text style={{ color: palette.textDim, fontSize: 10, fontWeight: '600' }}>
+            {done}/{total}
           </Text>
         </View>
       </View>
       {/* Track */}
-      <View style={{ height: 4, borderRadius: 99, backgroundColor: `${CART}22`, overflow: 'hidden' }}>
+      <View style={{ height: 3, borderRadius: 99, backgroundColor: `${CART}18`, overflow: 'hidden' }}>
         <View style={{ width: `${pct}%`, height: '100%', borderRadius: 99, backgroundColor: CART }} />
       </View>
     </View>
@@ -246,23 +247,28 @@ function Header({
 // ─── Toolbar pill ─────────────────────────────────────────────────────────────
 
 function Pill({
-  icon, label, color, onPress, disabled,
-}: { icon: React.ComponentProps<typeof Ionicons>['name']; label: string; color: string; onPress: () => void; disabled?: boolean }) {
+  icon, label, color, onPress, disabled, compact,
+}: { icon: React.ComponentProps<typeof Ionicons>['name']; label: string; color: string; onPress: () => void; disabled?: boolean; compact?: boolean }) {
   return (
     <Pressable
       onPress={onPress}
       disabled={disabled}
+      accessibilityLabel={label}
       style={({ pressed }) => ({
         flexDirection: 'row', alignItems: 'center', gap: 4,
-        paddingHorizontal: 9, paddingVertical: 5,
+        minWidth: compact ? 28 : undefined,
+        minHeight: compact ? 28 : undefined,
+        paddingHorizontal: compact ? 6 : 9,
+        paddingVertical: 5,
         borderRadius: 999, borderWidth: 1,
         borderColor: `${color}44`,
         backgroundColor: pressed ? `${color}22` : `${color}0e`,
+        justifyContent: 'center',
         opacity: disabled ? 0.35 : 1,
       })}
     >
-      <Ionicons name={icon} size={12} color={color} />
-      <Text style={{ color, fontSize: 10, fontWeight: '700' }}>{label}</Text>
+      <Ionicons name={icon} size={compact ? 13 : 12} color={color} />
+      {compact ? null : <Text style={{ color, fontSize: 10, fontWeight: '700' }}>{label}</Text>}
     </Pressable>
   );
 }
@@ -407,7 +413,7 @@ export function ShoppingListBlock({
 
   if (showRaw) {
     return (
-      <View style={{ gap: 8 }}>
+      <View style={{ gap: 6 }}>
         <Header done={items.filter((i) => i.checked).length} total={items.length} subtotal={subtotal} showPrice={showPrice} palette={palette} />
         <TextInput
           value={rawDraft}
@@ -416,8 +422,8 @@ export function ShoppingListBlock({
           style={{
             borderWidth: 1, borderColor: `${CART}55`, borderRadius: 10,
             backgroundColor: palette.bg, color: palette.textBody,
-            paddingHorizontal: 12, paddingVertical: 10,
-            fontSize: 13, lineHeight: 20, textAlignVertical: 'top', minHeight: 80,
+            paddingHorizontal: 10, paddingVertical: 8,
+            fontSize: 12, lineHeight: 18, textAlignVertical: 'top', minHeight: 72,
           }}
         />
         <View style={{ flexDirection: 'row', gap: 8 }}>
@@ -442,7 +448,7 @@ export function ShoppingListBlock({
   const hasDone  = done > 0;
 
   return (
-    <View style={{ gap: 8 }}>
+    <View style={{ gap: 6 }}>
       <Header done={done} total={items.length} subtotal={subtotal} showPrice={showPrice} palette={palette} />
 
       {/* Item rows */}
@@ -463,8 +469,8 @@ export function ShoppingListBlock({
           />
         ))}
         {hidden > 0 ? (
-          <Text style={{ color: palette.textMuted, fontSize: 11, paddingLeft: 4 }}>
-            +{hidden} more (expand to see all)
+          <Text style={{ color: palette.textMuted, fontSize: 10, paddingLeft: 4 }}>
+            +{hidden} more
           </Text>
         ) : null}
       </View>
@@ -475,12 +481,12 @@ export function ShoppingListBlock({
           onPress={handleUndo}
           style={({ pressed }) => ({
             flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-            paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10,
+            paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8,
             borderWidth: 1, borderColor: '#F59E0B44',
             backgroundColor: pressed ? '#F59E0B18' : '#F59E0B0c',
           })}
         >
-          <Text style={{ color: '#F59E0B', fontSize: 12, flex: 1 }} numberOfLines={1}>
+          <Text style={{ color: '#F59E0B', fontSize: 11, flex: 1 }} numberOfLines={1}>
             {`"${undoItem.item.label || 'Item'}" deleted`}
           </Text>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
@@ -491,19 +497,19 @@ export function ShoppingListBlock({
       ) : null}
 
       {/* Toolbar — row 1: add + price toggle + edit raw */}
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6, marginTop: 2 }}>
-        <Pill icon="add-circle-outline"  label="Add item"     color={CART}       onPress={handleAdd} />
-        <Pill icon="pricetag-outline"    label={showPrice ? 'Hide prices' : 'Prices'} color="#F59E0B" onPress={() => setShowPrice((v) => !v)} />
-        <Pill icon="share-social-outline" label="Share list"  color="#7C3AED"    onPress={() => handleShare()} />
-        <Pill icon="code-outline"        label="Edit raw"     color={palette.textDim} onPress={() => { setRawDraft(shoppingListToText(items)); setShowRaw(true); }} />
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 5, marginTop: 1 }}>
+        <Pill compact icon="add-circle-outline"  label="Add item"     color={CART}       onPress={handleAdd} />
+        <Pill compact icon="pricetag-outline"    label={showPrice ? 'Hide prices' : 'Prices'} color="#F59E0B" onPress={() => setShowPrice((v) => !v)} />
+        <Pill compact icon="share-social-outline" label="Share list"  color="#7C3AED"    onPress={() => handleShare()} />
+        <Pill compact icon="code-outline"        label="Edit raw"     color={palette.textDim} onPress={() => { setRawDraft(shoppingListToText(items)); setShowRaw(true); }} />
         {isShared && (
           <View
             style={{
               flexDirection: 'row',
               alignItems: 'center',
               gap: 4,
-              paddingHorizontal: 8,
-              paddingVertical: 4,
+              paddingHorizontal: 7,
+              paddingVertical: 3,
               borderRadius: 99,
               backgroundColor: '#22c55e18',
               borderWidth: 0.5,
@@ -511,7 +517,7 @@ export function ShoppingListBlock({
             }}
           >
             <Ionicons name="people-outline" size={12} color="#22c55e" />
-            <Text style={{ color: '#22c55e', fontSize: 11, fontWeight: '600' }}>
+            <Text style={{ color: '#22c55e', fontSize: 10, fontWeight: '600' }}>
               {sharedGroupName ? `Shared · ${sharedGroupName}` : 'Shared'}
             </Text>
           </View>
@@ -520,9 +526,9 @@ export function ShoppingListBlock({
 
       {/* Toolbar — row 2: reset / clear done (only when relevant) */}
       {(hasDone) ? (
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>
-          <Pill icon="refresh-outline"   label="Reset all"   color="#0EA5E9" onPress={handleResetAll} />
-          <Pill icon="trash-outline"     label="Clear done"  color="#EF4444" onPress={handleClearDone} disabled={!hasDone} />
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 5 }}>
+          <Pill compact icon="refresh-outline"   label="Reset all"   color="#0EA5E9" onPress={handleResetAll} />
+          <Pill compact icon="trash-outline"     label="Clear done"  color="#EF4444" onPress={handleClearDone} disabled={!hasDone} />
         </View>
       ) : null}
     </View>

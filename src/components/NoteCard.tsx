@@ -414,8 +414,8 @@ export function NoteCard({
               borderLeftColor: selected ? palette.accent : borderLeftColor,
               borderRadius: 14,
               backgroundColor: selected ? `${palette.accent}12` : palette.surface,
-              padding: 12,
-              gap: 8,
+              padding: isShopping ? 10 : 12,
+              gap: isShopping ? 6 : 8,
               opacity: pressed ? 0.92 : 1,
             })}
           >
