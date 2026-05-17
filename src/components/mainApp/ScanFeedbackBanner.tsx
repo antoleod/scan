@@ -53,6 +53,8 @@ export function ScanFeedbackBanner({ feedback }: { feedback: Feedback }) {
         animStyle,
       ]}
       pointerEvents="none"
+      accessibilityLiveRegion="polite"
+      accessibilityLabel={feedback ? `Scan ${feedback.type}: ${feedback.message}` : undefined}
     >
       <Ionicons name={cfg.icon} size={16} color={cfg.text} />
       <Text style={[styles.text, { color: cfg.text }]} numberOfLines={1}>

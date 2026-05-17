@@ -114,7 +114,7 @@ export default function ForgotPasswordForm({ onSwitchToLogin }: ForgotPasswordFo
     <View>
       {/* Success Message */}
       {success && (
-        <Animated.View entering={FadeIn.duration(300)} style={[styles.successCard, { backgroundColor: theme.surface, borderColor: theme.secondary }]}>
+        <Animated.View entering={FadeIn.duration(300)} accessibilityLiveRegion="polite" style={[styles.successCard, { backgroundColor: theme.surface, borderColor: theme.secondary }]}>
           <Ionicons name={successType === 'magic' ? 'mail-outline' : 'checkmark-circle'} size={20} color={theme.secondary} />
           <Text style={[styles.successText, { color: theme.text }]}>{success}</Text>
         </Animated.View>
@@ -122,7 +122,7 @@ export default function ForgotPasswordForm({ onSwitchToLogin }: ForgotPasswordFo
 
       {/* Error Message */}
       {error && (
-        <Animated.View entering={FadeIn.duration(300)} style={[styles.errorCard, { backgroundColor: theme.surface, borderColor: theme.error }]}>
+        <Animated.View entering={FadeIn.duration(300)} accessibilityLiveRegion="assertive" style={[styles.errorCard, { backgroundColor: theme.surface, borderColor: theme.error }]}>
           <Ionicons name="alert-circle" size={20} color={theme.error} />
           <Text style={[styles.errorText, { color: theme.error }]}>{error}</Text>
         </Animated.View>
@@ -131,6 +131,9 @@ export default function ForgotPasswordForm({ onSwitchToLogin }: ForgotPasswordFo
       {/* Recovery Method Selector */}
       <Animated.View entering={FadeInDown.delay(100).duration(400)} style={styles.methodSelector}>
         <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Password reset"
+          accessibilityState={{ selected: recoveryMethod === 'password' }}
           onPress={() => setRecoveryMethod('password')}
           style={[
             styles.methodOption,
@@ -147,6 +150,9 @@ export default function ForgotPasswordForm({ onSwitchToLogin }: ForgotPasswordFo
         </Pressable>
 
         <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Magic link"
+          accessibilityState={{ selected: recoveryMethod === 'magic' }}
           onPress={() => setRecoveryMethod('magic')}
           style={[
             styles.methodOption,
@@ -168,6 +174,7 @@ export default function ForgotPasswordForm({ onSwitchToLogin }: ForgotPasswordFo
           {recoveryMethod === 'magic' ? 'Email address' : 'Username or recovery email'}
         </Text>
         <TextInput
+          accessibilityLabel={recoveryMethod === 'magic' ? 'Email address' : 'Username or recovery email'}
           value={input}
           onChangeText={setInput}
           style={[styles.input, { borderColor: theme.border, backgroundColor: theme.inputBg, color: theme.text }]}
@@ -181,6 +188,9 @@ export default function ForgotPasswordForm({ onSwitchToLogin }: ForgotPasswordFo
 
       <Animated.View entering={FadeInDown.delay(300).duration(400)}>
         <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={recoveryMethod === 'magic' ? 'Send sign-in link' : 'Send reset link'}
+          accessibilityState={{ disabled: submitDisabled, busy: loading }}
           onPress={handleSubmit}
           disabled={submitDisabled}
           style={[styles.primaryButton, { backgroundColor: theme.secondary }, submitDisabled ? styles.primaryButtonDisabled : null]}
@@ -198,7 +208,7 @@ export default function ForgotPasswordForm({ onSwitchToLogin }: ForgotPasswordFo
       </Animated.View>
 
       <View style={styles.linksBlock}>
-        <Pressable onPress={onSwitchToLogin}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Back to login" onPress={onSwitchToLogin}>
           <Text style={[styles.primaryLink, { color: theme.secondary }]}>Back to login</Text>
         </Pressable>
       </View>

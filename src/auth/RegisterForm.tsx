@@ -327,11 +327,12 @@ export default function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
         </View>
       </View>
 
-      {error ? <Text style={[styles.errorText, { color: theme.error }]}>{error}</Text> : null}
+      {error ? <Text accessibilityLiveRegion="assertive" style={[styles.errorText, { color: theme.error }]}>{error}</Text> : null}
 
       <View style={styles.inputGroup}>
         <Text style={[styles.label, { color: theme.secondary }]}>Username</Text>
         <TextInput
+          accessibilityLabel="Username"
           value={username}
           onChangeText={setUsername}
           style={[styles.input, { borderColor: theme.border, backgroundColor: theme.inputBg, color: theme.text }]}
@@ -351,12 +352,12 @@ export default function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
         <View style={styles.labelRow}>
           <Text style={[styles.label, { color: theme.secondary }]}>Password</Text>
           <View style={{ flexDirection: 'row', gap: 12 }}>
-            <Pressable onPress={handleGeneratePassword} style={styles.generateBtn}>
+            <Pressable accessibilityRole="button" accessibilityLabel="Generate a strong password" onPress={handleGeneratePassword} style={styles.generateBtn}>
               <Ionicons name="sparkles-outline" size={14} color={theme.secondary} />
               <Text style={[styles.generateText, { color: theme.secondary }]}>Magic pass</Text>
             </Pressable>
             {password.length > 0 && (
-              <Pressable onPress={handleCopyPassword} style={styles.generateBtn}>
+              <Pressable accessibilityRole="button" accessibilityLabel="Copy password" onPress={handleCopyPassword} style={styles.generateBtn}>
                 <Ionicons name="copy-outline" size={14} color={theme.secondary} />
                 <Text style={[styles.generateText, { color: theme.secondary }]}>Copy</Text>
               </Pressable>
@@ -369,6 +370,7 @@ export default function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
         </View>
         <View style={styles.passwordWrapper}>
           <TextInput
+            accessibilityLabel="Password"
             value={password}
             onChangeText={setPassword}
             style={[styles.input, styles.passwordInput, { borderColor: theme.border, backgroundColor: theme.inputBg, color: theme.text }]}
@@ -380,7 +382,10 @@ export default function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
             autoCapitalize="none"
             autoCorrect={false}
           />
-          <Pressable 
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
+            accessibilityState={{ selected: showPassword }}
             onPress={() => setShowPassword(!showPassword)}
             style={styles.eyeIcon}
           >
@@ -388,7 +393,11 @@ export default function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
           </Pressable>
         </View>
         {password.length > 0 && (
-          <View style={styles.strengthRow}>
+          <View
+            style={styles.strengthRow}
+            accessibilityLiveRegion="polite"
+            accessibilityLabel={`Password strength: ${['very weak', 'weak', 'fair', 'good', 'strong'][passwordStrength] ?? 'very weak'}`}
+          >
             <Text style={[styles.strengthText, { color: theme.textSecondary }]}>STRENGTH</Text>
             <View style={styles.strengthBar}>
               {[1, 2, 3, 4].map((step) => (
@@ -409,6 +418,7 @@ export default function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
         <Text style={[styles.label, { color: theme.secondary }]}>Confirm password</Text>
         <View style={styles.passwordWrapper}>
           <TextInput
+            accessibilityLabel="Confirm password"
             value={confirmPassword}
             onChangeText={setConfirmPassword}
             style={[styles.input, styles.passwordInput, { borderColor: theme.border, backgroundColor: theme.inputBg, color: theme.text }]}
@@ -426,6 +436,7 @@ export default function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
       <View style={styles.inputGroup}>
         <Text style={[styles.label, { color: theme.secondary }]}>Recovery email (optional)</Text>
         <TextInput
+          accessibilityLabel="Recovery email, optional"
           value={recoveryEmail}
           onChangeText={setRecoveryEmail}
           style={[styles.input, { borderColor: theme.border, backgroundColor: theme.inputBg, color: theme.text }]}
@@ -439,6 +450,7 @@ export default function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
       <View style={styles.inputGroup}>
         <Text style={[styles.label, { color: theme.secondary }]}>Recovery phone (optional)</Text>
         <TextInput
+          accessibilityLabel="Recovery phone, optional"
           value={phone}
           onChangeText={setPhone}
           style={[styles.input, { borderColor: theme.border, backgroundColor: theme.inputBg, color: theme.text }]}
@@ -448,6 +460,9 @@ export default function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
       </View>
 
       <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Create account"
+        accessibilityState={{ disabled: submitDisabled, busy: loading }}
         onPress={handleSubmit}
         disabled={submitDisabled}
         style={[styles.primaryButton, { backgroundColor: theme.secondary }, submitDisabled ? styles.primaryButtonDisabled : null]}
@@ -458,7 +473,7 @@ export default function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
       </Pressable>
 
       <View style={styles.linksBlock}>
-        <Pressable onPress={onSwitchToLogin}>
+        <Pressable accessibilityRole="button" accessibilityLabel="I already have an account" onPress={onSwitchToLogin}>
           <Text style={[styles.primaryLink, { color: theme.secondary }]}>I already have an account</Text>
         </Pressable>
       </View>

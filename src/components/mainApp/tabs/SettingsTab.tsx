@@ -164,7 +164,14 @@ function SectionCard({
 
   return (
     <View style={[styles.sectionCard, { borderLeftColor: accent, backgroundColor: cardBackground, borderColor: cardBorder }]}>
-      <Pressable onPress={onToggle} style={({ pressed }) => [styles.sectionHeader, { opacity: pressed ? 0.8 : 1 }]}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={title}
+        accessibilityHint={subtitle}
+        accessibilityState={{ expanded: open }}
+        onPress={onToggle}
+        style={({ pressed }) => [styles.sectionHeader, { opacity: pressed ? 0.8 : 1 }]}
+      >
         {icon ? (
           <View style={[styles.sectionIcon, { backgroundColor: `${accent}1f`, borderColor: `${accent}55` }]}>
             <Ionicons name={icon} size={14} color={accent} />
@@ -197,7 +204,13 @@ function ThemeCard({ option, active, onPress, desktop }: { option: ThemeOption; 
   }, [active]);
 
   return (
-    <Pressable onPress={onPress} style={({ pressed }) => [styles.themeCard, desktop ? styles.themeCardDesktop : styles.themeCardMobile, { backgroundColor: option.background, borderColor: active ? option.accent : option.border, borderWidth: active ? (pulse ? 2.3 : 1.5) : 1, opacity: pressed ? 0.85 : 1 }]}>
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`${option.label} theme`}
+      accessibilityState={{ selected: active }}
+      onPress={onPress}
+      style={({ pressed }) => [styles.themeCard, desktop ? styles.themeCardDesktop : styles.themeCardMobile, { backgroundColor: option.background, borderColor: active ? option.accent : option.border, borderWidth: active ? (pulse ? 2.3 : 1.5) : 1, opacity: pressed ? 0.85 : 1 }]}
+    >
       <View style={[styles.themeSwatch, { backgroundColor: option.accent }]} />
       <Text style={[styles.themeCardText, { color: option.text }]}>{option.label}</Text>
       {active ? <Text style={[styles.check, { color: option.accent }]}>ACTIVE</Text> : null}
@@ -776,9 +789,9 @@ export function SettingsTab({
           cardBackground={palette.card}
           cardBorder={palette.border}
         >
-          <View style={styles.toggleRow}><Text style={[styles.toggleLabel, { color: palette.fg }]}>Auto detect</Text><Switch value={settings.autoDetect} onValueChange={(value) => onPatchSettings({ autoDetect: value, scanProfile: value ? 'auto' : settings.scanProfile })} /></View>
-          <View style={styles.toggleRow}><Text style={[styles.toggleLabel, { color: palette.fg }]}>Open URL</Text><Switch value={settings.openUrls ?? true} onValueChange={(value) => onPatchSettings({ openUrls: value })} /></View>
-          <View style={styles.toggleRow}><Text style={[styles.toggleLabel, { color: palette.fg }]}>OCR correction</Text><Switch value={settings.ocrCorrection} onValueChange={(value) => onPatchSettings({ ocrCorrection: value })} /></View>
+          <View style={styles.toggleRow}><Text style={[styles.toggleLabel, { color: palette.fg }]}>Auto detect</Text><Switch accessibilityLabel="Auto detect" value={settings.autoDetect} onValueChange={(value) => onPatchSettings({ autoDetect: value, scanProfile: value ? 'auto' : settings.scanProfile })} /></View>
+          <View style={styles.toggleRow}><Text style={[styles.toggleLabel, { color: palette.fg }]}>Open URL</Text><Switch accessibilityLabel="Open URL" value={settings.openUrls ?? true} onValueChange={(value) => onPatchSettings({ openUrls: value })} /></View>
+          <View style={styles.toggleRow}><Text style={[styles.toggleLabel, { color: palette.fg }]}>OCR correction</Text><Switch accessibilityLabel="OCR correction" value={settings.ocrCorrection} onValueChange={(value) => onPatchSettings({ ocrCorrection: value })} /></View>
         </SectionCard>
 
         <SectionCard
@@ -797,6 +810,7 @@ export function SettingsTab({
           <View style={styles.toggleRow}>
             <Text style={[styles.toggleLabel, { color: palette.fg }]}>Auto-detect smart workflows</Text>
             <Switch
+              accessibilityLabel="Auto-detect smart workflows"
               value={notesFeatures.autoDetectSmartType}
               onValueChange={(value) => patchNotesFeatures({ autoDetectSmartType: value })}
             />
@@ -804,6 +818,8 @@ export function SettingsTab({
           <View style={styles.toggleRow}>
             <Text style={[styles.toggleLabel, { color: notesFeatures.autoDetectSmartType ? palette.fg : palette.muted }]}>Detect medication</Text>
             <Switch
+              accessibilityLabel="Detect medication"
+              accessibilityState={{ disabled: !notesFeatures.autoDetectSmartType }}
               disabled={!notesFeatures.autoDetectSmartType}
               value={notesFeatures.detectMedication}
               onValueChange={(value) => patchNotesFeatures({ detectMedication: value })}
@@ -812,6 +828,8 @@ export function SettingsTab({
           <View style={styles.toggleRow}>
             <Text style={[styles.toggleLabel, { color: notesFeatures.autoDetectSmartType ? palette.fg : palette.muted }]}>Detect shopping list</Text>
             <Switch
+              accessibilityLabel="Detect shopping list"
+              accessibilityState={{ disabled: !notesFeatures.autoDetectSmartType }}
               disabled={!notesFeatures.autoDetectSmartType}
               value={notesFeatures.detectShopping}
               onValueChange={(value) => patchNotesFeatures({ detectShopping: value })}
@@ -820,6 +838,8 @@ export function SettingsTab({
           <View style={styles.toggleRow}>
             <Text style={[styles.toggleLabel, { color: notesFeatures.autoDetectSmartType ? palette.fg : palette.muted }]}>Detect reminder</Text>
             <Switch
+              accessibilityLabel="Detect reminder"
+              accessibilityState={{ disabled: !notesFeatures.autoDetectSmartType }}
               disabled={!notesFeatures.autoDetectSmartType}
               value={notesFeatures.detectReminder}
               onValueChange={(value) => patchNotesFeatures({ detectReminder: value })}
@@ -828,6 +848,7 @@ export function SettingsTab({
           <View style={styles.toggleRow}>
             <Text style={[styles.toggleLabel, { color: palette.fg }]}>Auto-save draft</Text>
             <Switch
+              accessibilityLabel="Auto-save draft"
               value={notesFeatures.autoSaveDraft}
               onValueChange={(value) => patchNotesFeatures({ autoSaveDraft: value })}
             />
@@ -848,6 +869,7 @@ export function SettingsTab({
           <View style={styles.toggleRow}>
             <Text style={[styles.toggleLabel, { color: palette.fg }]}>IP detection</Text>
             <Switch
+              accessibilityLabel="IP detection"
               value={settings.smartNotes?.ipDetectionEnabled ?? true}
               onValueChange={(value) => onPatchSettings({
                 smartNotes: {
@@ -860,6 +882,7 @@ export function SettingsTab({
           <View style={styles.toggleRow}>
             <Text style={[styles.toggleLabel, { color: palette.fg }]}>Detect IP</Text>
             <Switch
+              accessibilityLabel="Detect IP"
               value={settings.smartNotes?.detectionEnabled.ip ?? true}
               onValueChange={(value) => onPatchSettings({
                 smartNotes: {
@@ -875,6 +898,7 @@ export function SettingsTab({
           <View style={styles.toggleRow}>
             <Text style={[styles.toggleLabel, { color: palette.fg }]}>Detect hostname</Text>
             <Switch
+              accessibilityLabel="Detect hostname"
               value={settings.smartNotes?.detectionEnabled.hostname ?? true}
               onValueChange={(value) => onPatchSettings({
                 smartNotes: {
@@ -890,6 +914,7 @@ export function SettingsTab({
           <View style={styles.toggleRow}>
             <Text style={[styles.toggleLabel, { color: palette.fg }]}>Detect office</Text>
             <Switch
+              accessibilityLabel="Detect office"
               value={settings.smartNotes?.detectionEnabled.office ?? true}
               onValueChange={(value) => onPatchSettings({
                 smartNotes: {
@@ -905,6 +930,7 @@ export function SettingsTab({
           <View style={styles.toggleRow}>
             <Text style={[styles.toggleLabel, { color: palette.fg }]}>Detect PI</Text>
             <Switch
+              accessibilityLabel="Detect PI"
               value={settings.smartNotes?.detectionEnabled.asset ?? true}
               onValueChange={(value) => onPatchSettings({
                 smartNotes: {
@@ -1081,6 +1107,7 @@ export function SettingsTab({
               <Text style={[styles.toggleHint, { color: palette.muted }]}>Mirror clipboard entries to Firestore across devices.</Text>
             </View>
             <Switch
+              accessibilityLabel="Cloud sync"
               value={settings.clipboardCloudSync}
               onValueChange={(value) => onPatchSettings({ clipboardCloudSync: value })}
             />
@@ -1091,6 +1118,7 @@ export function SettingsTab({
               <Text style={[styles.toggleHint, { color: palette.muted }]}>Keep monitoring the clipboard while the app/tab is in the background.</Text>
             </View>
             <Switch
+              accessibilityLabel="Background capture"
               value={settings.clipboardBackgroundCapture}
               onValueChange={(value) => onPatchSettings({ clipboardBackgroundCapture: value })}
             />
@@ -1581,6 +1609,7 @@ export function SettingsTab({
               <Text style={[styles.toggleHint, { color: palette.muted }]}>Display the unprocessed scan content in history.</Text>
             </View>
             <Switch
+              accessibilityLabel="Show raw text"
               value={settings.showRawText}
               onValueChange={(value) => onPatchSettings({ showRawText: value })}
             />
@@ -1591,6 +1620,7 @@ export function SettingsTab({
               <Text style={[styles.toggleHint, { color: palette.muted }]}>Keep the Firebase session active for 15 days.</Text>
             </View>
             <Switch
+              accessibilityLabel="Stay signed in"
               value={settings.staySignedIn}
               onValueChange={(value) => onPatchSettings({ staySignedIn: value })}
             />

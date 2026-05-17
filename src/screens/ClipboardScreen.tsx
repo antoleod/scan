@@ -3,6 +3,7 @@ import { Image, Modal, Pressable, ScrollView, StyleSheet, Switch, Text, TextInpu
 import { Ionicons } from '@expo/vector-icons';
 
 import { mainAppStyles } from '../components/mainApp/styles';
+import { Toast, useToast } from '../components/Toast';
 import { ClipboardPermissionBadge } from '../clipboard/ClipboardPermissionBadge';
 import { ManualCaptureBar } from '../clipboard/ManualCaptureBar';
 import { useClipboard } from '../clipboard/useClipboard';
@@ -217,9 +218,22 @@ export function ClipboardScreen({ palette, settings, onSendToNote, onSendToTempl
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [selectedClipboardIds, setSelectedClipboardIds] = useState<Set<string>>(new Set());
   const [previewEntry, setPreviewEntry] = useState<ClipEntry | null>(null);
-  const [lastTap, setLastTap] = useState<{ id: string; ts: number } | null>(null);
   const [expandedClipId, setExpandedClipId] = useState<string | null>(null);
   const resolvedSettings = settings ?? defaultSettings;
+  const { toast, show: showToast, hide: hideToast } = useToast();
+
+  function copyValue(value: string) {
+    if (typeof navigator === 'undefined' || !navigator.clipboard?.writeText) return;
+    void navigator.clipboard
+      .writeText(value)
+      .then(() => showToast(`Copied ${value.length > 28 ? `${value.slice(0, 28)}…` : value}`))
+      .catch(() => undefined);
+  }
+
+  async function runCaptureNow() {
+    const inserted = await captureNow().catch(() => false);
+    showToast(inserted ? 'Clipboard captured' : 'Nothing new on the clipboard', inserted ? 'success' : 'info');
+  }
 
   const filteredClipboard = useMemo(() => {
     const q = searchText.trim().toLowerCase();
@@ -247,9 +261,9 @@ export function ClipboardScreen({ palette, settings, onSendToNote, onSendToTempl
       return;
     }
 
-    const text = entry.kind === 'image' ? entry.content : entry.content;
     const attachments = entry.kind === 'image' && entry.imageDataUri ? [entry.imageDataUri] : [];
-    await addRichNoteUnique(text || 'Clipboard capture', 'general', attachments);
+    const result = await addRichNoteUnique(entry.content || 'Clipboard capture', 'general', attachments);
+    showToast(result.inserted ? 'Saved to notes' : 'Already in your notes', result.inserted ? 'success' : 'info');
   }
 
   async function createNoteFromPreview() {
@@ -260,14 +274,16 @@ export function ClipboardScreen({ palette, settings, onSendToNote, onSendToTempl
 
   async function deleteSelectedClipboard() {
     if (!selectedClipboardIds.size) return;
-    const next = await removeClipboardEntriesByIds(Array.from(selectedClipboardIds));
-    void next;
+    const count = selectedClipboardIds.size;
+    await removeClipboardEntriesByIds(Array.from(selectedClipboardIds));
     setSelectedClipboardIds(new Set());
+    showToast(`${count} ${count === 1 ? 'entry' : 'entries'} deleted`);
   }
 
   async function deleteClipboardDay(day: string) {
     await removeClipboardEntriesByDay(day);
     setSelectedClipboardIds(new Set());
+    showToast('Day cleared');
   }
 
   function toggleClipboardSelection(id: string) {
@@ -279,22 +295,13 @@ export function ClipboardScreen({ palette, settings, onSendToNote, onSendToTempl
     });
   }
 
-  function handleClipboardCardPress(entry: ClipEntry) {
-    const now = Date.now();
-    if (lastTap && lastTap.id === entry.id && now - lastTap.ts < 320) {
-      setPreviewEntry(entry);
-      setLastTap(null);
-      return;
-    }
-    setLastTap({ id: entry.id, ts: now });
-  }
-
   const clipboardEmptyTitle = entries.length === 0 ? 'Capture your clipboard' : 'No results';
   const clipboardEmptyText = entries.length === 0
     ? 'Use the capture button or paste text from any app.'
     : 'Clear the search to see the full history again.';
 
   return (
+    <>
     <ScrollView
       style={mainAppStyles.screen}
       contentContainerStyle={styles.content}
@@ -308,9 +315,9 @@ export function ClipboardScreen({ palette, settings, onSendToNote, onSendToTempl
         {permState !== 'granted' ? (
           <ManualCaptureBar
             permState={permState}
-            onCaptureNow={async () => { await captureNow(); }}
-            onPasteText={async (text) => { await capturePastedText(text); }}
-            onImportScreenshot={async (dataUrl) => { await importScreenshot(dataUrl); }}
+            onCaptureNow={async () => { await runCaptureNow(); }}
+            onPasteText={async (text) => { await capturePastedText(text); showToast('Text captured'); }}
+            onImportScreenshot={async (dataUrl) => { await importScreenshot(dataUrl); showToast('Screenshot imported'); }}
           />
         ) : null}
         <View style={[styles.searchRow, { borderColor: palette.border, backgroundColor: palette.bg }]}>
@@ -327,6 +334,8 @@ export function ClipboardScreen({ palette, settings, onSendToNote, onSendToTempl
           </View>
           {/* Calendar filter button */}
           <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Filter by date"
             onPress={() => setCalendarOpen(true)}
             hitSlop={8}
             style={{
@@ -339,7 +348,7 @@ export function ClipboardScreen({ palette, settings, onSendToNote, onSendToTempl
             <Ionicons name="calendar-outline" size={15} color={dateFilter ? palette.accent : palette.muted} />
           </Pressable>
           {(searchText || dateFilter) ? (
-            <Pressable onPress={() => { setSearchText(''); setDateFilter(null); }} hitSlop={8}>
+            <Pressable accessibilityRole="button" accessibilityLabel="Clear search and filters" onPress={() => { setSearchText(''); setDateFilter(null); }} hitSlop={8}>
               <Ionicons name="close-circle" size={15} color={palette.muted} />
             </Pressable>
           ) : null}
@@ -347,6 +356,8 @@ export function ClipboardScreen({ palette, settings, onSendToNote, onSendToTempl
         {/* Active date chip */}
         {dateFilter ? (
           <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Remove date filter"
             onPress={() => setDateFilter(null)}
             style={{ flexDirection: 'row', alignItems: 'center', gap: 5, alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 99, borderWidth: 1, borderColor: palette.accent, backgroundColor: `${palette.accent}18` }}
           >
@@ -368,7 +379,7 @@ export function ClipboardScreen({ palette, settings, onSendToNote, onSendToTempl
         {selectedClipboardIds.size ? (
           <View style={styles.selectionRow}>
             <Text style={{ color: palette.muted, fontSize: 11 }}>{selectedClipboardIds.size} selected</Text>
-            <Pressable onPress={() => deleteSelectedClipboard().catch(() => undefined)} style={[styles.selectionBtn, { borderColor: palette.border }]}>
+            <Pressable accessibilityRole="button" accessibilityLabel="Delete selected entries" onPress={() => deleteSelectedClipboard().catch(() => undefined)} style={[styles.selectionBtn, { borderColor: palette.border }]}>
               <Text style={{ color: '#ef4444', fontSize: 10, fontWeight: '800' }}>Delete selected</Text>
             </Pressable>
           </View>
@@ -409,13 +420,15 @@ export function ClipboardScreen({ palette, settings, onSendToNote, onSendToTempl
           <Text style={{ color: palette.fg, fontSize: 15, fontWeight: '800', textAlign: 'center' }}>{clipboardEmptyTitle}</Text>
           <Text style={{ color: palette.muted, fontSize: 12, lineHeight: 18, textAlign: 'center' }}>{clipboardEmptyText}</Text>
           <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={entries.length === 0 ? 'Capture clipboard now' : 'Clear search'}
             style={({ pressed }) => [
               mainAppStyles.btn,
               { backgroundColor: palette.accent, borderColor: palette.accent, opacity: pressed ? 0.85 : 1, alignSelf: 'stretch' },
             ]}
             onPress={() => {
               if (entries.length === 0) {
-                captureNow().catch(() => undefined);
+                void runCaptureNow();
                 return;
               }
               setSearchText('');
@@ -431,7 +444,7 @@ export function ClipboardScreen({ palette, settings, onSendToNote, onSendToTempl
           <View key={day} style={{ gap: 8, width: '100%', minWidth: 0 }}>
             <View style={styles.dayRow}>
               <Text style={{ color: palette.muted, fontSize: 11, fontWeight: '800' }}>{day} ({dayEntries.length})</Text>
-              <Pressable onPress={() => deleteClipboardDay(day).catch(() => undefined)} style={[styles.selectionBtn, { borderColor: palette.border }]}>
+              <Pressable accessibilityRole="button" accessibilityLabel="Delete all entries from this day" onPress={() => deleteClipboardDay(day).catch(() => undefined)} style={[styles.selectionBtn, { borderColor: palette.border }]}>
                 <Text style={{ color: '#ef4444', fontSize: 10, fontWeight: '800' }}>Delete day</Text>
               </Pressable>
             </View>
@@ -441,7 +454,10 @@ export function ClipboardScreen({ palette, settings, onSendToNote, onSendToTempl
                   return (
                     <Pressable
                       key={entry.id}
-                      onPress={() => handleClipboardCardPress(entry)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`${classifyTitle(entry.kind)} clipboard entry, ${entry.category}`}
+                      accessibilityHint="Opens a preview. Long-press to select."
+                      onPress={() => setPreviewEntry(entry)}
                       onLongPress={() => toggleClipboardSelection(entry.id)}
                       style={({ pressed }) => [
                         styles.card,
@@ -467,40 +483,43 @@ export function ClipboardScreen({ palette, settings, onSendToNote, onSendToTempl
                           palette={palette}
                           expanded={expandedClipId === entry.id}
                           settings={resolvedSettings}
-                          onCopy={(value) => {
-                            if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
-                              void navigator.clipboard.writeText(value).catch(() => undefined);
-                            }
-                          }}
+                          onCopy={copyValue}
                         />
                       ) : (
                         <Text style={{ color: palette.fg, fontSize: 12 }} numberOfLines={2}>Screenshot capture</Text>
                       )}
                       <View style={styles.actionsRow}>
                         <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel={`Category: ${entry.category}`}
+                          accessibilityHint="Tap to change the category"
                           onPress={() => {
                             const order: Array<'general' | 'code' | 'servicenow' | 'url' | 'email'> = ['general', 'code', 'servicenow', 'url', 'email'];
                             const idx = order.indexOf(entry.category as typeof order[number]);
                             const nextCategory = order[(idx + 1) % order.length];
-                            void updateClipboardEntryCategory(entry.id, nextCategory).catch(() => undefined);
+                            void updateClipboardEntryCategory(entry.id, nextCategory)
+                              .then(() => showToast(`Category: ${nextCategory}`, 'info'))
+                              .catch(() => undefined);
                           }}
                           style={[styles.categoryChip, { borderColor: palette.border, paddingVertical: 4, paddingHorizontal: 8 }]}
                         >
                           <Text style={{ color: palette.fg, fontSize: 10, fontWeight: '700' }}>{entry.category}</Text>
                         </Pressable>
-                        <Pressable onPress={() => sendToNote(entry).catch(() => undefined)} hitSlop={8}>
+                        <Pressable accessibilityRole="button" accessibilityLabel="Save to notes" onPress={() => sendToNote(entry).catch(() => undefined)} hitSlop={8}>
                           <Ionicons name="document-text-outline" size={16} color={palette.fg} />
                         </Pressable>
                         {onSendToTemplate ? (
-                          <Pressable onPress={() => onSendToTemplate(entry)} hitSlop={8}>
+                          <Pressable accessibilityRole="button" accessibilityLabel="Send to template" onPress={() => onSendToTemplate(entry)} hitSlop={8}>
                             <Ionicons name="layers-outline" size={16} color={palette.fg} />
                           </Pressable>
                         ) : null}
-                        <Pressable onPress={() => setPreviewEntry(entry)} hitSlop={8}>
+                        <Pressable accessibilityRole="button" accessibilityLabel="Preview entry" onPress={() => setPreviewEntry(entry)} hitSlop={8}>
                           <Ionicons name="eye-outline" size={16} color={palette.fg} />
                         </Pressable>
                         {entry.kind === 'text' ? (
                           <Pressable
+                            accessibilityRole="button"
+                            accessibilityLabel={expandedClipId === entry.id ? 'Collapse entry' : 'Expand entry'}
                             onPress={() => setExpandedClipId((prev) => prev === entry.id ? null : entry.id)}
                             hitSlop={8}
                             style={{ marginLeft: 'auto' }}
@@ -540,11 +559,7 @@ export function ClipboardScreen({ palette, settings, onSendToNote, onSendToTempl
                 palette={palette}
                 expanded
                 settings={resolvedSettings}
-                onCopy={(value) => {
-                  if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
-                    void navigator.clipboard.writeText(value).catch(() => undefined);
-                  }
-                }}
+                onCopy={copyValue}
               />
             ) : null}
             <Text style={{ color: palette.muted, fontSize: 11, marginTop: 8 }}>Would you like to create a note with this item?</Text>
@@ -560,6 +575,8 @@ export function ClipboardScreen({ palette, settings, onSendToNote, onSendToTempl
         </Pressable>
       </Modal>
     </ScrollView>
+    <Toast toast={toast} onHide={hideToast} />
+    </>
   );
 }
 

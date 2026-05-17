@@ -8,7 +8,19 @@
       "Bash(git commit -m ' *)",
       "Bash(git push *)",
       "Bash(git commit *)",
-      "Bash(git *)"
+      "Bash(git *)",
+      "Read(//c/Users/X1/.claude/**)",
+      "Bash(cat \"c:/Users/X1/Downloads/scan/scan/.claude/scheduled_tasks.lock\" 2>/dev/null; echo \"---\"; stat -c '%y %s bytes' \"c:/Users/X1/Downloads/scan/scan/.claude/scheduled_tasks.lock\" 2>/dev/null)",
+      "Read(//c/Users/X1/Downloads/scan/scan/**)",
+      "Bash(tasklist /FI \"PID eq 15440\")",
+      "Bash(rm \"c:/Users/X1/Downloads/scan/scan/.claude/scheduled_tasks.lock\" && echo \"Stale lock removed\")",
+      "Bash(npx tsc *)",
+      "Bash(gh pr *)",
+      "PowerShell(winget install --id GitHub.cli --silent --accept-source-agreements --accept-package-agreements 2>&1)",
+      "PowerShell(& \"C:\\\\Program Files\\\\GitHub CLI\\\\gh.exe\" auth status 2>&1)"
+    ],
+    "additionalDirectories": [
+      "c:\\Users\\X1\\Downloads\\scan\\scan\\.claude"
     ]
   }
 }

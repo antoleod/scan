@@ -66,16 +66,19 @@ export function ManualCaptureBar({ permState, onCaptureNow, onPasteText, onImpor
   return (
     <View style={styles.shell}>
       <View style={styles.row}>
-        <Pressable style={styles.button} onPress={() => void onCaptureNow()}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Capture clipboard now" style={styles.button} onPress={() => void onCaptureNow()}>
           <Text style={styles.buttonText}>Capture clipboard now</Text>
         </Pressable>
-        <Pressable style={styles.buttonSecondary} onPress={() => void handleImportScreenshot()}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Import a screenshot" style={styles.buttonSecondary} onPress={() => void handleImportScreenshot()}>
           <Text style={styles.buttonSecondaryText}>Import screenshot</Text>
         </Pressable>
       </View>
       {permState !== 'granted' ? (
         <>
           <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Paste to capture"
+            accessibilityHint="Focuses a field — then paste with your keyboard"
             style={styles.buttonSecondary}
             onPress={() => hiddenInputRef.current?.focus()}
           >
