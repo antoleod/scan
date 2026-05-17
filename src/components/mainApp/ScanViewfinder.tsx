@@ -205,6 +205,9 @@ export function ScanViewfinder({
 
       {/* ── Torch button ── */}
       <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={torchEnabled ? 'Turn off the flashlight' : 'Turn on the flashlight'}
+        accessibilityState={{ selected: torchEnabled }}
         style={[styles.torchBtn, torchEnabled && styles.torchBtnActive]}
         onPress={onToggleTorch}
         hitSlop={12}
