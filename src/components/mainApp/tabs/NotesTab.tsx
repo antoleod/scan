@@ -298,7 +298,7 @@ export function NotesTab({
   const [workflowModalType, setWorkflowModalType] = useState<SmartWorkflowType | null>(null);
   const [workflowModalData, setWorkflowModalData] = useState<Record<string, unknown>>({});
   const [draftAutoSaveStatus, setDraftAutoSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
-  const [pendingDraft, setPendingDraft] = useState<{ text: string; images: string[]; category: NoteCategory | null; smartLabel?: SmartNoteLabel | null; updatedAt?: number } | null>(null);
+  const [pendingDraft, setPendingDraft] = useState<{ text: string; images: string[]; category: NoteCategory | null; smartLabel?: SmartNoteLabel | null; updatedAt?: number; noteId?: string | null } | null>(null);
   const { toast, show: showToast, hide: hideToast } = useToast();
 
   const draftAutoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -596,7 +596,7 @@ export function NotesTab({
       const smartLabel = ['contact', 'developer', 'money', 'travel', 'legal', 'home', 'idea', 'general'].includes(String(parsed?.smartLabel || ''))
         ? parsed.smartLabel as SmartNoteLabel
         : null;
-      setPendingDraft({ text, images, category, smartLabel, updatedAt: parsed?.updatedAt });
+      setPendingDraft({ text, images, category, smartLabel, updatedAt: parsed?.updatedAt, noteId: typeof parsed?.noteId === 'string' ? parsed.noteId : null });
     }).catch((error) => {
       diag.warn('notes.tab.draft.restore.error', { message: String(error) }).catch(() => undefined);
     });
@@ -604,9 +604,11 @@ export function NotesTab({
 
   // Auto-save draft after 10 seconds of inactivity
   useEffect(() => {
-    // Only auto-save when in notes tab with non-empty content
+    // Only auto-save when in notes tab with non-empty content. Secret drafts
+    // are never auto-persisted — that would surface the content unmasked in
+    // the regular feed before the lock is applied.
     const hasContent = draftTextValue.trim().length > 0;
-    if (workspaceTab !== 'notes' || (!hasContent && draftImages.length === 0)) {
+    if (workspaceTab !== 'notes' || draftIsSecret || (!hasContent && draftImages.length === 0)) {
       if (draftAutoSaveTimerRef.current) {
         clearTimeout(draftAutoSaveTimerRef.current);
         draftAutoSaveTimerRef.current = null;
@@ -632,7 +634,7 @@ export function NotesTab({
         // 1) Local snapshot for crash recovery
         await AsyncStorage.setItem(
           DRAFT_KEY,
-          JSON.stringify({ text: draftTextValue, images: draftImages, category: manualCategory, smartLabel: manualSmartLabel, updatedAt: Date.now() })
+          JSON.stringify({ text: draftTextValue, images: draftImages, category: manualCategory, smartLabel: manualSmartLabel, updatedAt: Date.now(), noteId: draftNoteIdRef.current })
         );
 
         // 2) Persist as a real Note with draft:true so it appears in the Draft filter
@@ -666,7 +668,7 @@ export function NotesTab({
         draftAutoSaveTimerRef.current = null;
       }
     };
-  }, [activeCategory, activeGroupId, activeSmartLabel, draftImages, draftTextValue, manualCategory, manualSmartLabel, settings.notesFeatures?.autoSaveDraft, workspaceTab]);
+  }, [activeCategory, activeGroupId, activeSmartLabel, draftImages, draftIsSecret, draftTextValue, manualCategory, manualSmartLabel, settings.notesFeatures?.autoSaveDraft, workspaceTab]);
 
   // Real-time workflow detection while typing
   useEffect(() => {
@@ -760,7 +762,7 @@ export function NotesTab({
     };
   }, []);
 
-  const secretCount = useMemo(() => notes.filter((n) => n.isSecret && !n.deletedAt).length, [notes]);
+  const secretCount = useMemo(() => notes.filter((n) => n.isSecret && !n.deletedAt && !n.draft).length, [notes]);
 
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -957,12 +959,40 @@ export function NotesTab({
     showToast('Image pasted');
   }
 
-  async function saveDraftAsNote() {
+  function resetDraftEditor() {
+    draftNoteIdRef.current = null;
+    if (draftAutoSaveTimerRef.current) {
+      clearTimeout(draftAutoSaveTimerRef.current);
+      draftAutoSaveTimerRef.current = null;
+    }
+    void AsyncStorage.removeItem(DRAFT_KEY);
+    setDraftText('');
+    setDraftImages([]);
+    setManualCategory(null);
+    setManualSmartLabel(null);
+    setDraftAutoSaveStatus('idle');
+  }
+
+  // Remove the raw auto-saved draft left behind when a workflow modal saves a
+  // re-generated note (shopping/medication text differs from the typed draft),
+  // so it does not linger as a ghost entry in the Draft filter.
+  async function discardOrphanDraft(keepId?: string) {
+    const orphanId = draftNoteIdRef.current;
+    draftNoteIdRef.current = null;
+    if (orphanId && orphanId !== keepId) {
+      setNotes(await removeNote(orphanId));
+    }
+  }
+
+  async function saveDraftAsNote(forceSecret?: boolean) {
     if (!draftTextValue.trim() && draftImages.length === 0) {
       showToast('Add text or an image first');
       return;
     }
 
+    // saveDraftAsNote is a render closure; callers that toggle secret state in
+    // the same tick must pass forceSecret so we don't read a stale draftIsSecret.
+    const isSecretSave = forceSecret ?? draftIsSecret;
     const groupId = activeGroupId === 'personal' ? undefined : activeGroupId;
 
     // If there is already a draft note (created by auto-save), promote it
@@ -970,44 +1000,31 @@ export function NotesTab({
     // creating a brand-new duplicate note.
     if (draftNoteIdRef.current) {
       const existingId = draftNoteIdRef.current;
-      const synced = await updateNoteText(existingId, draftTextValue);
-      setNotes(synced);
-      const promoted = await clearDraftFlag(existingId);
-      setNotes(promoted);
-      showToast(draftIsSecret ? 'Secret note saved' : 'Note saved');
-      setFilter('all');
-      if (draftIsSecret) {
-        const secret = await setNoteSecret(existingId, true);
-        setNotes(secret);
+      await updateNoteText(existingId, draftTextValue);
+      let promoted = await clearDraftFlag(existingId);
+      if (isSecretSave) {
+        promoted = await setNoteSecret(existingId, true);
         setDraftIsSecret(false);
       }
-      draftNoteIdRef.current = null;
-      if (draftAutoSaveTimerRef.current) {
-        clearTimeout(draftAutoSaveTimerRef.current);
-        draftAutoSaveTimerRef.current = null;
-      }
-      await AsyncStorage.removeItem(DRAFT_KEY);
-      setDraftText('');
-      setDraftImages([]);
-      setManualCategory(null);
-      setManualSmartLabel(null);
-      setDraftAutoSaveStatus('idle');
+      setNotes(promoted);
+      showToast(isSecretSave ? 'Secret note saved' : 'Note saved');
+      setFilter('all');
+      resetDraftEditor();
       return;
     }
 
     const autoDetectEnabled = settings.notesFeatures?.autoDetectSmartType ?? true;
     const result = await addRichNoteUnique(draftTextValue, activeCategory, draftImages, groupId, false, autoDetectEnabled, activeSmartLabel);
-    setNotes(result.notes);
     if (result.inserted) {
-      showToast(draftIsSecret ? 'Secret note saved' : 'Note saved');
-      setFilter('all');
-
+      let nextNotes = result.notes;
       const createdNote = findInsertedNote(result.notes, result.insertedId);
-      if (draftIsSecret && createdNote) {
-        const updated = await setNoteSecret(createdNote.id, true);
-        setNotes(updated);
+      if (isSecretSave && createdNote) {
+        nextNotes = await setNoteSecret(createdNote.id, true);
         setDraftIsSecret(false);
       }
+      setNotes(nextNotes);
+      showToast(isSecretSave ? 'Secret note saved' : 'Note saved');
+      setFilter('all');
 
       // Detect smart workflows (medication, shopping, reminder, task)
       if (autoDetectEnabled && draftTextValue.trim().length > 0) {
@@ -1023,20 +1040,23 @@ export function NotesTab({
         }
       }
 
-      // Cancel any pending auto-save timer
-      if (draftAutoSaveTimerRef.current) {
-        clearTimeout(draftAutoSaveTimerRef.current);
-        draftAutoSaveTimerRef.current = null;
+      resetDraftEditor();
+    } else {
+      // addRichNoteUnique deduped against a note that already exists — usually
+      // our own auto-saved draft whose in-memory id was lost (e.g. across a web
+      // reload). Reconcile instead of leaving the editor silently stuck.
+      const existing = result.duplicateId
+        ? result.notes.find((n) => n.id === result.duplicateId)
+        : undefined;
+      let nextNotes = existing?.draft ? await clearDraftFlag(existing.id) : result.notes;
+      if (isSecretSave && existing) {
+        nextNotes = await setNoteSecret(existing.id, true);
+        setDraftIsSecret(false);
       }
-
-      // Clear draft from AsyncStorage after successful save
-      await AsyncStorage.removeItem(DRAFT_KEY);
-
-      setDraftText('');
-      setDraftImages([]);
-      setManualCategory(null);
-      setManualSmartLabel(null);
-      setDraftAutoSaveStatus('idle');
+      setNotes(nextNotes);
+      showToast(isSecretSave ? 'Secret note saved' : 'Note saved');
+      setFilter('all');
+      resetDraftEditor();
     }
   }
 
@@ -1157,42 +1177,52 @@ export function NotesTab({
     const noteText = lines.join('\n');
     const result = await addRichNoteUnique(noteText, 'health', [], groupId);
     setNotes(result.notes);
-    if (result.inserted) {
-      setFilter('all');
-      const createdNote = findInsertedNote(result.notes, result.insertedId);
-      if (!createdNote) {
-        showToast('Failed to create medication follow-up');
-        return;
-      }
-
-      const focus = cycleMeds[0];
-      const workflowMeta: WorkflowMetadata = {
-        medicationName: focus.name,
-        doseText: focus.dose,
-        takenAt: focus.takenAt,
-        takenAtText: takenAtText || undefined,
-        reason: reason || undefined,
-        followUpAt: focus.nextSuggestedAt,
-        followUpLabel: metadata.followUpLabel || undefined,
-        medications: cycleMeds,
-      };
-      const updatedNotes = await updateNoteSmartType(
-        createdNote.id,
-        'medication',
-        'active',
-        workflowMeta,
-      );
-      setNotes(updatedNotes);
-
-      if (typeof focus.nextSuggestedAt === 'number' && focus.nextSuggestedAt > Date.now()) {
-        await scheduleReminder(
-          createdNote.id,
-          0,
-          focus.nextSuggestedAt,
-          focus.name,
-        ).catch(() => undefined);
-      }
+    // Apply the medication workflow whether the note was freshly inserted or
+    // deduped against an existing note (e.g. our own auto-saved draft).
+    const targetId = result.insertedId || result.duplicateId;
+    if (!targetId) {
+      showToast('Failed to create medication follow-up');
+      return;
     }
+    setFilter('all');
+    const targetNote = result.notes.find((n) => n.id === targetId);
+    if (!result.inserted && targetNote?.draft) {
+      setNotes(await clearDraftFlag(targetId));
+    }
+    await discardOrphanDraft(targetId);
+
+    const focus = cycleMeds[0];
+    const workflowMeta: WorkflowMetadata = {
+      medicationName: focus.name,
+      doseText: focus.dose,
+      takenAt: focus.takenAt,
+      takenAtText: takenAtText || undefined,
+      reason: reason || undefined,
+      followUpAt: focus.nextSuggestedAt,
+      followUpLabel: metadata.followUpLabel || undefined,
+      medications: cycleMeds,
+    };
+    const updatedNotes = await updateNoteSmartType(
+      targetId,
+      'medication',
+      'active',
+      workflowMeta,
+    );
+    setNotes(updatedNotes);
+
+    if (typeof focus.nextSuggestedAt === 'number' && focus.nextSuggestedAt > Date.now()) {
+      await scheduleReminder(
+        targetId,
+        0,
+        focus.nextSuggestedAt,
+        focus.name,
+      ).catch(() => undefined);
+    }
+
+    // Match the shopping flow: confirm the save and clear the composer so the
+    // raw text the user typed does not linger after the workflow is created.
+    showToast(result.inserted ? 'Medication reminder saved' : 'Medication reminder updated', 'success');
+    resetDraftEditor();
   }
 
   async function handleMedicationTaken(noteId: string, medIndex: number) {
@@ -1274,16 +1304,17 @@ export function NotesTab({
     const groupId = note.groupId || (activeGroupId === 'personal' ? undefined : activeGroupId);
     const result = await addRichNoteUnique(dupText, note.category, note.attachments ?? [], groupId);
     setNotes(result.notes);
-    showToast('Note duplicated');
+    showToast(result.inserted ? 'Note duplicated' : 'A copy already exists');
   }
 
   async function sendClipboardToNote(entry: ClipboardEntry) {
     setWorkspaceTab('notes');
     if (entry.kind === 'image' && entry.imageDataUri) {
       setDraftImages((current) => Array.from(new Set([entry.imageDataUri as string, ...current])).slice(0, 6));
-      return;
+    } else {
+      setDraftText((current) => current ? `${current}\n${entry.content}` : entry.content);
     }
-    setDraftText((current) => current ? `${current}\n${entry.content}` : entry.content);
+    showToast('Added to note composer', 'info');
   }
 
   async function createNoteFromPreview() {
@@ -1296,11 +1327,14 @@ export function NotesTab({
     setNotes(result.notes);
     setWorkspaceTab('notes');
     setPreviewEntry(null);
+    setFilter('all');
+    showToast(result.inserted ? 'Note created' : 'Note already exists');
   }
 
   function sendClipboardToTemplate(entry: ClipboardEntry) {
     setWorkspaceTab('templates');
     setTemplateBody((current) => current ? `${current}\n${entry.content}` : entry.content);
+    showToast('Added to template', 'info');
   }
 
   function buildTemplateShareText(template: NoteTemplate) {
@@ -1706,13 +1740,13 @@ export function NotesTab({
                   if (!exists) {
                     pendingSecretActionRef.current = async () => {
                       setDraftIsSecret(true);
-                      await saveDraftAsNote();
+                      await saveDraftAsNote(true);
                     };
                     setPinModalMode('setup');
                     return;
                   }
                   setDraftIsSecret(true);
-                  await saveDraftAsNote();
+                  await saveDraftAsNote(true);
                 }}
                 onLongPressSecret={async () => {
                   // Long press = open Vault
@@ -1830,17 +1864,20 @@ export function NotesTab({
                   </Text>
                   <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
                     <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel="Continue editing the unfinished draft"
                       onPress={() => {
                         setDraftText(pendingDraft.text);
                         setDraftImages(pendingDraft.images);
                         if (pendingDraft.category) setManualCategory(pendingDraft.category);
                         if (pendingDraft.smartLabel) setManualSmartLabel(pendingDraft.smartLabel);
+                        draftNoteIdRef.current = pendingDraft.noteId ?? null;
                         setPendingDraft(null);
                         scheduleFocus(() => draftInputRef.current?.focus(), 80);
                       }}
                       style={({ pressed }) => ({
-                        paddingHorizontal: 12,
-                        paddingVertical: 6,
+                        paddingHorizontal: 14,
+                        paddingVertical: 9,
                         borderRadius: 8,
                         backgroundColor: pressed ? '#F59E0Bcc' : '#F59E0B',
                       })}
@@ -1848,6 +1885,8 @@ export function NotesTab({
                       <Text style={{ color: '#000', fontSize: 12, fontWeight: '700' }}>Continue editing</Text>
                     </Pressable>
                     <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel="Save the unfinished draft as a note"
                       onPress={async () => {
                         const draft = pendingDraft;
                         setPendingDraft(null);
@@ -1861,13 +1900,16 @@ export function NotesTab({
                           true,
                           draft.smartLabel || detectSmartNoteLabel(draft.text).label,
                         );
-                        setNotes(result.notes);
+                        const dup = !result.inserted && result.duplicateId
+                          ? result.notes.find((n) => n.id === result.duplicateId)
+                          : undefined;
+                        setNotes(dup?.draft ? await clearDraftFlag(dup.id) : result.notes);
                         await AsyncStorage.removeItem(DRAFT_KEY);
-                        if (result.inserted) showToast('Draft saved as note');
+                        showToast('Draft saved as note');
                       }}
                       style={({ pressed }) => ({
-                        paddingHorizontal: 12,
-                        paddingVertical: 6,
+                        paddingHorizontal: 14,
+                        paddingVertical: 9,
                         borderRadius: 8,
                         borderWidth: 1,
                         borderColor: '#F59E0B66',
@@ -1877,6 +1919,9 @@ export function NotesTab({
                       <Text style={{ color: '#F59E0B', fontSize: 12, fontWeight: '600' }}>Save as note</Text>
                     </Pressable>
                     <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel="Discard the unfinished draft"
+                      accessibilityHint="Permanently deletes the saved draft text"
                       onPress={() => {
                         Alert.alert(
                           'Discard draft?',
@@ -1885,16 +1930,21 @@ export function NotesTab({
                             { text: 'Cancel', style: 'cancel' },
                             {
                               text: 'Discard', style: 'destructive', onPress: async () => {
+                                const orphanId = pendingDraft.noteId;
                                 setPendingDraft(null);
                                 await AsyncStorage.removeItem(DRAFT_KEY);
+                                if (orphanId) {
+                                  setNotes(await removeNote(orphanId));
+                                  if (draftNoteIdRef.current === orphanId) draftNoteIdRef.current = null;
+                                }
                               },
                             },
                           ],
                         );
                       }}
                       style={({ pressed }) => ({
-                        paddingHorizontal: 12,
-                        paddingVertical: 6,
+                        paddingHorizontal: 14,
+                        paddingVertical: 9,
                         borderRadius: 8,
                         borderWidth: 1,
                         borderColor: `${palette.border}`,
@@ -2435,39 +2485,31 @@ export function NotesTab({
           addRichNoteUnique(shoppingNote, 'shopping', [], groupId, false, true).then(async (result) => {
             try {
               setNotes(result.notes);
-              if (result.inserted) {
-                const createdNote = findInsertedNote(result.notes, result.insertedId);
-                if (!createdNote) {
-                  showToast('Failed to create shopping list', 'error');
-                  return;
-                }
-                const updatedNotes = await updateNoteSmartType(createdNote.id, 'shopping', 'active', {
-                  checklistItems: checklistEntries.map((entry) => ({
-                    id: entry.id,
-                    text: String(entry.text || '').trim(),
-                    completed: Boolean(entry.completed),
-                    quantity: String(entry.quantity || '').trim() || undefined,
-                    unit: String(entry.unit || '').trim() || undefined,
-                    rawText: String(entry.rawText || entry.text || '').trim() || undefined,
-                  })),
-                  extractedFromText: true,
-                });
-                setNotes(updatedNotes);
-                showToast('Shopping list created', 'success');
-                setFilter('all');
-                setDraftText('');
-                setDraftImages([]);
-                setManualCategory(null);
-                setManualSmartLabel(null);
-                setDraftAutoSaveStatus('idle');
-                if (draftAutoSaveTimerRef.current) {
-                  clearTimeout(draftAutoSaveTimerRef.current);
-                  draftAutoSaveTimerRef.current = null;
-                }
-                AsyncStorage.removeItem(DRAFT_KEY).catch(() => undefined);
-              } else {
-                showToast('Shopping list already exists', 'info');
+              const targetId = result.insertedId || result.duplicateId;
+              if (!targetId) {
+                showToast('Failed to create shopping list', 'error');
+                return;
               }
+              const targetNote = result.notes.find((n) => n.id === targetId);
+              if (!result.inserted && targetNote?.draft) {
+                setNotes(await clearDraftFlag(targetId));
+              }
+              const updatedNotes = await updateNoteSmartType(targetId, 'shopping', 'active', {
+                checklistItems: checklistEntries.map((entry) => ({
+                  id: entry.id,
+                  text: String(entry.text || '').trim(),
+                  completed: Boolean(entry.completed),
+                  quantity: String(entry.quantity || '').trim() || undefined,
+                  unit: String(entry.unit || '').trim() || undefined,
+                  rawText: String(entry.rawText || entry.text || '').trim() || undefined,
+                })),
+                extractedFromText: true,
+              });
+              setNotes(updatedNotes);
+              showToast(result.inserted ? 'Shopping list created' : 'Shopping list updated', 'success');
+              setFilter('all');
+              await discardOrphanDraft(targetId);
+              resetDraftEditor();
               setWorkflowModalType(null);
               setWorkflowModalData({});
               setDetectedWorkflow(null);

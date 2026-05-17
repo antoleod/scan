@@ -177,6 +177,7 @@ export async function loadNotes(): Promise<NoteItem[]> {
           groupId: typeof item?.groupId === 'string' ? item.groupId : undefined,
           color: (['default', 'amber', 'mint', 'sky', 'rose'].includes(String(item?.color || '')) ? item.color : 'default') as NoteItem['color'],
           archived: Boolean(item?.archived),
+          draft: item?.draft === true ? true : undefined,
           imageBase64: typeof item?.imageBase64 === 'string' ? item.imageBase64 : undefined,
           imageMimeType: typeof item?.imageMimeType === 'string' ? item.imageMimeType : undefined,
           attachments: Array.isArray(item?.attachments) ? item.attachments.map((v: unknown) => String(v || '')).filter((v: string) => Boolean(v) && !v.startsWith('blob:')).slice(0, 8) : undefined,
@@ -188,6 +189,8 @@ export async function loadNotes(): Promise<NoteItem[]> {
               createdAt: Number((version as { createdAt?: unknown })?.createdAt || Date.now()),
             })).filter((version: { text: string }) => safeText(version.text).trim().length > 0)
             : undefined,
+          currentVersionNumber: typeof item?.currentVersionNumber === 'number' ? item.currentVersionNumber : undefined,
+          lastVersionAt: typeof item?.lastVersionAt === 'string' ? item.lastVersionAt : undefined,
           pinned: Boolean(item?.pinned),
           createdAt: Number(item?.createdAt || Date.now()),
           updatedAt: Number(item?.updatedAt || Date.now()),
@@ -202,6 +205,10 @@ export async function loadNotes(): Promise<NoteItem[]> {
             item?.syncStatus === 'failed' ||
             item?.syncStatus === 'offline'
           ) ? item.syncStatus : undefined,
+          isSecret: item?.isSecret === true ? true : undefined,
+          imageRtdbPaths: Array.isArray(item?.imageRtdbPaths)
+            ? item.imageRtdbPaths.map((v: unknown) => String(v || '')).filter(Boolean)
+            : undefined,
         }))
         .filter((item) => {
           const key = noteStorageKey(item.id, item.groupId ? 'group' : 'personal', item.groupId);
@@ -376,7 +383,7 @@ export async function addRichNoteUnique(
   draft?: boolean,
   autoDetectSmartType: boolean = true,
   smartLabelOverride?: SmartNoteLabel,
-): Promise<{ notes: NoteItem[]; inserted: boolean; insertedId?: string }> {
+): Promise<{ notes: NoteItem[]; inserted: boolean; insertedId?: string; duplicateId?: string }> {
   const textStr = text && typeof text === 'string' ? text : '';
   const trimmed = textStr.trim();
   const normalizedAttachments = attachments.map((item) => String(item || '').trim()).filter(Boolean).slice(0, 8);
@@ -413,8 +420,9 @@ export async function addRichNoteUnique(
       smartType,
       smartLabel,
     };
-    if (hasDuplicateNote(current, candidate)) {
-      return { notes: current, inserted: false } as const;
+    const duplicate = current.find((item) => sameNoteContent(item, candidate));
+    if (duplicate) {
+      return { notes: current, inserted: false, duplicateId: duplicate.id } as const;
     }
     const now = Date.now();
     const note: NoteItem = { ...candidate, id: makeId('note'), createdAt: now, updatedAt: now, draft: draft ?? false };
