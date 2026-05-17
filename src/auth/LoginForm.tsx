@@ -812,6 +812,9 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
             {showBiometricOption && (
               <Animated.View entering={FadeIn.duration(300)} style={styles.biometricSection}>
                 <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`${biometricStatus.label} — quick unlock`}
+                  accessibilityState={{ disabled: isLoading }}
                   style={[styles.biometricButton, { backgroundColor: theme.secondary + '15', borderColor: theme.secondary }]}
                   onPress={handleBiometricQuickLogin}
                   disabled={isLoading}
@@ -849,6 +852,8 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
             <Animated.View entering={FadeInDown.delay(400).duration(500)} style={styles.field}>
               <Text style={[styles.label, { color: theme.secondary }]}>USERNAME OR EMAIL</Text>
               <TextInput
+                accessibilityLabel="Username or email"
+                accessibilityHint={errors.username ? errors.username : undefined}
                 style={[
                   styles.input,
                   {
@@ -881,14 +886,19 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
                 onKeyPress={handleSubmitShortcut}
               />
               {errors.username ? (
-                <Animated.View entering={FadeIn.duration(200)}>
+                <Animated.View entering={FadeIn.duration(200)} accessibilityLiveRegion="polite">
                   <Text style={[styles.error, { color: theme.error }]}>{errors.username}</Text>
                 </Animated.View>
               ) : null}
               {username ? (
                 <Animated.View entering={FadeIn.duration(200)} style={styles.helperRow}>
                   <Text style={[styles.helper, { color: theme.textSecondary }]}>Login id: <Text style={styles.helperStrong}>{normalizedUsername}</Text></Text>
-                  <Pressable onPress={handleCopyLoginId} style={styles.miniCopyBtn}>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Copy login id"
+                    onPress={handleCopyLoginId}
+                    style={styles.miniCopyBtn}
+                  >
                     <Ionicons name="copy-outline" size={12} color={theme.secondary} />
                   </Pressable>
                 </Animated.View>
@@ -900,6 +910,8 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
               <View style={styles.passwordWrapper}>
                 <TextInput
                   ref={pinInputRef}
+                  accessibilityLabel="Password"
+                  accessibilityHint={errors.pin ? errors.pin : undefined}
                   style={[
                     styles.input,
                     styles.passwordInput,
@@ -932,7 +944,10 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
                   }}
                   onKeyPress={handleSubmitShortcut}
                 />
-                <Pressable 
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
+                  accessibilityState={{ selected: showPassword }}
                   onPress={() => setShowPassword(!showPassword)}
                   style={styles.eyeIcon}
                 >
@@ -944,7 +959,7 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
                 </Pressable>
               </View>
               {errors.pin ? (
-                <Animated.View entering={FadeIn.duration(200)}>
+                <Animated.View entering={FadeIn.duration(200)} accessibilityLiveRegion="polite">
                   <Text style={[styles.error, { color: theme.error }]}>{errors.pin}</Text>
                 </Animated.View>
               ) : null}
@@ -967,6 +982,9 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
             <Animated.View entering={FadeInDown.delay(700).duration(500)} style={styles.actionRow}>
               <Animated.View style={[{ flex: 1 }, shakeStyle]}>
                 <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={palette.primaryText}
+                  accessibilityState={{ disabled: isLoading || !firebase.enabled, busy: isLoading }}
                   style={[styles.primaryButton, { backgroundColor: theme.secondary }, isLoading && styles.primaryDisabled]}
                   onPress={handleSignIn}
                   disabled={isLoading || !firebase.enabled}
@@ -988,6 +1006,9 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
 
             <Animated.View entering={FadeInDown.delay(800).duration(500)} style={styles.socialButtonRow}>
               <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Continue with Google"
+                accessibilityState={{ disabled: isLoading || !firebase.enabled }}
                 style={[styles.googleButton, { borderColor: theme.secondary, backgroundColor: isWeb ? theme.surface : 'transparent' }]}
                 onPress={handleGoogleLogin}
                 disabled={isLoading || !firebase.enabled}
@@ -1009,7 +1030,10 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
             </Animated.View>
 
             {authError ? (
-              <Text style={[styles.authError, { color: theme.error, borderColor: `${theme.error}40`, backgroundColor: `${theme.error}12` }]}>
+              <Text
+                accessibilityLiveRegion="assertive"
+                style={[styles.authError, { color: theme.error, borderColor: `${theme.error}40`, backgroundColor: `${theme.error}12` }]}
+              >
                 {authError}
               </Text>
             ) : null}
@@ -1034,19 +1058,19 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
             </View>
 
             <View style={styles.links}>
-              <Pressable onPress={onSwitchToRegister} style={styles.linkAction}>
+              <Pressable accessibilityRole="button" accessibilityLabel="Create account" onPress={onSwitchToRegister} style={styles.linkAction}>
                 <Text style={[styles.link, { color: theme.secondary }]}>Create account</Text>
               </Pressable>
               <Text style={[styles.linkDivider, { color: theme.textSecondary }]}>|</Text>
-              <Pressable onPress={onSwitchToForgot} style={styles.linkAction}>
+              <Pressable accessibilityRole="button" accessibilityLabel="Forgot password" onPress={onSwitchToForgot} style={styles.linkAction}>
                 <Text style={[styles.link, { color: theme.textSecondary }]}>Forgot password</Text>
               </Pressable>
               <Text style={[styles.linkDivider, { color: theme.textSecondary }]}>|</Text>
-              <Pressable onPress={() => setShowMagicLink(true)} style={styles.linkAction}>
+              <Pressable accessibilityRole="button" accessibilityLabel="Passwordless login" onPress={() => setShowMagicLink(true)} style={styles.linkAction}>
                 <Text style={[styles.link, { color: theme.textSecondary }]}>Passwordless login</Text>
               </Pressable>
               <Text style={[styles.linkDivider, { color: theme.textSecondary }]}>|</Text>
-              <Pressable onPress={handleGuestAccess} style={styles.linkAction}>
+              <Pressable accessibilityRole="button" accessibilityLabel="Guest access" onPress={handleGuestAccess} style={styles.linkAction}>
                 <Text style={[styles.link, { color: theme.textSecondary }]}>Guest access</Text>
               </Pressable>
             </View>
