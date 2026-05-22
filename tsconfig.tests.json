@@ -23,6 +23,9 @@
     "src/core/shoppingDictionary.ts",
     "src/core/shoppingList.ts",
     "src/core/settings.ts",
-    "src/types.ts"
+    "src/types.ts",
+    "src/features/airdrop/utils/qr.ts",
+    "src/features/airdrop/constants/index.ts",
+    "src/features/airdrop/types/index.ts"
   ]
 }

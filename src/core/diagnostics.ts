@@ -13,6 +13,24 @@ export interface LogEntry {
 class Diagnostics {
   private logs: LogEntry[] = [];
   private loaded = false;
+  private listeners = new Set<(logs: LogEntry[]) => void>();
+
+  /**
+   * Subscribe to live log updates. Fires immediately with the current logs and
+   * again after every write/clear. Returns an unsubscribe function.
+   */
+  subscribe(listener: (logs: LogEntry[]) => void): () => void {
+    this.listeners.add(listener);
+    listener([...this.logs]);
+    return () => {
+      this.listeners.delete(listener);
+    };
+  }
+
+  private notify() {
+    const snapshot = [...this.logs];
+    this.listeners.forEach((l) => l(snapshot));
+  }
 
   async init() {
     if (this.loaded) return;
@@ -26,6 +44,7 @@ class Diagnostics {
       }
     }
     this.loaded = true;
+    this.notify();
   }
 
   private async persist() {
@@ -40,6 +59,7 @@ class Diagnostics {
     await this.init();
     this.logs.push({ ts: new Date().toISOString(), level, event, data });
     if (this.logs.length > MAX) this.logs = this.logs.slice(this.logs.length - MAX);
+    this.notify();
     await this.persist();
   }
 
@@ -49,6 +69,7 @@ class Diagnostics {
 
   async clear() {
     this.logs = [];
+    this.notify();
     await AsyncStorage.removeItem(KEY);
   }
 

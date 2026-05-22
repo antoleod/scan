@@ -17,7 +17,14 @@
       "Bash(npx tsc *)",
       "Bash(gh pr *)",
       "PowerShell(winget install --id GitHub.cli --silent --accept-source-agreements --accept-package-agreements 2>&1)",
-      "PowerShell(& \"C:\\\\Program Files\\\\GitHub CLI\\\\gh.exe\" auth status 2>&1)"
+      "PowerShell(& \"C:\\\\Program Files\\\\GitHub CLI\\\\gh.exe\" auth status 2>&1)",
+      "PowerShell(npm run typecheck)",
+      "PowerShell(npm test)",
+      "PowerShell(npm run typecheck 2>&1)",
+      "PowerShell(Get-Process -Name node -ErrorAction SilentlyContinue | Select-Object Id, StartTime, @{N='Cmd';E={\\(Get-CimInstance Win32_Process -Filter \"ProcessId=$\\($_.Id\\)\"\\).CommandLine}} | Format-Table -Wrap; \"---\"; if \\(Test-Path .expo\\) { \"has .expo cache\" } else { \"no .expo\" }; if \\(Test-Path node_modules\\\\.cache\\) { \"has node_modules/.cache\" } else { \"no metro cache dir\" })",
+      "PowerShell(Stop-Process -Id 23276 -Force -ErrorAction SilentlyContinue; Stop-Process -Id 24976 -Force -ErrorAction SilentlyContinue; Start-Sleep -Milliseconds 800; $still = Get-Process -Name node -ErrorAction SilentlyContinue; if \\($still\\) { \"Quedan procesos node: $\\($still.Id -join ', '\\)\" } else { \"No quedan procesos node\" })",
+      "PowerShell(npx expo start --web --clear)",
+      "PowerShell(npx expo install expo-document-picker 2>&1)"
     ],
     "additionalDirectories": [
       "c:\\Users\\X1\\Downloads\\scan\\scan\\.claude"

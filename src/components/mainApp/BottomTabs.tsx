@@ -11,10 +11,12 @@ type Palette = {
   border: string;
 };
 
+// History lives as a sub-tab inside Scan now, so it is not a top-level nav entry.
+// Tapping Scan lands on the camera (#scan); the in-Scan toggle switches to #history.
 const tabs: { key: Tab; icon: keyof typeof Ionicons.glyphMap; label: string }[] = [
   { key: 'notes', icon: 'document-text-outline', label: 'Notes' },
-  { key: 'history', icon: 'time-outline', label: 'History' },
   { key: 'scan', icon: 'scan-outline', label: 'Scan' },
+  { key: 'airdrop', icon: 'paper-plane-outline', label: 'AirDrop' },
   { key: 'settings', icon: 'settings-outline', label: 'Settings' },
 ];
 
@@ -43,7 +45,8 @@ export function BottomTabs({
     <View style={{ width: '100%', minWidth: 0, flexShrink: 0, paddingTop: 8, borderTopWidth: 1, borderTopColor: palette.border, backgroundColor: palette.bg, paddingHorizontal: 8 }}>
       <View style={{ flex: 1, flexDirection: 'row', alignItems: 'stretch', justifyContent: 'space-between', minHeight: 56 }}>
         {tabs.map((tab, idx) => {
-          const active = activeTab === tab.key;
+          // Scan owns the History sub-tab, so it stays highlighted on #history too.
+          const active = tab.key === 'scan' ? activeTab === 'scan' || activeTab === 'history' : activeTab === tab.key;
           return (
             <React.Fragment key={tab.key}>
               {idx === 2 && <View style={{ flex: 1.2 }} />} {/* Spacer para el FAB del centro */}

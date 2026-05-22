@@ -64,6 +64,8 @@ import { HistoryTab } from '../components/mainApp/tabs/HistoryTab';
 import { NotesTab } from '../components/mainApp/tabs/NotesTab';
 import { QrModal } from '../components/mainApp/QrModal';
 import { ScanTab } from '../components/mainApp/tabs/ScanTab';
+import { ScanHistoryToggle } from '../components/mainApp/ScanHistoryToggle';
+import { AirDropScreen } from '../features/airdrop';
 import { SelectionFooter } from '../components/mainApp/SelectionFooter';
 import { SettingsTab } from '../components/mainApp/tabs/SettingsTab';
 import { hardDeleteAllNotes, hardDeleteAllTemplates, clearArchivedNotes, clearUnpinnedNotes, clearNotesOlderThan, loadNotes, saveNotes as saveWorkNotes, saveTemplates as saveNoteTemplates } from '../core/notes';
@@ -71,6 +73,7 @@ import { clearClipboardEntries, reinitClipboardFirebaseSync } from '../core/clip
 import { Toast, useToast } from '../components/Toast';
 import { BatchSessionModal } from '../components/mainApp/BatchSessionModal';
 import { useVoiceCommands } from '../hooks/useVoiceCommands';
+import { useTabRouting } from '../hooks/useTabRouting';
 import {
   clearAppLocalStorage,
   clearCacheStorage,
@@ -155,7 +158,7 @@ function MainApp() {
   const { height, width } = useWindowDimensions();
   const [bootStatus, setBootStatus] = useState<BootStatus>('booting');
   const [persistenceMode, setPersistenceMode] = useState<PersistenceMode>('local');
-  const [activeTab, setActiveTab] = useState<Tab>('notes');
+  const [activeTab, setActiveTab] = useTabRouting('notes');
   const [settings, setSettings] = useState<AppSettings>(defaultSettings);
   const [history, setHistory] = useState<ScanRecord[]>([]);
   const [templates, setTemplates] = useState<TemplateRule[]>([]);
@@ -1675,7 +1678,7 @@ function MainApp() {
   }, [settings.barcodeTypes]);
 
   const selectedDateLabel = selectedDate ? selectedDate.toLocaleDateString() : null;
-  const tabOrder: Tab[] = ['notes', 'scan', 'history', 'settings'];
+  const tabOrder: Tab[] = ['notes', 'scan', 'history', 'airdrop', 'settings'];
 
   const swipeResponder = useMemo(() => {
     if (Platform.OS === 'web' || Platform.OS === 'ios') return null;
@@ -1739,77 +1742,89 @@ function MainApp() {
                 <Text style={{ color: palette.fg }}>Boot error</Text>
               )}
             </View>
-          ) : activeTab === 'scan' ? (
-            <ScanTab
-              palette={palette}
-              isCompactLayout={isCompactLayout}
-              cameraPermissionGranted={cameraPermission?.granted}
-              requestCameraPermission={() => requestCameraPermission()}
-              cameraRef={cameraRef}
-              cameraBarcodeTypes={cameraBarcodeTypes}
-              scanFeedback={scanFeedback}
-              onScanFromImage={scanFromImage}
-              imageScanPreviewUri={imageScanPreviewUri}
-              imageScanBusy={imageScanBusy}
-              onClearImagePreview={() => setImageScanPreviewUri(null)}
-              onTakePicture={takePictureAndScan}
-              onScanFromNfc={scanFromNfc}
-              nfcBusy={nfcBusy}
-              nfcReady={nfcReady}
-              scanState={scanState}
-              showManualCapture={scanState === 'timeout' || scanState === 'manual_capture_ready' || scanState === 'saving_photo'}
-              manualCaptureBusy={manualCaptureBusy}
-              cameraActive={activeTab === 'scan' && bootStatus === 'ready' && Boolean(cameraPermission?.granted)}
-              torchEnabled={torchEnabled}
-              onToggleTorch={() => setTorchEnabled((value) => !value)}
-              onCameraReady={() => setCameraReady(true)}
-              laserAnim={laserAnim}
-              laserDuration={laserDuration}
-              onBarcodeScanned={(data) => {
-                onBarCodeScanned(data).catch((e) => {
-                  diag.error('scan.handler.unhandled', { message: String(e) });
-                });
-              }}
-              batchMode={batchMode}
-              batchCount={batchItems.length}
-              onToggleBatchMode={() => {
-                const next = !batchMode;
-                setBatchMode(next);
-                if (!next && batchItems.length > 0) setBatchModalVisible(true);
-              }}
-              onReviewBatch={() => setBatchModalVisible(true)}
-              voiceState={voiceState}
-              voiceSupported={voiceSupported}
-              onToggleVoice={toggleVoice}
-            />
-          ) : activeTab === 'history' ? (
-            <HistoryTab
-              palette={palette}
-              filteredHistory={filteredHistory}
-              historyCount={history.length}
-              query={query}
-              filterType={filterType}
-              dateFilter={dateFilter}
-              sortBy={historySort}
-              selection={selection}
-              selectedDateLabel={selectedDateLabel}
-              onQueryChange={setQuery}
-              onFilterTypeChange={setFilterType}
-              onDateFilterChange={handleDateFilterChange}
-              onSortByChange={setHistorySort}
-              onOpenDatePicker={() => setDateModalVisible(true)}
-              onToggleSelection={toggleSelection}
-              onLongPressSelection={handleLongPress}
-              onToggleUsed={toggleUsed}
-              onEditItem={openEditItemModal}
-              onDeleteItem={deleteHistoryItem}
-              onOpenBarcode={openBarcodePreview}
-              onOpenScanner={() => setActiveTab('scan')}
-              visibleScanType={visibleScanType}
-              onRefresh={() => syncNow(false)}
-            />
+          ) : activeTab === 'scan' || activeTab === 'history' ? (
+            <View style={{ flex: 1 }}>
+              <ScanHistoryToggle
+                value={activeTab}
+                palette={palette}
+                historyCount={history.length}
+                onChange={(view) => setActiveTab(view)}
+              />
+              {activeTab === 'scan' ? (
+                <ScanTab
+                  palette={palette}
+                  isCompactLayout={isCompactLayout}
+                  cameraPermissionGranted={cameraPermission?.granted}
+                  requestCameraPermission={() => requestCameraPermission()}
+                  cameraRef={cameraRef}
+                  cameraBarcodeTypes={cameraBarcodeTypes}
+                  scanFeedback={scanFeedback}
+                  onScanFromImage={scanFromImage}
+                  imageScanPreviewUri={imageScanPreviewUri}
+                  imageScanBusy={imageScanBusy}
+                  onClearImagePreview={() => setImageScanPreviewUri(null)}
+                  onTakePicture={takePictureAndScan}
+                  onScanFromNfc={scanFromNfc}
+                  nfcBusy={nfcBusy}
+                  nfcReady={nfcReady}
+                  scanState={scanState}
+                  showManualCapture={scanState === 'timeout' || scanState === 'manual_capture_ready' || scanState === 'saving_photo'}
+                  manualCaptureBusy={manualCaptureBusy}
+                  cameraActive={activeTab === 'scan' && bootStatus === 'ready' && Boolean(cameraPermission?.granted)}
+                  torchEnabled={torchEnabled}
+                  onToggleTorch={() => setTorchEnabled((value) => !value)}
+                  onCameraReady={() => setCameraReady(true)}
+                  laserAnim={laserAnim}
+                  laserDuration={laserDuration}
+                  onBarcodeScanned={(data) => {
+                    onBarCodeScanned(data).catch((e) => {
+                      diag.error('scan.handler.unhandled', { message: String(e) });
+                    });
+                  }}
+                  batchMode={batchMode}
+                  batchCount={batchItems.length}
+                  onToggleBatchMode={() => {
+                    const next = !batchMode;
+                    setBatchMode(next);
+                    if (!next && batchItems.length > 0) setBatchModalVisible(true);
+                  }}
+                  onReviewBatch={() => setBatchModalVisible(true)}
+                  voiceState={voiceState}
+                  voiceSupported={voiceSupported}
+                  onToggleVoice={toggleVoice}
+                />
+              ) : (
+                <HistoryTab
+                  palette={palette}
+                  filteredHistory={filteredHistory}
+                  historyCount={history.length}
+                  query={query}
+                  filterType={filterType}
+                  dateFilter={dateFilter}
+                  sortBy={historySort}
+                  selection={selection}
+                  selectedDateLabel={selectedDateLabel}
+                  onQueryChange={setQuery}
+                  onFilterTypeChange={setFilterType}
+                  onDateFilterChange={handleDateFilterChange}
+                  onSortByChange={setHistorySort}
+                  onOpenDatePicker={() => setDateModalVisible(true)}
+                  onToggleSelection={toggleSelection}
+                  onLongPressSelection={handleLongPress}
+                  onToggleUsed={toggleUsed}
+                  onEditItem={openEditItemModal}
+                  onDeleteItem={deleteHistoryItem}
+                  onOpenBarcode={openBarcodePreview}
+                  onOpenScanner={() => setActiveTab('scan')}
+                  visibleScanType={visibleScanType}
+                  onRefresh={() => syncNow(false)}
+                />
+              )}
+            </View>
           ) : activeTab === 'notes' ? (
             <NotesTab palette={palette} settings={settings} onPatchSettings={patchSettings} />
+          ) : activeTab === 'airdrop' ? (
+            <AirDropScreen palette={palette} />
           ) : (
             <SettingsTab
               palette={palette}

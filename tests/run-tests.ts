@@ -16,6 +16,7 @@ import { AppError, AuthError, SyncError, ValidationError, toAppError, isRetryabl
 import { sanitizeScanInput, sanitizeNoteText, sanitizeTemplatePattern } from "../src/core/validation";
 import { computeNotesChecksum } from "../src/core/syncChecksum";
 import { getAuthRedirectPath, LOGIN_ROUTE, MAIN_APP_ROUTE } from "../src/core/routes";
+import { encodeQrPayload, decodeQrPayload, isAirdropQr } from "../src/features/airdrop/utils/qr";
 
 let passed = 0;
 let failed = 0;
@@ -704,6 +705,37 @@ run("Note payload should include required fields for Firebase", () => {
   assert.equal(typeof payload.workflowMetadata, "string");
   assert.equal(payload.isSecret, true);
   assert.equal(payload.draft, false);
+});
+
+run("airdrop QR encodes a deep-link URL that roundtrips", () => {
+  const encoded = encodeQrPayload("ssn_abc123", "K7P2QM9XAB");
+  // Off-web (Node) uses the https placeholder host; must be an openable URL
+  // carrying the join param and the #airdrop hash.
+  assert.ok(encoded.startsWith("https://"), `expected URL, got ${encoded}`);
+  assert.ok(encoded.includes("/app?airdrop="), encoded);
+  assert.ok(encoded.endsWith("#airdrop"), encoded);
+  const decoded = decodeQrPayload(encoded);
+  assert.deepEqual(decoded, { v: 1, session: "ssn_abc123", token: "K7P2QM9XAB" });
+});
+
+run("airdrop QR decodes the legacy compact form (backward compat)", () => {
+  const decoded = decodeQrPayload("scan-airdrop:1:ssn_abc123:K7P2QM9XAB");
+  assert.deepEqual(decoded, { v: 1, session: "ssn_abc123", token: "K7P2QM9XAB" });
+});
+
+run("airdrop QR decodes a deep-link URL with extra params and hash", () => {
+  const url = "https://host.example/scan/app?foo=1&airdrop=ssn_x%3ATOK99#airdrop";
+  assert.deepEqual(decodeQrPayload(url), { v: 1, session: "ssn_x", token: "TOK99" });
+  assert.equal(isAirdropQr(url), true);
+});
+
+run("airdrop QR decode rejects non-airdrop and malformed strings", () => {
+  assert.equal(decodeQrPayload("https://example.com"), null); // URL but no join param
+  assert.equal(decodeQrPayload("scan-airdrop:1:onlysession"), null);
+  assert.equal(decodeQrPayload("scan-airdrop:x:ssn:tok"), null);
+  assert.equal(isAirdropQr("scan-airdrop:1:a:b"), true);
+  assert.equal(isAirdropQr("https://example.com"), false); // no join param
+  assert.equal(isAirdropQr("RITM0012345"), false);
 });
 
 console.log("\n-------------------");
