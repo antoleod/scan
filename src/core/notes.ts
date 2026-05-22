@@ -11,7 +11,7 @@ import {
   getFirebaseRuntime,
 } from './firebase';
 import { diag } from './diagnostics';
-import { clearDeletedNoteKeys, loadDeletedNoteKeys, markDeletedNoteKey, noteStorageKey } from './noteDeletions';
+import { clearDeletedNoteKeys, loadDeletedNoteKeys, markDeletedNoteKey, markDeletedNoteKeys, noteStorageKey } from './noteDeletions';
 import { enqueueOperation } from './offlineQueue';
 import type { SmartWorkflowType } from './smartNoteWorkflows';
 import { detectSmartTypeFromContent } from './smartNoteWorkflows';
@@ -30,6 +30,16 @@ let notesSaveLock: Promise<void> = Promise.resolve();
 function withNotesSaveLock<T>(fn: () => Promise<T>): Promise<T> {
   const next = notesSaveLock.then(fn, fn);
   notesSaveLock = next.then(() => undefined, () => undefined);
+  return next;
+}
+
+// M-6: a separate lock for the templates store so two rapid template saves cannot
+// race on AsyncStorage (load → mutate → save) and silently drop one another's write.
+let templatesSaveLock: Promise<void> = Promise.resolve();
+
+function withTemplatesSaveLock<T>(fn: () => Promise<T>): Promise<T> {
+  const next = templatesSaveLock.then(fn, fn);
+  templatesSaveLock = next.then(() => undefined, () => undefined);
   return next;
 }
 
@@ -225,14 +235,26 @@ export async function saveNotes(items: NoteItem[]): Promise<void> {
 }
 
 async function updateNoteSyncStatus(noteId: string, status: NoteItem['syncStatus']): Promise<void> {
-  // C-3: serialise the read-modify-write via the write lock so concurrent callers
-  // (e.g. pushNoteIfAuthenticated called from two rapid mutations) don't overwrite
-  // each other's changes.
+  // C-2: lightweight raw patch. Previously this ran a full loadNotes() (JSON parse +
+  // per-item normalize/map + deleted-key load over up to 3000 notes) and a full
+  // saveNotes() (re-sort + slice) just to flip ONE note's syncStatus — and it was
+  // called twice per push. Here we touch only the target note in the raw JSON.
+  // Still serialised via the write lock so it can't race a concurrent mutation.
   return withNotesSaveLock(async () => {
     try {
-      const notes = await loadNotes();
-      const updated = notes.map((n) => (n.id === noteId ? { ...n, syncStatus: status } : n));
-      await saveNotes(updated);
+      const raw = await AsyncStorage.getItem(NOTES_KEY);
+      if (!raw) return;
+      const arr = JSON.parse(raw);
+      if (!Array.isArray(arr)) return;
+      let changed = false;
+      for (const n of arr) {
+        if (n && n.id === noteId) {
+          n.syncStatus = status;
+          changed = true;
+          break;
+        }
+      }
+      if (changed) await AsyncStorage.setItem(NOTES_KEY, JSON.stringify(arr));
     } catch (error) {
       await diag.warn('notes.update.sync_status.error', { noteId, status, message: String(error) });
     }
@@ -246,9 +268,9 @@ async function pushNoteIfAuthenticated(note: NoteItem): Promise<boolean> {
       return true;
     }
 
-    // Set pending status before attempting sync
-    await updateNoteSyncStatus(note.id, 'pending');
-
+    // C-2: no 'pending' pre-write here — callers already persist syncStatus:'pending'
+    // in the same locked mutation that saves the note, so the on-disk state is correct
+    // before we even attempt the push. This removes one full storage round trip per push.
     await upsertNoteInFirebase(note);
     if (note.groupId) {
       await upsertSharedGroupNote(note.groupId, note);
@@ -425,7 +447,7 @@ export async function addRichNoteUnique(
       return { notes: current, inserted: false, duplicateId: duplicate.id } as const;
     }
     const now = Date.now();
-    const note: NoteItem = { ...candidate, id: makeId('note'), createdAt: now, updatedAt: now, draft: draft ?? false };
+    const note: NoteItem = { ...candidate, id: makeId('note'), createdAt: now, updatedAt: now, draft: draft ?? false, syncStatus: 'pending' };
     const next: NoteItem[] = [note, ...current];
     await saveNotes(next);
     newNote = note;
@@ -478,6 +500,7 @@ export async function addImageNoteUnique(dataUri: string, title = 'Screenshot ca
       pinned: false,
       createdAt: now,
       updatedAt: now,
+      syncStatus: 'pending',
     };
     const next: NoteItem[] = [note, ...current];
     await saveNotes(next);
@@ -1145,11 +1168,16 @@ export async function markNotesSynced(noteIds: ReadonlySet<string>): Promise<Not
 }
 
 export async function clearNotes(): Promise<void> {
-  const current = await loadNotes();
-  for (const n of current) {
-    await markDeletedNoteKey(noteStorageKey(n.id, n.groupId ? 'group' : 'personal', n.groupId));
-  }
-  await AsyncStorage.setItem(NOTES_KEY, JSON.stringify([]));
+  // C-3: hold the write lock (prevents a concurrent create from re-adding a note
+  // between load and clear) and batch all deletion keys into ONE save instead of
+  // N serial load-modify-write round trips.
+  await withNotesSaveLock(async () => {
+    const current = await loadNotes();
+    await markDeletedNoteKeys(
+      current.map((n) => noteStorageKey(n.id, n.groupId ? 'group' : 'personal', n.groupId)),
+    );
+    await AsyncStorage.setItem(NOTES_KEY, JSON.stringify([]));
+  });
   try {
     await clearNotesInFirebase();
   } catch (error) {
@@ -1162,7 +1190,8 @@ export async function clearArchivedNotes(): Promise<NoteItem[]> {
   return withNotesSaveLock(async () => {
     const current = await loadNotes();
     const archived = current.filter((n) => n.archived && !n.deletedAt);
-    for (const n of archived) await markDeletedNoteKey(noteStorageKey(n.id, n.groupId ? 'group' : 'personal', n.groupId));
+    // M-5: single batched save of all deletion keys instead of N serial writes.
+    await markDeletedNoteKeys(archived.map((n) => noteStorageKey(n.id, n.groupId ? 'group' : 'personal', n.groupId)));
     const kept = current.filter((n) => !n.archived);
     await saveNotes(kept);
     return normalizeNotes(kept);
@@ -1174,7 +1203,8 @@ export async function clearUnpinnedNotes(): Promise<NoteItem[]> {
   return withNotesSaveLock(async () => {
     const current = await loadNotes();
     const unpinned = current.filter((n) => !n.pinned && !n.deletedAt);
-    for (const n of unpinned) await markDeletedNoteKey(noteStorageKey(n.id, n.groupId ? 'group' : 'personal', n.groupId));
+    // M-5: single batched save of all deletion keys instead of N serial writes.
+    await markDeletedNoteKeys(unpinned.map((n) => noteStorageKey(n.id, n.groupId ? 'group' : 'personal', n.groupId)));
     const kept = current.filter((n) => n.pinned);
     await saveNotes(kept);
     return normalizeNotes(kept);
@@ -1188,7 +1218,8 @@ export async function clearNotesOlderThan(days: number): Promise<NoteItem[]> {
   return withNotesSaveLock(async () => {
     const current = await loadNotes();
     const old = current.filter((n) => !n.pinned && !n.deletedAt && n.updatedAt < cutoff);
-    for (const n of old) await markDeletedNoteKey(noteStorageKey(n.id, n.groupId ? 'group' : 'personal', n.groupId));
+    // M-5: single batched save of all deletion keys instead of N serial writes.
+    await markDeletedNoteKeys(old.map((n) => noteStorageKey(n.id, n.groupId ? 'group' : 'personal', n.groupId)));
     const kept = current.filter((n) => n.pinned || n.updatedAt >= cutoff);
     await saveNotes(kept);
     return normalizeNotes(kept);
@@ -1235,18 +1266,22 @@ export async function saveTemplates(items: NoteTemplate[]): Promise<void> {
 }
 
 export async function addTemplate(template: Omit<NoteTemplate, 'id' | 'createdAt' | 'updatedAt'>): Promise<NoteTemplate[]> {
-  const current = await loadTemplates();
-  const now = Date.now();
-  const next: NoteTemplate[] = [
-    {
-      ...template,
-      id: makeId('tpl'),
-      createdAt: now,
-      updatedAt: now,
-    },
-    ...current,
-  ];
-  await saveTemplates(next);
+  // M-6: lock the load/save; Firebase push stays outside the lock.
+  const next = await withTemplatesSaveLock(async () => {
+    const current = await loadTemplates();
+    const now = Date.now();
+    const updated: NoteTemplate[] = [
+      {
+        ...template,
+        id: makeId('tpl'),
+        createdAt: now,
+        updatedAt: now,
+      },
+      ...current,
+    ];
+    await saveTemplates(updated);
+    return updated;
+  });
   await pushTemplateIfAuthenticated(next[0]);
   return next;
 }
@@ -1255,21 +1290,25 @@ export async function updateTemplate(
   id: string,
   patch: Partial<Pick<NoteTemplate, 'name' | 'to' | 'subject' | 'body' | 'location' | 'durationMinutes' | 'kind'>>,
 ): Promise<NoteTemplate[]> {
-  const current = await loadTemplates();
-  const next = current.map((item) =>
-    item.id === id
-      ? {
-        ...item,
-        ...patch,
-        name: typeof patch.name === 'string' ? patch.name : item.name,
-        to: typeof patch.to === 'string' ? patch.to : item.to,
-        subject: typeof patch.subject === 'string' ? patch.subject : item.subject,
-        body: typeof patch.body === 'string' ? patch.body : item.body,
-        updatedAt: Date.now(),
-      }
-      : item,
-  );
-  await saveTemplates(next);
+  // M-6: lock the load/save; Firebase push stays outside the lock.
+  const next = await withTemplatesSaveLock(async () => {
+    const current = await loadTemplates();
+    const updated = current.map((item) =>
+      item.id === id
+        ? {
+          ...item,
+          ...patch,
+          name: typeof patch.name === 'string' ? patch.name : item.name,
+          to: typeof patch.to === 'string' ? patch.to : item.to,
+          subject: typeof patch.subject === 'string' ? patch.subject : item.subject,
+          body: typeof patch.body === 'string' ? patch.body : item.body,
+          updatedAt: Date.now(),
+        }
+        : item,
+    );
+    await saveTemplates(updated);
+    return updated;
+  });
   const updated = next.find((item) => item.id === id);
   if (updated) await pushTemplateIfAuthenticated(updated);
   return next;

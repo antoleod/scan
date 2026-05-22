@@ -1,4 +1,5 @@
 import { Platform } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { FirebaseApp, getApp, getApps, initializeApp } from 'firebase/app';
 import {
   Auth,
@@ -32,6 +33,7 @@ import {
   query,
   serverTimestamp,
   setDoc,
+  Timestamp,
   where,
   writeBatch,
 } from 'firebase/firestore';
@@ -752,6 +754,43 @@ export async function upsertTemplateInFirebase(template: NoteTemplate): Promise<
   );
 }
 
+// C-1: per-user incremental-sync cursor. We persist the highest `updatedAtServer`
+// (server time) we have observed so the next push-sync only re-reads notes that
+// changed since then, instead of scanning the entire (up to 3000-doc) collection
+// on every 300ms-debounced sync. Server→local delivery is handled separately by
+// the always-on subscribeToNotes() listener, so a missed incremental pickup is
+// still reconciled in real time.
+function notesSyncCursorKey(uid: string): string {
+  return `@MyKit_notes_sync_cursor_${uid}`;
+}
+
+async function loadNotesSyncCursor(uid: string): Promise<number> {
+  try {
+    const raw = await AsyncStorage.getItem(notesSyncCursorKey(uid));
+    const n = Number(raw);
+    return Number.isFinite(n) && n > 0 ? n : 0;
+  } catch {
+    return 0;
+  }
+}
+
+async function saveNotesSyncCursor(uid: string, ms: number): Promise<void> {
+  if (!Number.isFinite(ms) || ms <= 0) return;
+  try {
+    await AsyncStorage.setItem(notesSyncCursorKey(uid), String(ms));
+  } catch {
+    // non-critical: a missing cursor just means the next sync does a full scan
+  }
+}
+
+function updatedAtServerMillis(data: Record<string, unknown>): number {
+  const uas = (data as { updatedAtServer?: unknown }).updatedAtServer;
+  if (uas && typeof (uas as { toMillis?: () => number }).toMillis === 'function') {
+    return (uas as { toMillis: () => number }).toMillis();
+  }
+  return 0;
+}
+
 export async function syncNotesWithFirebase(localNotes: NoteItem[], localTemplates: NoteTemplate[]) {
   const rt = await initFirebaseRuntime();
   if (!rt.enabled || !rt.auth || !rt.db) {
@@ -765,11 +804,21 @@ export async function syncNotesWithFirebase(localNotes: NoteItem[], localTemplat
   const templatesRef = collection(rt.db, 'users', uid, 'noteTemplates');
   const deletedKeys = await loadDeletedNoteKeys();
 
-  // Read server state first so we can merge (newest updatedAt wins).
-  const notesSnapBefore = await getDocsFromServer(query(notesRef));
+  // C-1: read only notes changed since our last sync (incremental). On the first
+  // sync (cursor === 0) we do a full scan to seed local + the cursor. Since every
+  // write/tombstone stamps updatedAtServer, this also catches remote deletions.
+  const cursor = await loadNotesSyncCursor(uid);
+  const notesQuery = cursor > 0
+    ? query(notesRef, where('updatedAtServer', '>', Timestamp.fromMillis(cursor)))
+    : query(notesRef);
+  const notesSnapBefore = await getDocsFromServer(notesQuery);
+  let maxObservedMillis = cursor;
   const serverNotesMap = new Map<string, NoteItem>();
   notesSnapBefore.forEach((d) => {
-    const x = d.data() as NoteItem;
+    const raw = d.data();
+    const ms = updatedAtServerMillis(raw);
+    if (ms > maxObservedMillis) maxObservedMillis = ms;
+    const x = raw as unknown as NoteItem;
     // Handle workflowMetadata stored as JSON string (legacy) or object (new)
     if (typeof x.workflowMetadata === 'string') {
       try { x.workflowMetadata = JSON.parse(x.workflowMetadata); } catch { x.workflowMetadata = undefined; }
@@ -875,6 +924,12 @@ export async function syncNotesWithFirebase(localNotes: NoteItem[], localTemplat
   }
 
   if (opCount > 0) await batch.commit();
+
+  // C-1: advance the incremental cursor to the newest server change we observed.
+  // Our own writes above resolve to a slightly later server time and will simply be
+  // re-read (idempotently) on the next sync — far cheaper than re-scanning the
+  // whole collection every time.
+  await saveNotesSyncCursor(uid, maxObservedMillis);
 
   // Build merged result from in-memory data — avoids a second full getDocs read.
   // serverNotesMap already contains all server notes from the first read above.
@@ -1100,6 +1155,12 @@ export async function subscribeToSharedGroupNotes(
   if (!rt.enabled || !rt.auth || !rt.db) return () => {};
 
   const db = rt.db;
+  // M-2: cap concurrent per-group note listeners. Each group opens its own
+  // onSnapshot WebSocket subscription; an unbounded count means a user in many
+  // groups holds many live sockets and re-materializes every group's notes on any
+  // single change. Groups beyond the cap simply won't stream live (still reachable
+  // via fetchSharedGroupNotesForCurrentUser on demand).
+  const MAX_GROUP_LISTENERS = 15;
   const perGroupUnsub = new Map<string, () => void>();
   const latestByGroup = new Map<string, NoteItem[]>();
   let groupsUnsub: (() => void) | null = null;
@@ -1130,6 +1191,7 @@ export async function subscribeToSharedGroupNotes(
         const groupId = d.id;
         seen.add(groupId);
         if (perGroupUnsub.has(groupId)) return;
+        if (perGroupUnsub.size >= MAX_GROUP_LISTENERS) return; // M-2: cap reached
 
         const notesRef = collection(db, 'noteGroups', groupId, 'notes');
         const unsub = onSnapshot(query(notesRef), (notesSnap) => {
@@ -1169,9 +1231,10 @@ export async function upsertSharedGroupNote(groupId: string, note: NoteItem): Pr
   if (!rt.enabled || !rt.auth || !rt.db) return;
   const user = rt.auth.currentUser;
   if (!user || !groupId) return;
-  const groupRef = doc(rt.db, 'noteGroups', groupId);
-  const groupSnap = await getDoc(groupRef);
-  if (!groupSnap.exists()) return;
+  // H-1: no getDoc existence check before writing. It added a Firestore read (cost +
+  // ~100-300ms latency) to every group-note save. Firestore security rules already
+  // deny writes to non-existent / non-member groups, so the guard prevented no error
+  // the user would care about — a setDoc to a deleted group simply fails harmlessly.
   // N-4: sanitize before writing to strip imageBase64 and avoid exceeding Firestore's
   // 1MB document limit. Matches what upsertNoteInFirebase does.
   const payload = sanitizeNoteForFirestore({ ...note, groupId });

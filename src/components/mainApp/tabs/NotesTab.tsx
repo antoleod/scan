@@ -326,6 +326,10 @@ export function NotesTab({
   // Ref to avoid auto-pushing notes back to Firebase when they just arrived from the server.
   const serverUpdateRef = useRef(false);
   const notesSyncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // H-5: exponential backoff so a persistently failing/offline sync doesn't retry
+  // in a tight 300ms loop (each retry was a full Firestore round trip).
+  const syncBackoffUntilRef = useRef(0);
+  const syncFailCountRef = useRef(0);
   const deletedNoteKeysRef = useRef<Set<string>>(new Set());
   const [deletedKeysLoaded, setDeletedKeysLoaded] = useState(false);
   const serverNotesRef = useRef<NoteItem[]>([]);
@@ -385,30 +389,10 @@ export function NotesTab({
     });
   }, [user?.uid]);
 
-  useEffect(() => {
-    if (!user || !deletedKeysLoaded) return;
-    let cancelled = false;
-    fetchNotesFromFirebase().then(({ serverNotes, serverTemplates }) => {
-      if (cancelled || !mountedRef.current) return;
-      serverUpdateRef.current = true;
-      const remoteNotes = asSyncedRemoteNotes(serverNotes);
-      serverNotesRef.current = remoteNotes;
-      setNotes((current) => {
-        const merged = mergeNotesFromServerAuthoritative(current, remoteNotes, sharedNotesRef.current, deletedNoteKeysRef.current);
-        saveWorkNotes(merged).catch((error) => {
-          diag.warn('notes.tab.server_bootstrap.save.error', { message: String(error) }).catch(() => undefined);
-        });
-        return merged;
-      });
-      setTemplates(serverTemplates);
-      saveWorkTemplates(serverTemplates).catch((error) => {
-        diag.warn('notes.tab.server_templates.save.error', { message: String(error) }).catch(() => undefined);
-      });
-    }).catch((error) => {
-      diag.warn('notes.tab.server_bootstrap.error', { message: String(error) }).catch(() => undefined);
-    });
-    return () => { cancelled = true; };
-  }, [user?.uid, deletedKeysLoaded]);
+  // L-3: no explicit fetchNotesFromFirebase() bootstrap here. The subscribeToNotes()
+  // listener below delivers the full current collection in its first (non-cache)
+  // snapshot, so a separate getDocs on login was a duplicate full-collection read.
+  // (fetchNotesFromFirebase is still used by pull-to-refresh — see handleRefresh.)
 
   // Real-time cross-device sync via Firestore onSnapshot.
   useEffect(() => {
@@ -453,9 +437,13 @@ export function NotesTab({
       return;
     }
     if (notesSyncTimerRef.current) clearTimeout(notesSyncTimerRef.current);
+    // H-5: honour the backoff window. After repeated failures we wait longer
+    // (30s, 60s, … capped at 5min) instead of hammering Firestore every 300ms.
+    const backoffRemaining = syncBackoffUntilRef.current - Date.now();
+    const delay = backoffRemaining > 0 ? Math.max(300, backoffRemaining) : 300;
     notesSyncTimerRef.current = setTimeout(async () => {
       // N-3: clear the flag inside the callback so a server snapshot that arrives
-      // during the 300ms debounce window is not prematurely discarded.
+      // during the debounce window is not prematurely discarded.
       serverUpdateRef.current = false;
       // C-2: use refs instead of closed-over state to avoid stale closure when two
       // notes are created rapidly and the second debounce fires with old state.
@@ -469,6 +457,9 @@ export function NotesTab({
           pendingIds.has(item.id) ? { ...item, syncStatus: 'retrying' as const } : item,
         ));
         await syncNotesWithFirebase(latestNotesRef.current, latestTemplatesRef.current);
+        // H-5: success — reset the backoff.
+        syncFailCountRef.current = 0;
+        syncBackoffUntilRef.current = 0;
         if (pendingIds.size > 0) {
           const updated = await markNotesSynced(pendingIds);
           // C-1: set the flag BEFORE setNotes so the next render's effect sees it
@@ -477,6 +468,13 @@ export function NotesTab({
           setNotes(updated);
         }
       } catch (error) {
+        // H-5: grow the backoff window (30s, 60s, 120s … capped at 5min) so a
+        // persistent offline/failure state stops re-triggering this effect every 300ms.
+        if (!isLocalOnlySyncError(error)) {
+          syncFailCountRef.current += 1;
+          const backoff = Math.min(30_000 * 2 ** (syncFailCountRef.current - 1), 300_000);
+          syncBackoffUntilRef.current = Date.now() + backoff;
+        }
         diag.warn('notes.tab.sync.debounced.error', { message: String(error), pendingCount: pendingIds.size }).catch(() => undefined);
         setNotes((current) => current.map((item) => {
           if (!pendingIds.has(item.id)) return item;
@@ -490,7 +488,7 @@ export function NotesTab({
           };
         }));
       }
-    }, 300);
+    }, delay);
     return () => {
       if (notesSyncTimerRef.current) clearTimeout(notesSyncTimerRef.current);
     };
@@ -677,19 +675,25 @@ export function NotesTab({
       return;
     }
 
-    // Allow short text if it contains a known medication
-    const hasMedication = findMedication(draftTextValue) !== null;
-    if (draftTextValue.length < 3 && !hasMedication) {
-      setDetectedWorkflow(null);
-      return;
-    }
+    // H-3: debounce. Detection runs findMedication() plus four workflow detectors
+    // (medication / shopping / reminder / task) over the full draft. Running that
+    // synchronously on every keystroke janks the composer; wait for a ~300ms pause.
+    const timer = setTimeout(() => {
+      // Allow short text if it contains a known medication
+      const hasMedication = findMedication(draftTextValue) !== null;
+      if (draftTextValue.length < 3 && !hasMedication) {
+        setDetectedWorkflow(null);
+        return;
+      }
 
-    const detection = detectSmartWorkflow(draftTextValue);
-    if (detection.type !== 'none' && detection.type !== 'shopping' && detection.confidence >= 0.65) {
-      setDetectedWorkflow(detection);
-    } else {
-      setDetectedWorkflow(null);
-    }
+      const detection = detectSmartWorkflow(draftTextValue);
+      if (detection.type !== 'none' && detection.type !== 'shopping' && detection.confidence >= 0.65) {
+        setDetectedWorkflow(detection);
+      } else {
+        setDetectedWorkflow(null);
+      }
+    }, 300);
+    return () => clearTimeout(timer);
   }, [draftTextValue]);
 
   // Poll for due medication reminders every 60 seconds
@@ -767,9 +771,32 @@ export function NotesTab({
   const handleRefresh = async () => {
     setRefreshing(true);
     try {
-      const result = await ensureWorkNotesAndEmailTemplates();
-      setNotes(result.notes);
-      setTemplates(result.templates);
+      // L-5: when signed in, actually pull from the server and merge — a user
+      // pulling to refresh expects to see notes created on other devices, not just
+      // a re-read of the local cache. Guests fall back to local storage.
+      if (user) {
+        const { serverNotes, serverTemplates } = await fetchNotesFromFirebase();
+        if (!mountedRef.current) return;
+        serverUpdateRef.current = true;
+        const remoteNotes = asSyncedRemoteNotes(serverNotes);
+        serverNotesRef.current = remoteNotes;
+        setNotes((current) => {
+          const merged = mergeNotesFromServerAuthoritative(current, remoteNotes, sharedNotesRef.current, deletedNoteKeysRef.current);
+          saveWorkNotes(merged).catch(() => undefined);
+          return merged;
+        });
+        setTemplates((current) => {
+          const merged = mergeTemplatesByNewest(current, serverTemplates);
+          saveWorkTemplates(merged).catch(() => undefined);
+          return merged;
+        });
+      } else {
+        const result = await ensureWorkNotesAndEmailTemplates();
+        setNotes(result.notes);
+        setTemplates(result.templates);
+      }
+    } catch (error) {
+      diag.warn('notes.tab.refresh.error', { message: String(error) }).catch(() => undefined);
     } finally {
       setRefreshing(false);
     }
@@ -1536,6 +1563,22 @@ export function NotesTab({
     chipBorder: palette.border,
   };
 
+  // H-2: stable palette reference for NoteCard. The card is React.memo'd and its
+  // comparator checks palette by identity; building this object inline per-card
+  // would defeat the memo (a new object every render → always re-render).
+  const cardPalette = useMemo(() => ({
+    bg: palette.bg,
+    accent: palette.accent,
+    border: palette.border,
+    surface: palette.card,
+    surfaceAlt: palette.card,
+    textBody: palette.fg,
+    textDim: palette.muted,
+    textMuted: palette.muted,
+    textPrimary: palette.fg,
+    chipBorder: palette.border,
+  }), [palette]);
+
   return (
     <View style={{ flex: 1 }}>
       {!vaultMode ? (
@@ -1577,7 +1620,10 @@ export function NotesTab({
           />
         }
         data={workspaceTab === 'notes' ? noteRows : []}
-        keyExtractor={(_, index) => `row-${index}`}
+        // M-3: key by the row's note ids, not the row index. With an index key,
+        // re-ordering (e.g. pinning) made React reconcile rows by position and
+        // re-render every row; identity keys keep stable rows stable.
+        keyExtractor={(row) => (row as NoteItem[]).map((n) => n.id).join('|')}
         renderItem={({ item: row, index: rowIndex }) => (
           <View key={`row-${rowIndex}`} style={[styles.gridRow, { marginBottom: 10 }]}>
             {row.map((note) => {
@@ -1623,18 +1669,7 @@ export function NotesTab({
                 <View key={note.id} style={{ flex: 1, minWidth: 0 }}>
                   <NoteCard
                     note={note}
-                    palette={{
-                      bg: palette.bg,
-                      accent: palette.accent,
-                      border: palette.border,
-                      surface: uiPalette.surface,
-                      surfaceAlt: uiPalette.surfaceAlt,
-                      textBody: uiPalette.textBody,
-                      textDim: uiPalette.textDim,
-                      textMuted: uiPalette.textMuted,
-                      textPrimary: uiPalette.textPrimary,
-                      chipBorder: uiPalette.chipBorder,
-                    }}
+                    palette={cardPalette}
                     expanded={expanded}
                     editing={editing}
                     editingText={editingText}
