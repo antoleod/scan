@@ -296,17 +296,29 @@ export function getAllMedicationNames(): string[] {
   return Array.from(names);
 }
 
+// H-3: Pre-compute lowercased (name → medication) pairs once at module load,
+// sorted longest-first so specific multi-word names win over short aliases
+// (e.g. "acetylsalicylic acid" before "asa"). This avoids re-lowercasing all
+// ~150 names on every findMedication() call — which previously ran on every
+// keystroke in the notes composer.
+const MEDICATION_NAME_INDEX: { name: string; med: Medication }[] = (() => {
+  const pairs: { name: string; med: Medication }[] = [];
+  for (const med of EU_MEDICATIONS) {
+    for (const name of med.names) {
+      pairs.push({ name: name.toLowerCase(), med });
+    }
+  }
+  return pairs.sort((a, b) => b.name.length - a.name.length);
+})();
+
 /**
- * Find medication by name (fuzzy matching)
+ * Find medication by name (substring matching)
  */
 export function findMedication(text: string): Medication | null {
   const lower = String(text || '').toLowerCase();
-  for (const med of EU_MEDICATIONS) {
-    for (const name of med.names) {
-      if (lower.includes(name.toLowerCase())) {
-        return med;
-      }
-    }
+  if (!lower) return null;
+  for (const { name, med } of MEDICATION_NAME_INDEX) {
+    if (lower.includes(name)) return med;
   }
   return null;
 }

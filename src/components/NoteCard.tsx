@@ -115,7 +115,7 @@ function SwipeAction({
 
 // ─── NoteCard ────────────────────────────────────────────────────────────────
 
-export function NoteCard({
+function NoteCardBase({
   note,
   palette,
   expanded,
@@ -323,7 +323,12 @@ export function NoteCard({
   const model = useMemo(() => buildSmartNoteModel(noteText, smart), [noteText, smart]);
   const sfModel = useMemo(() => parseServiceNowFields(noteText), [noteText]);
   const isShopping = useMemo(() => note.smartType === 'shopping' || note.category === 'shopping' || isShoppingList(noteText), [note.category, note.smartType, noteText]);
-  const smartLabel = note.smartLabel || detectSmartNoteLabel(noteText).label;
+  // L-4: memoize — detectSmartNoteLabel scans the full note text; only recompute
+  // when the stored label or the text actually changes.
+  const smartLabel = useMemo(
+    () => note.smartLabel || detectSmartNoteLabel(noteText).label,
+    [note.smartLabel, noteText],
+  );
   const smartLabelMeta = getSmartNoteLabelMeta(smartLabel);
   const previousShoppingItems = useMemo(() => (
     note.workflowMetadata?.checklistItems?.map((item) => ({
@@ -800,6 +805,45 @@ export function NoteCard({
     </>
   );
 }
+
+// H-2: memoize the card. Without this, every change to the parent `notes` array
+// (a sync tick, any single-note mutation, a server snapshot) re-rendered ALL
+// visible cards and re-ran their entity/shopping/ServiceNow detection. The
+// comparator below skips re-render when nothing this card displays has changed.
+//
+// Key insight: every note mutation in core/notes.ts bumps `updatedAt = Date.now()`,
+// so comparing id + updatedAt covers all content changes. `syncStatus` can change
+// WITHOUT bumping updatedAt (markNotesSynced), so it is compared explicitly.
+// Function props are intentionally ignored: the parent recreates them every render,
+// but when the data props above are unchanged the closures are behaviourally
+// equivalent (they capture the same note + the same primitive UI state).
+function noteCardPropsEqual(
+  prev: React.ComponentProps<typeof NoteCardBase>,
+  next: React.ComponentProps<typeof NoteCardBase>,
+): boolean {
+  const a = prev.note;
+  const b = next.note;
+  if (a !== b) {
+    if (a.id !== b.id) return false;
+    if (a.updatedAt !== b.updatedAt) return false;
+    if (a.syncStatus !== b.syncStatus) return false;
+    if (a.pinned !== b.pinned) return false;
+    if (a.isSecret !== b.isSecret) return false;
+    if (a.imageRtdbPaths !== b.imageRtdbPaths) return false;
+  }
+  if (prev.expanded !== next.expanded) return false;
+  if (prev.editing !== next.editing) return false;
+  // editingText only affects THIS card while it is the one being edited; ignoring it
+  // otherwise prevents every keystroke in one card from re-rendering all the others
+  // (editingText is shared parent state).
+  if (next.editing && prev.editingText !== next.editingText) return false;
+  if (prev.selected !== next.selected) return false;
+  if (prev.settings !== next.settings) return false;
+  if (prev.palette !== next.palette) return false;
+  return true;
+}
+
+export const NoteCard = React.memo(NoteCardBase, noteCardPropsEqual);
 
 // ─── Entity token colors ──────────────────────────────────────────────────────
 

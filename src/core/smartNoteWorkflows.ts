@@ -1,6 +1,6 @@
 // Smart workflow detection for notes: medication, shopping, reminder, task
 import { isLikelyShoppingNote, extractShoppingItemsFromText } from './groceryCatalog';
-import { getAllMedicationNames, findMedication } from './euMedicationDatabase';
+import { findMedication } from './euMedicationDatabase';
 
 export type SmartWorkflowType = 'none' | 'medication' | 'shopping' | 'reminder' | 'task';
 
@@ -45,9 +45,6 @@ const MEDICATION_KEYWORDS = {
   ],
 };
 
-// Medication names loaded from EU medication database
-const MEDICATION_NAMES = getAllMedicationNames();
-
 // Reminder keywords by language
 const REMINDER_KEYWORDS = {
   es: [
@@ -76,19 +73,26 @@ const TASK_KEYWORDS = {
 
 function detectLanguage(text: string): 'es' | 'fr' | 'en' {
   const lower = String(text || '').toLowerCase();
+  if (!lower.trim()) return 'en';
 
-  // Spanish indicators
-  if (/\b(tomé|tome|tomar|para|por|de la|el|la|los|las|una|unos)\b/.test(lower)) {
-    return 'es';
-  }
+  // M-4: score distinctive, low-ambiguity markers and pick the max instead of
+  // returning on the first loose match. The old code keyed on shared function
+  // words ("la", "el", "un") that match both Spanish AND French, so any French
+  // note containing "la" was misclassified as Spanish (Spanish was checked first),
+  // selecting the wrong keyword set and lowering detection accuracy.
+  let es = 0;
+  let fr = 0;
 
-  // French indicators
-  if (/\b(pris|prendre|pour|à|le|la|les|un|une|des)\b/.test(lower)) {
-    return 'fr';
-  }
+  // Spanish-only characters / words
+  if (/[ñ¿¡]/.test(lower)) es += 2;
+  if (/\b(tomé|tome|pastilla|medicamento|medicación|recordar|recuérdame|recordatorio|tarea|tengo que|necesito|debo|mañana|jarabe|fiebre|garganta|dolor)\b/.test(lower)) es += 1;
 
-  // English by default
-  return 'en';
+  // French-only characters / words
+  if (/[çœ]/.test(lower)) fr += 2;
+  if (/\b(je|j'ai|c'est|médicament|comprimé|sirop|prendre|pris|rappel|rappelle|tâche|tâches|n'oublie|ne pas oublier|aujourd'hui|demain|fièvre|gorge|douleur)\b/.test(lower)) fr += 1;
+
+  if (es === 0 && fr === 0) return 'en';
+  return es >= fr ? 'es' : 'fr';
 }
 
 function countKeywordMatches(text: string, keywords: string[]): number {
