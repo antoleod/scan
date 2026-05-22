@@ -31,12 +31,8 @@
    - 🎯 Tasks for today, this week, next steps
    - Duration: 15 min read
 
-2. **IMMEDIATELY** (If you're a PM/team lead):
-   - 📄 [`PHASE-5-TODAY-CHECKLIST.md`](PHASE-5-TODAY-CHECKLIST.md)
-   - 🎯 3 tasks for today + 2 for May 10 + 2 for May 14
-   - Duration: 10 min read
 
-3. **FOR STAKEHOLDERS** (Execs, finance, leadership):
+2. **FOR STAKEHOLDERS** (Execs, finance, leadership):
    - 📄 [`P2P-EXECUTIVE-SUMMARY.md`](P2P-EXECUTIVE-SUMMARY.md)
    - 🎯 1-page decision summary
    - Duration: 5 min read
@@ -45,17 +41,17 @@
 
 ### Detailed Reference (Deep Dives)
 
-4. **FOR ENGINEERS** (If implementing):
+3. **FOR ENGINEERS** (If implementing):
    - 📄 [`PHASE-5-P2P-IMPLEMENTATION-ROADMAP.md`](PHASE-5-P2P-IMPLEMENTATION-ROADMAP.md) ⭐
    - 🎯 Week-by-week detailed plan (24 weeks)
    - Duration: 45 min read
 
-5. **FOR ARCHITECTS** (Design decisions):
+4. **FOR ARCHITECTS** (Design decisions):
    - 📄 [`p2p-file-sharing-impact-analysis.md`](p2p-file-sharing-impact-analysis.md)
    - 🎯 14-section technical deep-dive
    - Duration: 2+ hour read
 
-6. **FOR LEADERSHIP** (Business metrics):
+5. **FOR LEADERSHIP** (Business metrics):
    - 📄 [`p2p-metrics-and-comparison.md`](p2p-metrics-and-comparison.md)
    - 🎯 Cost ($470K), timeline (19 weeks), risk matrix
    - Duration: 1 hour read
@@ -64,7 +60,7 @@
 
 ### Planning & Execution
 
-7. **FOR PROJECT LEADS** (Kickoff planning):
+6. **FOR PROJECT LEADS** (Kickoff planning):
    - 📄 [`PHASE-5-KICKOFF-IMMEDIATE-ACTIONS.md`](PHASE-5-KICKOFF-IMMEDIATE-ACTIONS.md)
    - 🎯 Pre-research planning (May-July), August 1 kickoff
    - Duration: 1 hour read
@@ -321,7 +317,6 @@ JAN 2027:           🚀 LAUNCH
 docs/
 ├── PHASE-5-COMMAND-CENTER.md ← YOU ARE HERE
 ├── PHASE-5-WEEK-1-PROGRESS.md ← THIS WEEK
-├── PHASE-5-TODAY-CHECKLIST.md ← TODAY'S TASKS
 ├── PHASE-5-KICKOFF-IMMEDIATE-ACTIONS.md ← PLANNING
 ├── PHASE-5-P2P-IMPLEMENTATION-ROADMAP.md ← DETAILED PLAN
 ├── P2P-EXECUTIVE-SUMMARY.md ← FOR EXECS
@@ -361,4 +356,3 @@ docs/
 - Report back by May 14
 
 🚀 **Let's ship P2P.**
-
