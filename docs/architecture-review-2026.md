@@ -164,6 +164,7 @@ export class InputValidator {
            img-src 'self' data: https: blob:; 
            font-src 'self' data:; 
            connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://*.firebasedatabase.app https://*.firebase.google.com wss://*.firebaseio.com wss://*.firebasedatabase.app;
+           frame-src 'self' https://*.firebaseapp.com https://*.web.app https://accounts.google.com;
            worker-src 'self' blob:;">
 ```
 

@@ -45,6 +45,7 @@ service cloud.firestore {
         'pinned',
         'versions',
         'smartType',
+        'smartLabel',
         'workflowStatus',
         'workflowMetadata',
         'isSecret',
@@ -72,6 +73,7 @@ service cloud.firestore {
       && (!('imageRtdbPaths' in request.resource.data) || request.resource.data.imageRtdbPaths is list)
       && (!('versions' in request.resource.data) || (request.resource.data.versions is list && request.resource.data.versions.size() <= 12))
       && (!('smartType' in request.resource.data) || request.resource.data.smartType is string)
+      && (!('smartLabel' in request.resource.data) || request.resource.data.smartLabel is string)
       && (!('workflowStatus' in request.resource.data) || request.resource.data.workflowStatus is string)
       && (!('isSecret' in request.resource.data) || request.resource.data.isSecret is bool)
       && (!('draft' in request.resource.data) || request.resource.data.draft is bool)

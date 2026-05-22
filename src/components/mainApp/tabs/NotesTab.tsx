@@ -96,11 +96,6 @@ const UI_COPY = {
     quickNote: 'Quick Add: Note',
     quickShopping: 'Quick Add: Shopping',
     quickMedication: 'Quick Add: Medication',
-    syncHealth: 'Sync health',
-    pendingSync: 'Pending sync',
-    syncFailed: 'Sync failed',
-    synced: 'Synced',
-    syncedNotes: 'Synced notes',
     online: 'Online',
     savedOffline: 'Saved offline',
     today: 'Today',
@@ -112,11 +107,6 @@ const UI_COPY = {
     quickNote: 'Rápido: Nota',
     quickShopping: 'Rápido: Compras',
     quickMedication: 'Rápido: Medicación',
-    syncHealth: 'Estado de sync',
-    pendingSync: 'Sync pendiente',
-    syncFailed: 'Sync fallido',
-    synced: 'Sincronizado',
-    syncedNotes: 'Notas sincronizadas',
     online: 'En línea',
     savedOffline: 'Guardado offline',
     today: 'Hoy',
@@ -128,11 +118,6 @@ const UI_COPY = {
     quickNote: 'Ajout rapide: Note',
     quickShopping: 'Ajout rapide: Courses',
     quickMedication: 'Ajout rapide: Médication',
-    syncHealth: 'Santé de sync',
-    pendingSync: 'Sync en attente',
-    syncFailed: 'Échec sync',
-    synced: 'Synchronisé',
-    syncedNotes: 'Notes synchronisées',
     online: 'En ligne',
     savedOffline: 'Sauvé hors ligne',
     today: "Aujourd'hui",
@@ -865,9 +850,6 @@ export function NotesTab({
   const notesHasMore = pagedFilteredNotes.length < filteredNotes.length;
 
   const noteRows = useMemo(() => chunk(pagedFilteredNotes, isDesktop ? desktopColumns : 1), [pagedFilteredNotes, isDesktop, desktopColumns]);
-  const pendingSyncCount = useMemo(() => notes.filter((n) => n.syncStatus === 'pending' || n.syncStatus === 'retrying' || n.syncStatus === 'offline').length, [notes]);
-  const failedSyncCount = useMemo(() => notes.filter((n) => n.syncStatus === 'failed').length, [notes]);
-  const syncedCount = useMemo(() => notes.filter((n) => n.syncStatus === 'synced').length, [notes]);
   const shoppingPending = useMemo(
     () => notes.filter((n) => !n.archived && (n.smartType === 'shopping' || n.category === 'shopping')).length,
     [notes],

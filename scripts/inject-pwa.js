@@ -171,7 +171,7 @@ injectIfMissing(`<meta name="mobile-web-app-capable" content="yes">`,           
 //    Note: frame-ancestors is ignored in <meta> CSP. It must be delivered as
 //    an HTTP header by the hosting layer, so it is intentionally omitted here.
 replaceOrInject('http-equiv="Content-Security-Policy"',
-  `<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://www.gstatic.com https://apis.google.com https://www.google.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https: blob:; font-src 'self' data:; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://*.firebasedatabase.app https://*.firebase.google.com wss://*.firebaseio.com wss://*.firebasedatabase.app; worker-src 'self' blob:;">`
+  `<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://www.gstatic.com https://apis.google.com https://www.google.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https: blob:; font-src 'self' data:; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://*.firebasedatabase.app https://*.firebase.google.com wss://*.firebaseio.com wss://*.firebasedatabase.app; frame-src 'self' https://*.firebaseapp.com https://*.web.app https://accounts.google.com; worker-src 'self' blob:;">`
 );
 
 // ── 9. Service worker registration ───────────────────────────────────────────
