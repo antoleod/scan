@@ -9,6 +9,7 @@
  * dependency on Notes or any other feature.
  */
 import { createStore } from './createStore';
+import { filterIncomingShares } from '../presence/shareFilter';
 import { generatePeerId } from '../utils/ids';
 import { avatarForPlatform, currentPlatform, generateDeviceAlias } from '../utils/format';
 import { TTL_PRESET_MS } from '../constants';
@@ -20,6 +21,7 @@ import type {
   SessionStatus,
   SessionTtlPreset,
   TransferProgress,
+  UserShare,
 } from '../types';
 
 export interface AirdropState {
@@ -31,6 +33,11 @@ export interface AirdropState {
   sessions: Record<string, ShareSession>;
   /** Transfer progress keyed by sessionId (placeholder until transfer lands). */
   transfers: Record<string, TransferProgress>;
+  /**
+   * Shares announced by THIS account's other devices, keyed by sessionId.
+   * Powers the "My Devices" direct-download list (no QR). Empty in guest mode.
+   */
+  userShares: Record<string, UserShare>;
   /** Monotonic clock tick used to drive countdown re-renders. */
   now: number;
 }
@@ -40,6 +47,7 @@ const initialState: AirdropState = {
   nearby: {},
   sessions: {},
   transfers: {},
+  userShares: {},
   now: Date.now(),
 };
 
@@ -93,6 +101,25 @@ export function reapStaleNearby(cutoff: number): void {
     else mutated = true;
   }
   if (mutated) airdropStore.setState({ nearby });
+}
+
+// ── User shares (same-account direct download) ──────────────────────────────
+
+/**
+ * Replace the set of shares offered by this account's other devices. `selfId`
+ * is the local device's peer id so we can filter out our OWN announcements, and
+ * `nowMs` drops anything already expired. Called by the presence subscription.
+ */
+export function setUserShares(shares: UserShare[], selfId: string | null, nowMs: number): void {
+  const next: Record<string, UserShare> = {};
+  for (const share of filterIncomingShares(shares, selfId, nowMs)) {
+    next[share.sessionId] = share;
+  }
+  airdropStore.setState({ userShares: next });
+}
+
+export function clearUserShares(): void {
+  airdropStore.setState({ userShares: {} });
 }
 
 // ── Sessions ──────────────────────────────────────────────────────────────

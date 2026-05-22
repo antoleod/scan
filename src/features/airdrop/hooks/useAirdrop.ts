@@ -9,7 +9,7 @@ import { useMemo } from 'react';
 
 import { airdropStore } from '../store/airdropStore';
 import type { AirdropState } from '../store/airdropStore';
-import type { NearbyDevice, PeerInfo, ShareSession, TransferProgress } from '../types';
+import type { NearbyDevice, PeerInfo, ShareSession, TransferProgress, UserShare } from '../types';
 
 /** Generic selector hook. */
 export function useAirdrop<S>(selector: (s: AirdropState) => S): S {
@@ -64,4 +64,17 @@ export function useSession(id: string | null): ShareSession | null {
 /** Transfer progress for a session (null until a transfer starts). */
 export function useTransfer(id: string | null): TransferProgress | null {
   return airdropStore.use((s) => (id ? s.transfers[id] ?? null : null));
+}
+
+/**
+ * Shares offered by THIS account's other devices, newest first. Drives the
+ * "My Devices" direct-download list. Empty in guest mode. Self/expired entries
+ * are already filtered out by the presence sync before they reach the store.
+ */
+export function useUserShares(): UserShare[] {
+  const map = airdropStore.use((s) => s.userShares);
+  return useMemo(
+    () => Object.values(map).sort((a, b) => b.createdAt - a.createdAt),
+    [map],
+  );
 }

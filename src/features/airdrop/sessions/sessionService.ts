@@ -12,6 +12,7 @@
  *  - This module never imports Notes (or any feature) — it is pure platform.
  */
 import { getSignalingChannel } from '../signaling';
+import { publishMyShare, clearMyShare, currentUid } from '../presence/userPresence';
 import { createPeerConnection, isWebRtcSupported } from '../webrtc';
 import {
   ensureSelf,
@@ -119,6 +120,27 @@ export async function createSession(opts: CreateSessionOptions = {}): Promise<Sh
   rt.pc.onStateChange((state) => onPeerState(id, state));
 
   setSessionStatus(id, 'waiting');
+
+  // Same-account direct download: if signed in and sharing a concrete file,
+  // announce this share so the account's other devices can pull it without a
+  // QR scan. Best-effort — guests and disabled Firebase simply skip this and
+  // rely on the QR path. Only join coordinates + file meta are published.
+  if (rt.file && currentUid()) {
+    void publishMyShare({
+      sessionId: id,
+      token,
+      deviceName: self.name,
+      deviceAvatar: self.avatar,
+      devicePlatform: self.platform,
+      hostPeerId: self.id,
+      fileName: rt.file.name,
+      fileSize: rt.file.size,
+      mimeType: rt.file.mimeType,
+      createdAt: now,
+      expiresAt: session.expiresAt,
+    });
+  }
+
   diag.info('airdrop.session.created', { id, ttl, webrtc: isWebRtcSupported() });
   return airdropStore.getState().sessions[id];
 }
@@ -211,6 +233,31 @@ export async function joinSession(
   return airdropStore.getState().sessions[sessionId];
 }
 
+/**
+ * Same-account direct download: join a share advertised by another device on
+ * THIS account (from the "My Devices" list) without scanning a QR. Reuses the
+ * exact guest pairing + transfer pipeline, then AUTO-ACCEPTS the file offer
+ * because the user already expressed intent by tapping "Download".
+ *
+ * The optional `onComplete` lets the UI react when the file finishes saving.
+ */
+export async function joinUserShare(
+  sessionId: string,
+  token: string,
+  // `onOffer` is optional here because we always supply our own auto-accepting one.
+  handlers?: Partial<ReceiverHandlers>,
+): Promise<ShareSession> {
+  const wrapped: ReceiverHandlers = {
+    ...handlers,
+    onOffer: (meta) => {
+      handlers?.onOffer?.(meta);
+      // Intent already confirmed by the "Download" tap → accept immediately.
+      acceptIncomingFile(sessionId);
+    },
+  };
+  return joinSession(sessionId, token, wrapped);
+}
+
 /** Receiver UI → accept the pending file offer (starts the byte stream). */
 export function acceptIncomingFile(sessionId: string): void {
   const pc = getSessionPeer(sessionId);
@@ -299,6 +346,13 @@ export async function cancelSession(sessionId: string): Promise<void> {
 
 /** Internal: close the local peer connection and stop listening (no room clear). */
 function teardownLocal(sessionId: string): void {
+  // If WE are the host, retract the same-account presence announcement so the
+  // share stops appearing on our other devices. Only the host published it.
+  const session = airdropStore.getState().sessions[sessionId];
+  if (session?.role === 'host') {
+    void clearMyShare(sessionId);
+  }
+
   const rt = runtimes.get(sessionId);
   if (rt) {
     rt.disposeTransfer?.();

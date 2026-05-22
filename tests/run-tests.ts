@@ -17,6 +17,8 @@ import { sanitizeScanInput, sanitizeNoteText, sanitizeTemplatePattern } from "..
 import { computeNotesChecksum } from "../src/core/syncChecksum";
 import { getAuthRedirectPath, LOGIN_ROUTE, MAIN_APP_ROUTE } from "../src/core/routes";
 import { encodeQrPayload, decodeQrPayload, isAirdropQr } from "../src/features/airdrop/utils/qr";
+import { filterIncomingShares, isValidShare } from "../src/features/airdrop/presence/shareFilter";
+import type { UserShare } from "../src/features/airdrop/types";
 
 let passed = 0;
 let failed = 0;
@@ -736,6 +738,57 @@ run("airdrop QR decode rejects non-airdrop and malformed strings", () => {
   assert.equal(isAirdropQr("scan-airdrop:1:a:b"), true);
   assert.equal(isAirdropQr("https://example.com"), false); // no join param
   assert.equal(isAirdropQr("RITM0012345"), false);
+});
+
+// ── AirDrop same-account share presence (direct download, no QR) ─────────────
+
+function makeShare(over: Partial<UserShare> = {}): UserShare {
+  return {
+    sessionId: "ssn_1",
+    token: "TOK1",
+    deviceName: "Swift Falcon",
+    deviceAvatar: "🖥️",
+    devicePlatform: "web",
+    hostPeerId: "peer_host",
+    fileName: "report.pdf",
+    fileSize: 1024,
+    mimeType: "application/pdf",
+    createdAt: 1000,
+    expiresAt: 10_000,
+    ...over,
+  };
+}
+
+run("airdrop share filter hides our OWN device's shares", () => {
+  const mine = makeShare({ sessionId: "ssn_mine", hostPeerId: "peer_me" });
+  const theirs = makeShare({ sessionId: "ssn_theirs", hostPeerId: "peer_other" });
+  const out = filterIncomingShares([mine, theirs], "peer_me", 5_000);
+  assert.equal(out.length, 1);
+  assert.equal(out[0].sessionId, "ssn_theirs");
+});
+
+run("airdrop share filter drops expired shares", () => {
+  const live = makeShare({ sessionId: "ssn_live", expiresAt: 10_000 });
+  const dead = makeShare({ sessionId: "ssn_dead", expiresAt: 4_000 });
+  const out = filterIncomingShares([live, dead], "peer_me", 5_000);
+  assert.deepEqual(out.map((s) => s.sessionId), ["ssn_live"]);
+});
+
+run("airdrop share filter keeps all valid shares when selfId is null (guest→login edge)", () => {
+  const a = makeShare({ sessionId: "a", hostPeerId: "p1" });
+  const b = makeShare({ sessionId: "b", hostPeerId: "p2" });
+  const out = filterIncomingShares([a, b], null, 5_000);
+  assert.equal(out.length, 2);
+});
+
+run("airdrop share guard rejects malformed/forged RTDB nodes", () => {
+  assert.equal(isValidShare(null), false);
+  assert.equal(isValidShare({ sessionId: "x" }), false); // missing fields
+  assert.equal(isValidShare({ ...makeShare(), expiresAt: "soon" }), false); // bad type
+  assert.equal(isValidShare(makeShare()), true);
+  // A forged node missing token must not slip through the filter.
+  const forged = { sessionId: "f", hostPeerId: "p", fileName: "x", expiresAt: 9_999 };
+  assert.equal(filterIncomingShares([forged as unknown as UserShare], "me", 1).length, 0);
 });
 
 console.log("\n-------------------");

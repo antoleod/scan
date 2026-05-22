@@ -58,6 +58,14 @@ export const RTDB_PATHS = {
     `airdrop/sessions/${sessionId}/presence/${peerId}`,
   /** Root of a session for one-shot cleanup. */
   sessionRoot: (sessionId: string) => `airdrop/sessions/${sessionId}`,
+  /**
+   * Per-user share presence: shares this account is currently offering, keyed by
+   * sessionId. Lets another device on the SAME account download without a QR.
+   * Carries only join coordinates + file metadata (no bytes). Must be locked to
+   * `auth.uid === $uid` in RTDB security rules.
+   */
+  userShares: (uid: string) => `airdrop/users/${uid}/shares`,
+  userShare: (uid: string, sessionId: string) => `airdrop/users/${uid}/shares/${sessionId}`,
 } as const;
 
 /**

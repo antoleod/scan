@@ -525,3 +525,54 @@ The final experience should feel like:
 - Wormhole
 
 but integrated naturally into Scan with its own identity.
+---
+
+# Same-Account Direct Download (no QR)
+
+When two devices are signed into the **same account**, the receiver can download
+a share without scanning a QR code.
+
+## Flow
+
+1. Device A (signed in) picks a file and starts a session (`createSession`).
+2. Alongside the normal signaling room, A announces the share under
+   `airdrop/users/{uid}/shares/{sessionId}` — **only** the join coordinates
+   (`sessionId` + `token`) and file metadata. **No file bytes.**
+3. Device B (same `uid`) is subscribed to `airdrop/users/{uid}/shares` and shows
+   the share in a **"Your devices"** list with a one-tap **Download** button.
+   (B filters out its own announcements and any expired entries.)
+4. Tapping Download calls `joinUserShare(sessionId, token)` — the *exact* guest
+   pairing + WebRTC transfer pipeline used by QR — and **auto-accepts** the
+   offer (intent already confirmed by the tap). Bytes stream peer-to-peer.
+5. When A cancels / the session expires / teardown runs, A removes its presence
+   node so the share disappears from B.
+
+The QR path is untouched and still works for cross-account / guest sharing.
+
+## Required RTDB security rule
+
+Lock the user-presence subtree to its owner (set in the Firebase console):
+
+```json
+{
+  "rules": {
+    "airdrop": {
+      "users": {
+        "$uid": {
+          ".read":  "auth != null && auth.uid === $uid",
+          ".write": "auth != null && auth.uid === $uid"
+        }
+      }
+    }
+  }
+}
+```
+
+## Key modules
+
+- `presence/userPresence.ts` — publish / clear / subscribe (only Firebase touch).
+- `presence/shareFilter.ts` — pure self/expired/forged filtering (unit-tested).
+- `sessions/sessionService.ts` — publishes on create, clears on host teardown,
+  `joinUserShare()` joins + auto-accepts.
+- `components/MyDevicesSection.tsx` — the "Your devices" UI with inline progress.
+- `hooks/useUserSharePresence.ts` — keeps the store synced, re-subscribes on auth.

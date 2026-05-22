@@ -6,9 +6,11 @@ import * as Haptics from 'expo-haptics';
 import type { Palette } from '../../../theme/theme';
 import { useActiveSessions, useAirdropNow, useSelf } from '../hooks/useAirdrop';
 import { useAirdropLifecycle } from '../hooks/useAirdropLifecycle';
+import { useUserSharePresence } from '../hooks/useUserSharePresence';
 import { dismissSession } from '../sessions/sessionService';
 import { encodeQrPayload, readJoinFromCurrentUrl, clearJoinFromUrl } from '../utils/qr';
 import { SessionCard } from '../components/SessionCard';
+import { MyDevicesSection } from '../components/MyDevicesSection';
 import { AirdropLogPanel } from '../components/AirdropLogPanel';
 import { SendScreen } from './SendScreen';
 import { ReceiveScreen } from './ReceiveScreen';
@@ -24,6 +26,9 @@ type Mode = 'home' | 'send' | 'receive' | 'logs';
  */
 export function AirDropScreen({ palette }: { palette: Palette }) {
   useAirdropLifecycle();
+  // Keep the "Your devices" list in sync with shares from this account's other
+  // signed-in devices (no-op for guests). Powers direct download without a QR.
+  useUserSharePresence();
 
   // If the app was opened from a scanned deep-link QR (?airdrop=session:token),
   // jump straight to Receive and hand the join code to it for auto-pairing.
@@ -90,6 +95,9 @@ export function AirDropScreen({ palette }: { palette: Palette }) {
             {self ? 'Visible to nearby devices' : 'Discovering your identity…'}
           </Text>
         </View>
+
+        {/* Your other devices' shares — one-tap download, no QR (signed-in only) */}
+        <MyDevicesSection palette={palette} />
 
         {/* Live sessions (only when present) */}
         {activeSessions.length > 0 ? (

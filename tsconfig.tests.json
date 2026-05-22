@@ -26,6 +26,7 @@
     "src/types.ts",
     "src/features/airdrop/utils/qr.ts",
     "src/features/airdrop/constants/index.ts",
-    "src/features/airdrop/types/index.ts"
+    "src/features/airdrop/types/index.ts",
+    "src/features/airdrop/presence/shareFilter.ts"
   ]
 }

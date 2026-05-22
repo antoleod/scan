@@ -13,6 +13,7 @@ export { AirDropScreen } from './screens/AirDropScreen';
 export {
   createSession,
   joinSession,
+  joinUserShare,
   cancelSession,
   dismissSession,
   acceptIncomingFile,
@@ -32,6 +33,7 @@ export {
   useSession,
   useTransfer,
   useNearbyDevices,
+  useUserShares,
   useSelf,
 } from './hooks/useAirdrop';
 
@@ -50,6 +52,7 @@ export type {
   SessionStatus,
   PeerInfo,
   NearbyDevice,
+  UserShare,
   SelectedFile,
   FileMeta,
   TransferProgress,

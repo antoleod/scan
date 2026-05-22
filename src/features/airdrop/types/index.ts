@@ -122,6 +122,37 @@ export interface NearbyDevice extends PeerInfo {
   proximity?: number;
 }
 
+/**
+ * A share announced by another device signed into the SAME account. Lets a
+ * second device of yours download directly — no QR scan needed. Published to
+ * `users/{uid}/airdropPresence/{sessionId}` in RTDB; carries only the join
+ * coordinates (sessionId + token) and file metadata — NEVER any file bytes.
+ */
+export interface UserShare {
+  /** Session to join (same value the QR would carry). */
+  sessionId: string;
+  /** Pairing token (authorizes the join over signaling). */
+  token: string;
+  /** Friendly name of the device that is sharing (host's `self.name`). */
+  deviceName: string;
+  /** Avatar key of the sharing device, for the card UI. */
+  deviceAvatar: string;
+  /** Platform of the sharing device. */
+  devicePlatform: PeerPlatform;
+  /** Peer id of the host device — used to hide our OWN shares from the list. */
+  hostPeerId: string;
+  /** Offered file's display name. */
+  fileName: string;
+  /** Offered file size in bytes. */
+  fileSize: number;
+  /** Offered file MIME type. */
+  mimeType: string;
+  /** When the share was announced (epoch ms). */
+  createdAt: number;
+  /** When the underlying session expires (epoch ms) — stale entries are hidden. */
+  expiresAt: number;
+}
+
 // ── Signaling ───────────────────────────────────────────────────────────────
 
 /**
