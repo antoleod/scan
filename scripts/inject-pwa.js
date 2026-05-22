@@ -166,36 +166,36 @@ injectIfMissing(`<meta name="mobile-web-app-capable" content="yes">`,           
 //    - script-src 'wasm-unsafe-eval' required for tesseract.js (WebAssembly)
 //    - style-src 'unsafe-inline' for Expo-generated dynamic styles
 //    - blob: for camera/canvas blob URLs and Reanimated worklets
-//    - wss: for Firestore real-time listeners (WebSocket Secure)
-//    - frame-ancestors 'none' prevents clickjacking via iframe
+//    - Firebase Auth may load Google-hosted helper scripts
+//    - wss: for Firestore/Realtime Database listeners (WebSocket Secure)
+//    Note: frame-ancestors is ignored in <meta> CSP. It must be delivered as
+//    an HTTP header by the hosting layer, so it is intentionally omitted here.
 replaceOrInject('http-equiv="Content-Security-Policy"',
-  `<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https: blob:; font-src 'self' data:; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://*.firebase.google.com wss://*.firebaseio.com; worker-src 'self' blob:; frame-ancestors 'none';">`
+  `<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://www.gstatic.com https://apis.google.com https://www.google.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https: blob:; font-src 'self' data:; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://*.firebasedatabase.app https://*.firebase.google.com wss://*.firebaseio.com wss://*.firebasedatabase.app; worker-src 'self' blob:;">`
 );
 
 // ── 9. Service worker registration ───────────────────────────────────────────
 //    Uses 'load' event so it doesn't block first paint.
 //    updateViaCache: 'none' forces the browser to always fetch a fresh SW,
 //    ensuring new builds are picked up immediately.
-const swSnippet = `<script>
-  if ('serviceWorker' in navigator) {
-    window.addEventListener('load', function () {
-      navigator.serviceWorker
-        .register('${basePath}/sw.js', { scope: '${basePath}/', updateViaCache: 'none' })
-        .then(function (reg) {
-          console.log('[SW] registered scope:', reg.scope);
-          reg.update(); // check for updates on every page load
-        })
-        .catch(function (err) { console.warn('[SW] registration failed:', err); });
-    });
-  }
-</script>`;
-
-// Replace any existing SW registration block
-if (html.includes('serviceWorker.register')) {
-  html = html.replace(/<script>\s*if\s*\('serviceWorker'[\s\S]*?<\/script>/, swSnippet);
-} else {
-  html = html.replace('</body>', `${swSnippet}\n</body>`);
+const swRegisterPath = path.join(distDir, 'sw-register.js');
+const swRegisterSource = `if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function () {
+    navigator.serviceWorker
+      .register('${basePath}/sw.js', { scope: '${basePath}/', updateViaCache: 'none' })
+      .then(function (reg) {
+        console.log('[SW] registered scope:', reg.scope);
+        reg.update();
+      })
+      .catch(function (err) { console.warn('[SW] registration failed:', err); });
+  });
 }
+`;
+fs.writeFileSync(swRegisterPath, swRegisterSource, 'utf-8');
+
+// Remove older inline registration blocks and inject the external script.
+html = html.replace(/<script>\s*if\s*\('serviceWorker'[\s\S]*?<\/script>/g, '');
+replaceOrInject('src="' + basePath + '/sw-register.js"', `<script defer src="${basePath}/sw-register.js"></script>`);
 
 fs.writeFileSync(htmlPath, html, 'utf-8');
 console.log(`[inject-pwa] Patched ${htmlPath} (base: "${basePath || '/'}")`);
