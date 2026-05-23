@@ -10,20 +10,25 @@ import { diag } from '../../../core/diagnostics';
 import type { FileMeta } from '../types';
 
 export async function deliverReceivedFile(bytes: Uint8Array, meta: FileMeta): Promise<void> {
-  if (Platform.OS === 'web') {
-    deliverWeb(bytes, meta);
-    return;
-  }
-  await deliverNative(bytes, meta);
+  return deliverReceivedFileParts([bytes], meta);
 }
 
-function deliverWeb(bytes: Uint8Array, meta: FileMeta): void {
+export async function deliverReceivedFileParts(parts: Uint8Array[], meta: FileMeta): Promise<void> {
+  if (Platform.OS === 'web') {
+    deliverWeb(parts, meta);
+    return;
+  }
+  await deliverNative(concatParts(parts), meta);
+}
+
+function deliverWeb(parts: Uint8Array[], meta: FileMeta): void {
   if (typeof document === 'undefined') return;
-  // Copy into a fresh ArrayBuffer so the BlobPart type is concretely ArrayBuffer
-  // (a Uint8Array may be backed by SharedArrayBuffer, which Blob rejects in TS).
-  const buf = new ArrayBuffer(bytes.byteLength);
-  new Uint8Array(buf).set(bytes);
-  const blob = new Blob([buf], { type: meta.mimeType || 'application/octet-stream' });
+  const blobParts = parts.map((part) => {
+    const buf = new ArrayBuffer(part.byteLength);
+    new Uint8Array(buf).set(part);
+    return buf;
+  });
+  const blob = new Blob(blobParts, { type: meta.mimeType || 'application/octet-stream' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -33,7 +38,7 @@ function deliverWeb(bytes: Uint8Array, meta: FileMeta): void {
   a.remove();
   // Revoke after the click has a chance to start the download.
   setTimeout(() => URL.revokeObjectURL(url), 4000);
-  void diag.info('airdrop.delivery.web_download', { name: meta.name, size: bytes.length });
+  void diag.info('airdrop.delivery.web_download', { name: meta.name, size: blob.size, parts: parts.length });
 }
 
 async function deliverNative(bytes: Uint8Array, meta: FileMeta): Promise<void> {
@@ -51,6 +56,17 @@ async function deliverNative(bytes: Uint8Array, meta: FileMeta): Promise<void> {
   if (await Sharing.isAvailableAsync()) {
     await Sharing.shareAsync(path, { mimeType: meta.mimeType || undefined });
   }
+}
+
+function concatParts(parts: Uint8Array[]): Uint8Array {
+  const total = parts.reduce((n, p) => n + p.byteLength, 0);
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const part of parts) {
+    bytes.set(part, offset);
+    offset += part.byteLength;
+  }
+  return bytes;
 }
 
 function bytesToBase64(bytes: Uint8Array): string {

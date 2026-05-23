@@ -58,6 +58,8 @@ function pickFileWeb(): Promise<SelectedFile | null> {
         name: file.name || 'file',
         size: file.size,
         mimeType: file.type || 'application/octet-stream',
+        getChunk: async (offset, length) =>
+          new Uint8Array(await file.slice(offset, offset + length).arrayBuffer()),
         getBytes: async () => new Uint8Array(await file.arrayBuffer()),
       });
     };
@@ -111,16 +113,22 @@ async function pickFileNative(): Promise<SelectedFile | null> {
     size: asset.size ?? 0,
     mimeType: asset.mimeType || 'application/octet-stream',
     uri: asset.uri,
+    getChunk: (offset, length) => readNativeFileBytes(asset.uri, offset, length),
     getBytes: async () => readNativeFileBytes(asset.uri),
   };
 }
 
-async function readNativeFileBytes(uri: string): Promise<Uint8Array> {
+async function readNativeFileBytes(uri: string, offset?: number, length?: number): Promise<Uint8Array> {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   const FileSystem = require('expo-file-system/legacy') as typeof import('expo-file-system/legacy');
-  const base64 = await FileSystem.readAsStringAsync(uri, {
+  const options: import('expo-file-system/legacy').ReadingOptions = {
     encoding: FileSystem.EncodingType.Base64,
-  });
+  };
+  if (typeof offset === 'number' && typeof length === 'number') {
+    options.position = offset;
+    options.length = length;
+  }
+  const base64 = await FileSystem.readAsStringAsync(uri, options);
   return base64ToBytes(base64);
 }
 

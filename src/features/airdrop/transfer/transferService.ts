@@ -15,7 +15,7 @@
 import { putTransfer, patchTransfer } from '../store/airdropStore';
 import { TRANSFER_CHUNK_SIZE } from '../constants';
 import { diag } from '../../../core/diagnostics';
-import { deliverReceivedFile } from './fileDelivery';
+import { deliverReceivedFileParts } from './fileDelivery';
 import type {
   FileMeta,
   PeerConnection,
@@ -25,8 +25,8 @@ import type {
 } from '../types';
 
 /** Pause sending when the channel buffer grows beyond this (backpressure). */
-const BUFFER_HIGH_WATER = 4 * 1024 * 1024; // 4 MiB
-const BUFFER_LOW_WATER = 1 * 1024 * 1024; // resume below 1 MiB
+const BUFFER_HIGH_WATER = 1024 * 1024; // 1 MiB
+const BUFFER_LOW_WATER = 256 * 1024; // resume below 256 KiB
 
 function parseControl(data: string): TransferControlFrame | null {
   try {
@@ -99,25 +99,29 @@ export function attachSender(
     try {
       patchTransfer(sessionId, { status: 'active' });
       pc.sendData(JSON.stringify({ t: 'start' } satisfies TransferControlFrame));
-      const bytes = await file.getBytes();
       const started = Date.now();
       let sent = 0;
+      let fallbackBytes: Uint8Array | null = null;
 
-      for (let i = 0; i < bytes.length; i += TRANSFER_CHUNK_SIZE) {
+      for (let offset = 0; offset < file.size; offset += TRANSFER_CHUNK_SIZE) {
         if (cancelled) return;
         // Backpressure: wait for the buffer to drain before queueing more.
         while (pc.bufferedAmount() > BUFFER_HIGH_WATER) {
           await waitFor(() => cancelled || pc.bufferedAmount() < BUFFER_LOW_WATER, 25);
           if (cancelled) return;
         }
-        // Copy the slice into its own ArrayBuffer (subarray shares the backing buffer).
-        const slice = bytes.slice(i, Math.min(i + TRANSFER_CHUNK_SIZE, bytes.length));
-        pc.sendData(slice.buffer.slice(slice.byteOffset, slice.byteOffset + slice.byteLength));
+        const requested = Math.min(TRANSFER_CHUNK_SIZE, file.size - offset);
+        if (!file.getChunk && !fallbackBytes) fallbackBytes = await file.getBytes();
+        const slice = file.getChunk
+          ? await file.getChunk(offset, requested)
+          : fallbackBytes!.slice(offset, offset + requested);
+        if (!slice.byteLength) throw new Error('File read returned an empty chunk.');
+        pc.sendData(toArrayBuffer(slice));
         sent += slice.byteLength;
         const elapsed = (Date.now() - started) / 1000;
         patchTransfer(sessionId, {
           bytesTransferred: sent,
-          progress: bytes.length ? sent / bytes.length : 1,
+          progress: file.size ? Math.min(sent / file.size, 1) : 1,
           rate: elapsed > 0 ? sent / elapsed : undefined,
         });
       }
@@ -134,6 +138,12 @@ export function attachSender(
   return () => {
     cancelled = true;
   };
+}
+
+function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  const out = new ArrayBuffer(bytes.byteLength);
+  new Uint8Array(out).set(bytes);
+  return out;
 }
 
 // ── Receiver ────────────────────────────────────────────────────────────────
@@ -211,14 +221,11 @@ export function attachReceiver(
   async function finish() {
     if (!meta) return;
     try {
-      const total = parts.reduce((n, p) => n + p.byteLength, 0);
-      const bytes = new Uint8Array(total);
-      let offset = 0;
-      for (const p of parts) {
-        bytes.set(p, offset);
-        offset += p.byteLength;
+      const total = received;
+      if (meta.size && total !== meta.size) {
+        throw new Error(`Transfer incomplete: received ${total} of ${meta.size} bytes.`);
       }
-      await deliverReceivedFile(bytes, meta);
+      await deliverReceivedFileParts(parts, meta);
       patchTransfer(sessionId, { status: 'done', progress: 1, bytesTransferred: total });
       void diag.info('airdrop.transfer.recv_complete', { sessionId, bytes: total });
       handlers.onComplete?.(meta);

@@ -71,6 +71,7 @@ export interface SelectedFile {
   /** Opaque platform handle (web File, or native uri) — used by getBytes(). */
   uri?: string;
   /** Reads the full file as bytes. Web: File→ArrayBuffer; native: FileSystem. */
+  getChunk?: (offset: number, length: number) => Promise<Uint8Array>;
   getBytes: () => Promise<Uint8Array>;
 }
 

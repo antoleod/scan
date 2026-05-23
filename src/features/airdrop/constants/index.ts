@@ -80,5 +80,5 @@ export const DEFAULT_ICE_SERVERS: { urls: string }[] = [
 /** WebRTC datachannel label used for the transfer stream. */
 export const TRANSFER_CHANNEL_LABEL = 'scan-transfer';
 
-/** Chunk size for future binary streaming (64 KiB is a safe DataChannel default). */
-export const TRANSFER_CHUNK_SIZE = 64 * 1024;
+/** DataChannel chunk size. 32 KiB is conservative across Chrome/Safari/Firefox. */
+export const TRANSFER_CHUNK_SIZE = 32 * 1024;
