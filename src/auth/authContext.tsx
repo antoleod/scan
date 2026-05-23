@@ -10,6 +10,8 @@ import { loadSettings } from '../core/settings';
 import { getBiometricStatus, authenticateWithBiometrics, type BiometricStatus } from '../core/biometrics';
 import { clearQueue } from '../core/offlineQueue';
 import { clearNotesChecksum } from '../core/syncChecksum';
+import { clearDeletedHistoryKeys } from '../core/historyDeletions';
+import { clearDeletedNoteKeys } from '../core/noteDeletions';
 import { clearAppLocalStorage, clearCacheStorage, purgeAllRelatedIndexedDB } from '../core/dataSync';
 
 import { getFirebaseGuardState, login, logout, register, sendPasswordReset, loginWithGoogle as loginWithGoogleService, sendMagicLink as sendMagicLinkService, verifyMagicLink as verifyMagicLinkService } from './authService';
@@ -272,12 +274,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         '@MyKit_clipboard_v2',
         '@barra_templates',
         '@barra_pending_captures',
-        '@barra_deleted_history',
-        '@barra_deleted_notes',
         '@barra_last_identifier_v1',
         '@barra_diag_logs',
       ]);
     } catch { /* best-effort */ }
+
+    // Soft-delete tombstone sets use *_keys_v1 keys AND an in-memory cache
+    // (noteDeletions). multiRemove on the wrong key names left tombstones on
+    // disk + cache warm, so the next user on a shared device inherited the
+    // previous user's deletions and saw their valid notes filtered out.
+    // These clear both storage and the in-memory cache.
+    try { await clearDeletedHistoryKeys(); } catch { /* best-effort */ }
+    try { await clearDeletedNoteKeys(); } catch { /* best-effort */ }
 
     if (Platform.OS === 'web') {
       try { clearAppLocalStorage(); } catch { /* best-effort */ }
