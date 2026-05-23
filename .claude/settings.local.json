@@ -34,7 +34,13 @@
       "PowerShell(npm run build:web 2>&1)",
       "Bash(node -e \"JSON.parse\\(require\\('fs'\\).readFileSync\\('database.rules.json','utf8'\\)\\); console.log\\('rules JSON valid'\\)\")",
       "Bash(node -e ' *)",
-      "Bash(rm -f /tmp/dbg.ts /tmp/dbgshop.js 2>&1; git status --short 2>&1 | head -30)"
+      "Bash(rm -f /tmp/dbg.ts /tmp/dbgshop.js 2>&1; git status --short 2>&1 | head -30)",
+      "Bash(node *)",
+      "Bash(firebase login:list)",
+      "Bash(firebase database:get \"/.settings/rules\" --instance lectorqr-45291-default-rtdb --project lectorqr-45291)",
+      "Bash(gcloud auth *)",
+      "Bash(curl -s https://lectorqr-45291-default-rtdb.europe-west1.firebasedatabase.app/.settings/rules.json -H 'Authorization: Bearer __TRACKED_VAR__')",
+      "Bash(grep -iE \"\\\\.log$|debug|\\\\.tmp|\\\\.bak|Thumbs.db|\\\\.DS_Store|npm-debug|firebase-debug\")"
     ],
     "additionalDirectories": [
       "c:\\Users\\X1\\Downloads\\scan\\scan\\.claude",
