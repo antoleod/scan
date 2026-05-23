@@ -33,9 +33,17 @@ export function useUserSharePresence(): void {
       // Initial subscription (covers the already-signed-in case).
       resubscribe();
       // React to login/logout/device-switch by re-subscribing under the new uid.
-      unsubAuth = (await onFirebaseAuthState(() => {
+      const unsub = (await onFirebaseAuthState(() => {
         if (mounted) resubscribe();
       })) as () => void;
+      // If we unmounted while awaiting (cold start + fast navigate away), the
+      // cleanup already ran with unsubAuth still null — so detach now to avoid
+      // a dangling auth listener that would re-subscribe after unmount.
+      if (!mounted) {
+        unsub?.();
+        return;
+      }
+      unsubAuth = unsub;
     })();
 
     return () => {

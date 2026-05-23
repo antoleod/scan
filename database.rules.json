@@ -1,0 +1,43 @@
+{
+  "rules": {
+    "airdrop": {
+      "sessions": {
+        "$sessionId": {
+          ".read": true,
+          ".write": true,
+          ".validate": "$sessionId.length <= 128",
+          "signals": {
+            "$pushId": {
+              ".validate": "newData.hasChildren(['type', 'sessionId', 'from'])"
+            }
+          }
+        }
+      },
+      "users": {
+        "$uid": {
+          ".read": "auth != null && auth.uid === $uid",
+          ".write": "auth != null && auth.uid === $uid",
+          "shares": {
+            "$sessionId": {
+              ".validate": "newData.hasChildren(['sessionId', 'token', 'hostPeerId', 'fileName', 'expiresAt'])"
+            }
+          },
+          "$other": {
+            ".validate": false
+          }
+        }
+      }
+    },
+    "users": {
+      "$uid": {
+        "pendingImages": {
+          ".read": "auth != null && auth.uid === $uid",
+          ".write": "auth != null && auth.uid === $uid",
+          "$imageId": {
+            ".validate": "newData.hasChildren(['data', 'uploadedAt'])"
+          }
+        }
+      }
+    }
+  }
+}

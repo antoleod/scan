@@ -547,20 +547,73 @@ a share without scanning a QR code.
 5. When A cancels / the session expires / teardown runs, A removes its presence
    node so the share disappears from B.
 
-The QR path is untouched and still works for cross-account / guest sharing.
+The QR path is untouched and works for ANYONE with the code — signed in or an
+anonymous guest (signaling is public; see "Two access models" below).
 
-## Required RTDB security rule
+## Two access models (important)
 
-Lock the user-presence subtree to its owner (set in the Firebase console):
+- **QR / code (`/airdrop/sessions/*`)** — **public, no auth required**, so ANYONE
+  with the code can download (signed in OR anonymous guest), ShareDrop-style.
+  The signaling room is publicly readable/writable, so the **`token` is the real
+  authorization**, NOT the sessionId: a joining guest must present the session
+  token on its `presence` frame, and the host rejects any presence whose token
+  doesn't match (`handleHostSignal` → `isPresenceAuthorized`). This stops an
+  eavesdropper who only learns the sessionId from hijacking/MITM-ing the WebRTC
+  negotiation. sessionIds carry ~80 bits of randomness (16-char suffix) so they
+  are not enumerable. Sessions auto-expire (5m–24h). File bytes never touch
+  Firebase.
+- **"Your devices" (`/airdrop/users/$uid/shares`)** — locked to the owner uid.
+  Only the same account can list/download its own shares without a QR. A guest
+  simply uses the QR path instead. This subtree is inherently same-account
+  because an anonymous device has no uid to key the list by.
+
+## Required RTDB security rules
+
+Deployed from the repo: `database.rules.json` (registered in `firebase.json`).
+Deploy with `firebase deploy --only database`.
+
+See `database.rules.json` in the repo root for the authoritative version. It
+also locks `users/$uid/pendingImages` (Notes image relay) to the owner and adds
+a `$other: { ".validate": false }` catch-all so no stray sub-paths are writable
+under `airdrop/users/$uid`.
 
 ```json
 {
   "rules": {
     "airdrop": {
+      "sessions": {
+        "$sessionId": {
+          ".read": true,
+          ".write": true,
+          ".validate": "$sessionId.length <= 128",
+          "signals": {
+            "$pushId": {
+              ".validate": "newData.hasChildren(['type', 'sessionId', 'from'])"
+            }
+          }
+        }
+      },
       "users": {
         "$uid": {
           ".read":  "auth != null && auth.uid === $uid",
-          ".write": "auth != null && auth.uid === $uid"
+          ".write": "auth != null && auth.uid === $uid",
+          "shares": {
+            "$sessionId": {
+              ".validate": "newData.hasChildren(['sessionId', 'token', 'hostPeerId', 'fileName', 'expiresAt'])"
+            }
+          },
+          "$other": { ".validate": false }
+        }
+      }
+    },
+    "users": {
+      "$uid": {
+        "pendingImages": {
+          ".read":  "auth != null && auth.uid === $uid",
+          ".write": "auth != null && auth.uid === $uid",
+          "$imageId": {
+            ".validate": "newData.hasChildren(['data', 'uploadedAt'])"
+          }
         }
       }
     }

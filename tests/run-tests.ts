@@ -18,6 +18,7 @@ import { computeNotesChecksum } from "../src/core/syncChecksum";
 import { getAuthRedirectPath, LOGIN_ROUTE, MAIN_APP_ROUTE } from "../src/core/routes";
 import { encodeQrPayload, decodeQrPayload, isAirdropQr } from "../src/features/airdrop/utils/qr";
 import { filterIncomingShares, isValidShare } from "../src/features/airdrop/presence/shareFilter";
+import { generateSessionId, generateToken, isPresenceAuthorized } from "../src/features/airdrop/utils/ids";
 import type { UserShare } from "../src/features/airdrop/types";
 
 let passed = 0;
@@ -400,6 +401,40 @@ run("smart type detection returns 'none' for generic text", () => {
   const genericText = "This is just a random note with no special meaning";
   const smartType = detectSmartTypeFromContent(genericText);
   assert.equal(smartType, "none");
+});
+
+// ── Regression: reminder/task were unreachable (0.65 gate); space-separated
+//    shopping lists missed because the auto-path used a different engine. ──
+
+run("smart type detection identifies reminders (ES/EN/FR)", () => {
+  assert.equal(detectSmartTypeFromContent("recordar llamar al banco mañana"), "reminder");
+  assert.equal(detectSmartTypeFromContent("remind me to call tomorrow"), "reminder");
+  assert.equal(detectSmartTypeFromContent("rappel: appeler demain"), "reminder");
+});
+
+run("smart type detection identifies tasks with explicit lead marker", () => {
+  assert.equal(detectSmartTypeFromContent("task: finish report"), "task");
+  assert.equal(detectSmartTypeFromContent("todo: review PR"), "task");
+  assert.equal(detectSmartTypeFromContent("tarea: terminar informe"), "task");
+});
+
+run("smart type detection handles space-separated shopping lists", () => {
+  // Was 'none' before unifying on the shoppingList.ts engine (splitLines did
+  // not tokenize on spaces / connectors).
+  assert.equal(detectSmartTypeFromContent("milk bread and cheese"), "shopping");
+  assert.equal(detectSmartTypeFromContent("arroz leche huevos azúcar"), "shopping");
+});
+
+run("smart type detection does not misclassify ordinary notes as task/reminder", () => {
+  // Common verbs were intentionally dropped from TASK_KEYWORDS to avoid this.
+  assert.equal(detectSmartTypeFromContent("necesito hacer ejercicio para estar sano"), "none");
+  assert.equal(detectSmartTypeFromContent("I like to do yoga in the morning"), "none");
+});
+
+run("smart type detection keeps health notes out of shopping", () => {
+  // Health-keyword blocker now lives in the auto-classification path.
+  const r = detectSmartTypeFromContent("comprar ibuprofeno y paracetamol en la farmacia");
+  assert.ok(r === "medication" || r === "none", `expected medication|none, got ${r}`);
 });
 
 // ─── Error handling tests (Phase 1) ────────────────────────────────────────────
@@ -789,6 +824,36 @@ run("airdrop share guard rejects malformed/forged RTDB nodes", () => {
   // A forged node missing token must not slip through the filter.
   const forged = { sessionId: "f", hostPeerId: "p", fileName: "x", expiresAt: 9_999 };
   assert.equal(filterIncomingShares([forged as unknown as UserShare], "me", 1).length, 0);
+});
+
+run("airdrop presence token gate authorizes only on exact match", () => {
+  assert.equal(isPresenceAuthorized("TOK123", "TOK123"), true);
+  assert.equal(isPresenceAuthorized("TOK123", "tok123"), false); // case-sensitive
+  assert.equal(isPresenceAuthorized("TOK123", "WRONG"), false);
+  // Empty / missing tokens must never authorize (public sessionId is not enough).
+  assert.equal(isPresenceAuthorized("TOK123", ""), false);
+  assert.equal(isPresenceAuthorized("TOK123", undefined), false);
+  assert.equal(isPresenceAuthorized(undefined, "TOK123"), false);
+  assert.equal(isPresenceAuthorized("", ""), false);
+});
+
+run("airdrop sessionId has high entropy and a stable prefix", () => {
+  const id = generateSessionId();
+  assert.ok(id.startsWith("ssn_"), id);
+  // prefix _ time _ rand(16) — the random suffix must be 16 chars (~80 bits).
+  const rand = id.split("_").pop() ?? "";
+  assert.equal(rand.length, 16, `expected 16-char suffix, got "${rand}"`);
+  // 200 ids in the same ms tick must still be unique (random suffix, not time).
+  const ids = new Set<string>();
+  for (let i = 0; i < 200; i += 1) ids.add(generateSessionId());
+  assert.equal(ids.size, 200);
+});
+
+run("airdrop token uses unambiguous alphabet and requested length", () => {
+  const t = generateToken(10);
+  assert.equal(t.length, 10);
+  // No ambiguous 0/O/1/I in the alphabet.
+  assert.equal(/[01OI]/.test(t), false, `token had ambiguous chars: ${t}`);
 });
 
 console.log("\n-------------------");

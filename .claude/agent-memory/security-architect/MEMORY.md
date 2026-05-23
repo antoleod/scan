@@ -1,2 +1,4 @@
 - [Audit baseline 2026-05-12](audit_baseline_20260512.md) — initial P0/P1/P2/P3 findings inventory from comprehensive audit
 - [Stack security posture](stack_posture.md) — Firebase + Expo RN + GitHub Pages; what's covered, what's gaps
+- [AirDrop signaling review](airdrop_signaling_review.md) — CRITICAL: pairing token never enforced; public RTDB sessions; low-entropy sessionId
+- [RTDB rules untracked](rtdb_rules_untracked.md) — database.rules.json wired in firebase.json but NOT in git

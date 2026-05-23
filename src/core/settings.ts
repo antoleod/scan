@@ -36,7 +36,7 @@ export const defaultSettings: AppSettings = {
     regex: {
       ip: String.raw`\b(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)\b`,
       hostname: String.raw`\b(?:IPOLBRUP[A-Z0-9-]*|P\d{2}[A-Z]{2}[A-Z0-9-]*)\b`,
-      pi: String.raw`\b02PI[A-Z0-9]*\b`,
+      pi: String.raw`\b(?:02PI[A-Z0-9]*|MUSTBRUN[A-Z0-9]*)\b`,
     },
   },
   notesFeatures: {

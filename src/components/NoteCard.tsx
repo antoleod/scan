@@ -212,7 +212,10 @@ function NoteCardBase({
         const { resolveRtdbImage } = await import('../core/imageSync');
         const resolved: string[] = [];
         for (const p of paths) {
-          const img = await resolveRtdbImage(p, true);
+          // Do NOT delete after download: the RTDB relay is shared across all of
+          // the user's devices. Deleting on first read loses the image for every
+          // other device. The 30-day `expiresAt` TTL handles cleanup instead.
+          const img = await resolveRtdbImage(p, false);
           if (img) resolved.push(img);
         }
         if (!cancelled && resolved.length) setRtdbImages(resolved);
