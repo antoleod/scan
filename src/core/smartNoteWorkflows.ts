@@ -88,7 +88,7 @@ function detectLanguage(text: string): 'es' | 'fr' | 'en' {
 
   // Spanish-only characters / words
   if (/[ñ¿¡]/.test(lower)) es += 2;
-  if (/\b(tomé|tome|pastilla|medicamento|medicación|recordar|recuérdame|recordatorio|tarea|tengo que|necesito|debo|mañana|jarabe|fiebre|garganta|dolor)\b/.test(lower)) es += 1;
+  if (/\b(tomé|tome|pastilla|medicamento|medicación|recordar|recuérdame|recordatorio|olvidar|olvides|tarea|pendiente|tengo que|necesito|debo|mañana|jarabe|fiebre|garganta|dolor)\b/.test(lower)) es += 1;
 
   // French-only characters / words
   if (/[çœ]/.test(lower)) fr += 2;
@@ -236,14 +236,20 @@ function detectReminderWorkflow(text: string): SmartWorkflowDetection {
   let confidence = 0;
 
   const keywordMatches = countKeywordMatches(value, keywords);
-  // 0.5 per keyword: a single explicit reminder keyword (0.5) plus a future-time
-  // reference (+0.2) clears the 0.65 gate, so realistic one-line reminders like
-  // "remind me to call tomorrow" classify instead of falling through to 'none'.
   confidence += Math.min(keywordMatches * 0.5, 1);
 
   // Check for future/time references
   if (/(?:mañana|tomorrow|demain|next|próximo|la próxima)/i.test(value)) {
     confidence += 0.2;
+  }
+
+  // Reminder keywords (recordar / remind / rappel / no olvidar …) are distinctive,
+  // explicit intent markers — unlike the ambiguous task verbs. A single one should
+  // classify on its own, so imperative reminders WITHOUT a future word ("recordar
+  // comprar pan", "remind me to buy bread") don't fall through to 'none'. Floor at
+  // the gate; future-word / multi-keyword still raise confidence above it.
+  if (keywordMatches >= 1) {
+    confidence = Math.max(confidence, 0.65);
   }
 
   return {

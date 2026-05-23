@@ -309,7 +309,14 @@ function NoteCardBase({
     () => noteText.trim() || `Image attachment (${note.attachments?.length ?? 0})`,
     [note.attachments?.length, noteText],
   );
-  const firstAttachment = mergedAttachments?.[0] ?? note.attachments?.[0];
+  // Image notes (kind='image') store the image in imageBase64, not attachments —
+  // fall back to a reconstructed data: URI so the thumbnail actually shows.
+  const firstAttachment =
+    mergedAttachments?.[0] ??
+    note.attachments?.[0] ??
+    (note.imageBase64
+      ? `data:${note.imageMimeType || 'image/png'};base64,${note.imageBase64}`
+      : undefined);
   const updatedAt = useMemo(() => {
     const d = new Date(note.updatedAt);
     return `${d.toLocaleDateString()} · ${d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;

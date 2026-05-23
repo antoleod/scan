@@ -548,13 +548,37 @@ export async function removeNote(id: string): Promise<NoteItem[]> {
 export async function updateNoteText(id: string, text: string): Promise<NoteItem[]> {
   const nextText = safeText(text).trim();
   if (!nextText) return loadNotes();
+
+  // Re-detect smart-type from the NEW text (pure/CPU-only, safe before the lock).
+  // Editing a note can change its kind (e.g. shopping → medication, or smart →
+  // plain). Without this the stale smartType makes NoteCard render the wrong
+  // card. `undefined` clears it so the entity/ServiceNow/plain branches apply.
+  let redetectedSmartType: SmartWorkflowType | undefined;
+  try {
+    const detected = detectSmartTypeFromContent(nextText);
+    redetectedSmartType = detected === 'none' ? undefined : detected;
+  } catch {
+    // Detection failure → leave smartType cleared rather than stale.
+    redetectedSmartType = undefined;
+  }
+
   // N-1: lock covers load/save; Firebase calls are outside.
   let updated: NoteItem | undefined;
   let next: NoteItem[] = [];
   const lockResult = await withNotesSaveLock(async () => {
     const current = await loadNotes();
     const mapped = current.map((item) =>
-      item.id === id ? { ...item, text: nextText, updatedAt: Date.now(), syncStatus: 'pending' as const } : item,
+      // Snapshot the pre-edit state as a version (rollback history), update the
+      // text, and refresh smartType so the rendered card matches the new content.
+      item.id === id
+        ? {
+            ...pushVersion(item),
+            text: nextText,
+            smartType: redetectedSmartType,
+            updatedAt: Date.now(),
+            syncStatus: 'pending' as const,
+          }
+        : item,
     );
     const updatedItem = mapped.find((item) => item.id === id);
     if (updatedItem && hasDuplicateNote(current, updatedItem, id)) {

@@ -19,3 +19,6 @@
 [0523/003106.051:ERROR:base\i18n\icu_util.cc:223] Invalid file descriptor to ICU data received.
 [0523/003106.978:ERROR:base\i18n\icu_util.cc:223] Invalid file descriptor to ICU data received.
 [0523/003108.046:ERROR:base\i18n\icu_util.cc:223] Invalid file descriptor to ICU data received.
+[0523/222900.234:ERROR:base\i18n\icu_util.cc:223] Invalid file descriptor to ICU data received.
+[0523/222900.646:ERROR:base\i18n\icu_util.cc:223] Invalid file descriptor to ICU data received.
+[0523/222901.562:ERROR:base\i18n\icu_util.cc:223] Invalid file descriptor to ICU data received.

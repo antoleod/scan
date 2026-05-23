@@ -412,6 +412,15 @@ run("smart type detection identifies reminders (ES/EN/FR)", () => {
   assert.equal(detectSmartTypeFromContent("rappel: appeler demain"), "reminder");
 });
 
+run("smart type detection identifies reminders WITHOUT a future word", () => {
+  // An explicit reminder keyword alone must classify (was 'none' before the
+  // single-keyword floor — it scored 0.5, below the 0.65 gate).
+  assert.equal(detectSmartTypeFromContent("recordar comprar pan"), "reminder");
+  assert.equal(detectSmartTypeFromContent("remind me to buy bread"), "reminder");
+  // "olvidar" now routes the language detector to Spanish so "no olvidar" matches.
+  assert.equal(detectSmartTypeFromContent("no olvidar pagar la factura"), "reminder");
+});
+
 run("smart type detection identifies tasks with explicit lead marker", () => {
   assert.equal(detectSmartTypeFromContent("task: finish report"), "task");
   assert.equal(detectSmartTypeFromContent("todo: review PR"), "task");
