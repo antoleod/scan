@@ -78,11 +78,16 @@ export function attachSender(
   // onChannelOpen fires immediately (next tick) if the channel is already open.
   pc.onChannelOpen(sendOffer);
 
+  let accepted = false;
   pc.onData((data) => {
     if (typeof data !== 'string') return; // sender only consumes control frames
     const frame = parseControl(data);
     if (!frame) return;
     if (frame.t === 'accept') {
+      // Guard against a duplicate `accept` (peer reconnect / re-sent frame):
+      // streaming twice would corrupt the receiver and double the transfer.
+      if (accepted) return;
+      accepted = true;
       void streamFile();
     } else if (frame.t === 'decline') {
       patchTransfer(sessionId, { status: 'declined' });

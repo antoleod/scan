@@ -1,5 +1,5 @@
 // Smart workflow detection for notes: medication, shopping, reminder, task
-import { isLikelyShoppingNote, extractShoppingItemsFromText } from './groceryCatalog';
+import { analyzeShoppingListCandidate } from './shoppingList';
 import { findMedication } from './euMedicationDatabase';
 
 export type SmartWorkflowType = 'none' | 'medication' | 'shopping' | 'reminder' | 'task';
@@ -58,16 +58,19 @@ const REMINDER_KEYWORDS = {
   ],
 };
 
-// Task keywords by language
+// Task keywords by language.
+// NOTE: deliberately excludes ultra-common verbs ('hacer', 'do', 'necesito',
+// 'need to', 'faire') — at 0.5/keyword they would misclassify ordinary notes as
+// tasks. Kept to distinctive task markers + explicit lead keywords like 'todo'.
 const TASK_KEYWORDS = {
   es: [
-    'tarea', 'tareas', 'hacer', 'debo', 'necesito', 'pendiente', 'todo',
+    'tarea', 'tareas', 'pendiente', 'todo', 'por hacer',
   ],
   fr: [
-    'tâche', 'tâches', 'faire', 'je dois', 'j\'ai besoin',
+    'tâche', 'tâches', 'à faire',
   ],
   en: [
-    'task', 'tasks', 'do', 'must do', 'need to', 'todo', 'pending',
+    'task', 'tasks', 'todo', 'to-do', 'pending',
   ],
 };
 
@@ -85,7 +88,7 @@ function detectLanguage(text: string): 'es' | 'fr' | 'en' {
 
   // Spanish-only characters / words
   if (/[ñ¿¡]/.test(lower)) es += 2;
-  if (/\b(tomé|tome|pastilla|medicamento|medicación|recordar|recuérdame|recordatorio|tarea|tengo que|necesito|debo|mañana|jarabe|fiebre|garganta|dolor)\b/.test(lower)) es += 1;
+  if (/\b(tomé|tome|pastilla|medicamento|medicación|recordar|recuérdame|recordatorio|olvidar|olvides|tarea|pendiente|tengo que|necesito|debo|mañana|jarabe|fiebre|garganta|dolor)\b/.test(lower)) es += 1;
 
   // French-only characters / words
   if (/[çœ]/.test(lower)) fr += 2;
@@ -190,33 +193,37 @@ function detectMedicationWorkflow(text: string): SmartWorkflowDetection {
 
 function detectShoppingWorkflow(text: string): SmartWorkflowDetection {
   const value = String(text || '');
-  // Use grocery catalog for smart detection
-  const isLikelyShoppingNote_detected = isLikelyShoppingNote(value);
+  // Use the SAME shopping engine as the rest of the app (shoppingList.ts).
+  // Previously this path used groceryDetection, which split only on \n;,: (not
+  // spaces) — so "milk bread and cheese" matched 0 items — and lacked the
+  // health-keyword blocker. analyzeShoppingListCandidate handles space/connector
+  // tokenization, narrative blockers, and health blocking in one place.
+  const analysis = analyzeShoppingListCandidate(value);
 
-  if (!isLikelyShoppingNote_detected) {
-    return {
-      type: 'none',
-      confidence: 0,
-      title: '',
-      reason: '',
-    };
+  // Treat as shopping when EITHER signal fires:
+  //  - isCandidate: the strict gate (great for short connector lists like
+  //    "milk bread and cheese"), OR
+  //  - ≥3 parsed items with a high score: covers longer comma lists where the
+  //    engine's strict `productHits >= parsedItems.length` check is over-tight
+  //    on plurals/accents (e.g. "Manzanas, plátanos, leche, …" scores 0.94 yet
+  //    isCandidate is false). Health/narrative blockers already zeroed those.
+  const looksLikeShopping =
+    analysis.isCandidate ||
+    (analysis.parsedItems.length >= 3 && analysis.confidence >= 0.62);
+
+  if (!looksLikeShopping) {
+    return { type: 'none', confidence: 0, title: '', reason: '' };
   }
-
-  // Extract items from text using grocery catalog
-  const extractedItems = extractShoppingItemsFromText(value);
-
-  // Build confidence based on item count
-  let confidence = 0.65; // Base confidence from catalog match
-  if (extractedItems.length >= 2) confidence += 0.2;
-  if (extractedItems.length >= 5) confidence += 0.15;
 
   return {
     type: 'shopping',
-    confidence: Math.min(confidence, 1),
+    // Floor at 0.65 so a confirmed candidate clears detectSmartWorkflow's gate;
+    // analysis.confidence (already 0..1) carries the finer signal above that.
+    confidence: Math.max(0.65, Math.min(analysis.confidence, 1)),
     title: 'Shopping list detected',
     reason: 'We can turn this note into a checklist.',
     extracted: {
-      items: extractedItems.map(item => ({ text: item.text, category: item.category })),
+      items: analysis.parsedItems.map((item) => ({ text: item.label })),
     },
   };
 }
@@ -229,11 +236,20 @@ function detectReminderWorkflow(text: string): SmartWorkflowDetection {
   let confidence = 0;
 
   const keywordMatches = countKeywordMatches(value, keywords);
-  confidence += Math.min(keywordMatches * 0.25, 0.6);
+  confidence += Math.min(keywordMatches * 0.5, 1);
 
   // Check for future/time references
   if (/(?:mañana|tomorrow|demain|next|próximo|la próxima)/i.test(value)) {
     confidence += 0.2;
+  }
+
+  // Reminder keywords (recordar / remind / rappel / no olvidar …) are distinctive,
+  // explicit intent markers — unlike the ambiguous task verbs. A single one should
+  // classify on its own, so imperative reminders WITHOUT a future word ("recordar
+  // comprar pan", "remind me to buy bread") don't fall through to 'none'. Floor at
+  // the gate; future-word / multi-keyword still raise confidence above it.
+  if (keywordMatches >= 1) {
+    confidence = Math.max(confidence, 0.65);
   }
 
   return {
@@ -253,7 +269,14 @@ function detectTaskWorkflow(text: string): SmartWorkflowDetection {
   let confidence = 0;
 
   const keywordMatches = countKeywordMatches(value, keywords);
-  confidence += Math.min(keywordMatches * 0.25, 0.5);
+  // 0.5 per keyword (was 0.25 — task could never reach the 0.65 gate).
+  confidence += Math.min(keywordMatches * 0.5, 1);
+
+  // An explicit lead marker ("task:", "todo:", "tarea:", "à faire:") is a strong
+  // intent signal — clears the gate on its own so "task: finish report" works.
+  if (/^\s*(?:task|to-?do|tarea|tâche|pendiente)\s*[:\-]/i.test(value)) {
+    confidence += 0.3;
+  }
 
   return {
     type: keywordMatches >= 1 ? 'task' : 'none',

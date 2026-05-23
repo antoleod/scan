@@ -602,11 +602,14 @@ export function MedicationCard({
     [noteText, metadata],
   );
 
-  // Tick once a minute so countdowns refresh.
+  // Tick every 30s so countdowns refresh. 60s was too coarse: the ±60s
+  // "Due now" window (120s wide) could fall entirely between two ticks, so a
+  // med would jump from "in 30s" straight to "Overdue 30s" and never show
+  // "Due now". 30s guarantees that window is sampled at least twice.
   const [, setTick] = useState(0);
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
   useEffect(() => {
-    tickRef.current = setInterval(() => setTick((n) => (n + 1) & 0x7fffffff), 60_000);
+    tickRef.current = setInterval(() => setTick((n) => (n + 1) & 0x7fffffff), 30_000);
     return () => {
       if (tickRef.current) clearInterval(tickRef.current);
     };

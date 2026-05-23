@@ -68,17 +68,30 @@ export interface HistoryWriteResult {
   duplicate: ScanRecord | null;
 }
 
+// Serialize history writes. Without this, two near-simultaneous scans (camera
+// burst + clipboard capture) can both loadHistory(), both see no duplicate, and
+// both saveHistory() — the second write clobbers the first item. Mirrors the
+// withNotesSaveLock pattern in notes.ts.
+let historySaveLock: Promise<void> = Promise.resolve();
+function withHistorySaveLock<T>(fn: () => Promise<T>): Promise<T> {
+  const next = historySaveLock.then(fn, fn);
+  historySaveLock = next.then(() => undefined, () => undefined);
+  return next;
+}
+
 export async function addHistoryUnique(item: ScanRecord): Promise<HistoryWriteResult> {
-  const current = await loadHistory();
-  const duplicate = current.find((entry) => historyKey(entry) === historyKey(item)) || null;
+  return withHistorySaveLock(async () => {
+    const current = await loadHistory();
+    const duplicate = current.find((entry) => historyKey(entry) === historyKey(item)) || null;
 
-  if (duplicate) {
-    return { history: current, inserted: false, duplicate };
-  }
+    if (duplicate) {
+      return { history: current, inserted: false, duplicate };
+    }
 
-  const next = [item, ...current].slice(0, 5000);
-  await saveHistory(next);
-  return { history: next, inserted: true, duplicate: null };
+    const next = [item, ...current].slice(0, 5000);
+    await saveHistory(next);
+    return { history: next, inserted: true, duplicate: null };
+  });
 }
 
 export async function addHistory(item: ScanRecord): Promise<ScanRecord[]> {

@@ -26,6 +26,15 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      # The custom runner exits 1 on any failure (tests/run-tests.ts), so a
+      # failing test now blocks the merge instead of being silently ignored.
       - name: Tests
         run: npm test
-        continue-on-error: true
+
+      # Catch malformed rules before they can be deployed. database.rules.json
+      # must be valid JSON; firestore.rules must exist (CEL syntax needs the
+      # Firebase CLI to fully parse, which we don't run here).
+      - name: Validate Firebase rules files
+        run: |
+          node -e "JSON.parse(require('fs').readFileSync('database.rules.json','utf8')); console.log('database.rules.json: valid JSON')"
+          test -s firestore.rules && echo "firestore.rules: present"

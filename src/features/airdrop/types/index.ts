@@ -181,6 +181,13 @@ export interface SignalMessage {
   candidate?: RTCIceCandidateInitLike;
   /** Presence payload for presence frames. */
   peer?: PeerInfo;
+  /**
+   * Pairing token (carried on the guest's `presence` frame). The host verifies
+   * it against the session's own token before sending an offer, so that knowing
+   * a public sessionId alone is NOT enough to join — the signaling room is
+   * public (anyone can read/write) but only the token holder gets paired.
+   */
+  token?: string;
 }
 
 /**

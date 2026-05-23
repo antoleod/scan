@@ -1,1 +1,2 @@
 - [Firebase Sync Architecture](project_firebase_sync.md) — confirmed race condition + Timestamp NaN bug blocking cross-device sync; notes listener missing entirely
+- [RTDB Rules Audit 2026-05-23](project_firebase_rtdb_audit.md) — deploy-blocking data-loss bug in resolveRtdbImage; token cosmetic in public signaling; onDisconnect gap for share presence

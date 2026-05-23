@@ -24,10 +24,22 @@
       "PowerShell(Get-Process -Name node -ErrorAction SilentlyContinue | Select-Object Id, StartTime, @{N='Cmd';E={\\(Get-CimInstance Win32_Process -Filter \"ProcessId=$\\($_.Id\\)\"\\).CommandLine}} | Format-Table -Wrap; \"---\"; if \\(Test-Path .expo\\) { \"has .expo cache\" } else { \"no .expo\" }; if \\(Test-Path node_modules\\\\.cache\\) { \"has node_modules/.cache\" } else { \"no metro cache dir\" })",
       "PowerShell(Stop-Process -Id 23276 -Force -ErrorAction SilentlyContinue; Stop-Process -Id 24976 -Force -ErrorAction SilentlyContinue; Start-Sleep -Milliseconds 800; $still = Get-Process -Name node -ErrorAction SilentlyContinue; if \\($still\\) { \"Quedan procesos node: $\\($still.Id -join ', '\\)\" } else { \"No quedan procesos node\" })",
       "PowerShell(npx expo start --web --clear)",
-      "PowerShell(npx expo install expo-document-picker 2>&1)"
+      "PowerShell(npx expo install expo-document-picker 2>&1)",
+      "Bash(node -e \"JSON.parse\\(require\\('fs'\\).readFileSync\\('database.rules.json','utf8'\\)\\); console.log\\('database.rules.json: valid JSON'\\)\")",
+      "Bash(node -e \"JSON.parse\\(require\\('fs'\\).readFileSync\\('firebase.json','utf8'\\)\\); console.log\\('firebase.json: valid JSON'\\)\")",
+      "Bash(firebase --version)",
+      "Bash(node -e \"JSON.parse\\(require\\('fs'\\).readFileSync\\('database.rules.json','utf8'\\)\\); console.log\\('valid JSON'\\)\")",
+      "PowerShell(npm run web)",
+      "PowerShell(npm test 2>&1)",
+      "PowerShell(npm run build:web 2>&1)",
+      "Bash(node -e \"JSON.parse\\(require\\('fs'\\).readFileSync\\('database.rules.json','utf8'\\)\\); console.log\\('rules JSON valid'\\)\")",
+      "Bash(node -e ' *)",
+      "Bash(rm -f /tmp/dbg.ts /tmp/dbgshop.js 2>&1; git status --short 2>&1 | head -30)"
     ],
     "additionalDirectories": [
-      "c:\\Users\\X1\\Downloads\\scan\\scan\\.claude"
+      "c:\\Users\\X1\\Downloads\\scan\\scan\\.claude",
+      "\\tmp",
+      "C:\\Users\\X1\\Downloads\\scan\\scan\\.git"
     ]
   }
 }

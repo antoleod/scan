@@ -1,7 +1,7 @@
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImageManipulator from 'expo-image-manipulator';
-import { getDatabase, ref, set, get, remove } from 'firebase/database';
+import { ref, set, get, remove } from 'firebase/database';
 import { getFirebaseRuntime } from './firebase';
 import { diag } from './diagnostics';
 
@@ -89,13 +89,11 @@ export async function compressImage(dataUri: string): Promise<string> {
 // ─── RTDB helpers ────────────────────────────────────────────────────────────
 
 function getRtdb() {
+  // Reuse the already-initialized RTDB from the runtime singleton. This honors
+  // the databaseURL guard in initFirebaseRuntime (rt.rtdb is null when
+  // EXPO_PUBLIC_FIREBASE_DATABASE_URL is absent) instead of re-initializing.
   const rt = getFirebaseRuntime();
-  if (!rt?.enabled || !rt.app) return null;
-  try {
-    return getDatabase(rt.app);
-  } catch {
-    return null;
-  }
+  return rt?.enabled ? (rt.rtdb ?? null) : null;
 }
 
 function imageRtdbPath(uid: string, imageId: string) {
@@ -186,7 +184,10 @@ export async function cacheImage(rtdbPath: string, dataUri: string): Promise<voi
 
 export async function resolveRtdbImage(
   rtdbPath: string,
-  deleteAfterDownload = true,
+  // Default OFF: the RTDB relay is shared by all of the user's devices, so
+  // deleting on first download loses the image for every other device. The
+  // 30-day `expiresAt` TTL is the cleanup mechanism, not first-read deletion.
+  deleteAfterDownload = false,
 ): Promise<string | null> {
   // Return from local cache first (avoid network on repeat renders)
   const cached = await getCachedImage(rtdbPath);
@@ -197,8 +198,8 @@ export async function resolveRtdbImage(
 
   await cacheImage(rtdbPath, dataUri);
 
-  // Clean up RTDB relay once we have it locally — same-user sync,
-  // no need to keep it seeding after this device has downloaded it.
+  // Only delete when the caller explicitly opts in (e.g. a known single-device
+  // teardown). Multi-device sync must NOT delete on read.
   if (deleteAfterDownload) {
     deleteImageFromRTDB(rtdbPath).catch(() => undefined);
   }

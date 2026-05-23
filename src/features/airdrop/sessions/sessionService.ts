@@ -22,7 +22,7 @@ import {
   setSessionStatus,
 } from '../store/airdropStore';
 import { airdropStore } from '../store/airdropStore';
-import { generateSessionId, generateToken } from '../utils/ids';
+import { generateSessionId, generateToken, isPresenceAuthorized } from '../utils/ids';
 import { TTL_PRESET_MS, DEFAULT_TTL } from '../constants';
 import { diag } from '../../../core/diagnostics';
 import { attachSender, attachReceiver, respondToOffer, type ReceiverHandlers } from '../transfer/transferService';
@@ -156,8 +156,21 @@ async function handleHostSignal(sessionId: string, selfId: string, msg: SignalMe
   }
 
   if (msg.type === 'presence' && msg.peer) {
+    // Token gate: the signaling room is public, so possession of the sessionId
+    // is NOT authorization. Only a guest that proves it knows the session token
+    // (delivered out-of-band via QR / same-account share) gets an offer. This
+    // blocks eavesdroppers from hijacking or MITM-ing the WebRTC negotiation.
+    const session = airdropStore.getState().sessions[sessionId];
+    if (!session || !isPresenceAuthorized(session.token, msg.token)) {
+      diag.warn('airdrop.session.presence_rejected', {
+        sessionId,
+        reason: !session ? 'no_session' : 'token_mismatch',
+        from: msg.from,
+      });
+      return;
+    }
     patchSession(sessionId, { peer: msg.peer, status: 'pairing' });
-    // Host initiates the offer once a guest is present.
+    // Host initiates the offer once a verified guest is present.
     if (rt.pc && isWebRtcSupported()) {
       const { sdp } = await rt.pc.createOffer();
       await channel.publish({ type: 'offer', sessionId, from: selfId, ts: Date.now(), sdp });
@@ -227,8 +240,10 @@ export async function joinSession(
     );
   });
 
-  // Announce presence so the host knows to send an offer.
-  await channel.publish({ type: 'presence', sessionId, from: self.id, ts: Date.now(), peer: self });
+  // Announce presence so the host knows to send an offer. The token proves we
+  // were given the session out-of-band (QR / same-account share); the host
+  // rejects presence frames whose token doesn't match (see handleHostSignal).
+  await channel.publish({ type: 'presence', sessionId, from: self.id, ts: Date.now(), peer: self, token });
   diag.info('airdrop.session.joined', { sessionId, webrtc: isWebRtcSupported() });
   return airdropStore.getState().sessions[sessionId];
 }

@@ -55,7 +55,7 @@ export function detectNoteEntities(text: string, settings: AppSettings): SmartNo
   const ipEnabled = smart.ipDetectionEnabled && smart.detectionEnabled.ip;
   const ipRegex = safeRegex(smart.regex.ip, /\b(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)\b/gi);
   const hostRegex = safeRegex(smart.regex.hostname, /\b(?:IPOLBRUP[A-Z0-9-]*|P\d{2}[A-Z]{2}[A-Z0-9-]*)\b/gi);
-  const piRegex = safeRegex(smart.regex.pi, /\b02PI[A-Z0-9]*\b/gi);
+  const piRegex = safeRegex(smart.regex.pi, /\b(?:02PI[A-Z0-9]*|MUSTBRUN[A-Z0-9]*)\b/gi);
   const officeRegex = smart.offices.length
     ? new RegExp(`\\b(?:${smart.offices.map((office) => escapeRegex(office)).join('|')})\\b`, 'gi')
     : null;

@@ -1,0 +1,52 @@
+{
+  "rules": {
+    "airdrop": {
+      "sessions": {
+        "$sessionId": {
+          ".read": true,
+          ".write": true,
+          ".validate": "$sessionId.length <= 128",
+          "signals": {
+            "$pushId": {
+              ".validate": "newData.hasChildren(['type', 'sessionId', 'from'])",
+              "type": { ".validate": "newData.isString() && newData.val().matches(/^(offer|answer|ice-candidate|presence|bye)$/)" },
+              "sessionId": { ".validate": "newData.isString() && newData.val() === $sessionId" },
+              "from": { ".validate": "newData.isString() && newData.val().length <= 128" },
+              "sdp": { ".validate": "newData.isString() && newData.val().length <= 30000" },
+              "token": { ".validate": "newData.isString() && newData.val().length <= 256" },
+              "ts": { ".validate": "newData.isNumber()" },
+              "candidate": {
+                "candidate": { ".validate": "newData.isString() && newData.val().length <= 4000" }
+              }
+            }
+          }
+        }
+      },
+      "users": {
+        "$uid": {
+          ".read": "auth != null && auth.uid === $uid",
+          ".write": "auth != null && auth.uid === $uid",
+          "shares": {
+            "$sessionId": {
+              ".validate": "newData.hasChildren(['sessionId', 'token', 'hostPeerId', 'fileName', 'expiresAt'])"
+            }
+          },
+          "$other": {
+            ".validate": false
+          }
+        }
+      }
+    },
+    "users": {
+      "$uid": {
+        "pendingImages": {
+          ".read": "auth != null && auth.uid === $uid",
+          ".write": "auth != null && auth.uid === $uid",
+          "$imageId": {
+            ".validate": "newData.hasChildren(['data', 'uploadedAt'])"
+          }
+        }
+      }
+    }
+  }
+}

@@ -24,6 +24,7 @@
  */
 import {
   type Database,
+  onDisconnect,
   onValue,
   ref,
   remove,
@@ -56,6 +57,20 @@ export function currentUid(): string | null {
 }
 
 /**
+ * Like {@link currentUid} but awaits the runtime init first, so it returns the
+ * uid even when called before the Firebase runtime has finished booting (e.g.
+ * the AirDrop screen mounts before auth resolves). Returns null for guests.
+ */
+async function resolveUid(): Promise<string | null> {
+  try {
+    const rt = await getFirebaseRuntimeSnapshot();
+    return rt.auth?.currentUser?.uid ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Announce a share so the account's other devices can download it directly.
  * No-op for guests / disabled Firebase. Idempotent per sessionId.
  */
@@ -65,10 +80,20 @@ export async function publishMyShare(share: UserShare): Promise<void> {
   const db = await getDb();
   if (!db) return;
   try {
-    await set(ref(db, RTDB_PATHS.userShare(uid, share.sessionId)), {
+    const node = ref(db, RTDB_PATHS.userShare(uid, share.sessionId));
+    await set(node, {
       ...share,
       _srv: serverTimestamp(),
     });
+    // Server-side cleanup for ungraceful exits (tab close, app killed, network
+    // drop): the RTDB server removes the announcement when this client's
+    // connection drops, so other devices don't see a phantom share until TTL.
+    // Registered after set() so the node exists when the handler is armed.
+    try {
+      await onDisconnect(node).remove();
+    } catch (e) {
+      void diag.warn('airdrop.presence.ondisconnect_failed', { sessionId: share.sessionId, error: String(e) });
+    }
     void diag.info('airdrop.presence.published', { sessionId: share.sessionId, file: share.fileName });
   } catch (e) {
     void diag.warn('airdrop.presence.publish_failed', {
@@ -86,7 +111,11 @@ export async function clearMyShare(sessionId: string): Promise<void> {
   const db = await getDb();
   if (!db) return;
   try {
-    await remove(ref(db, RTDB_PATHS.userShare(uid, sessionId)));
+    const node = ref(db, RTDB_PATHS.userShare(uid, sessionId));
+    // Cancel the armed onDisconnect handler first so it can't fire stale later
+    // (e.g. against a re-created share with the same id), then remove now.
+    await onDisconnect(node).cancel().catch(() => undefined);
+    await remove(node);
   } catch (e) {
     void diag.warn('airdrop.presence.clear_failed', { sessionId, error: String(e) });
   }
@@ -99,16 +128,19 @@ export async function clearMyShare(sessionId: string): Promise<void> {
  * Returns an unsubscribe fn. No-op (returns a noop unsub) for guests.
  */
 export function subscribeUserShares(onShares: (shares: UserShare[]) => void): () => void {
-  const uid = currentUid();
-  if (!uid) {
-    onShares([]);
-    return () => undefined;
-  }
-
   let detach: (() => void) | null = null;
   let cancelled = false;
 
   void (async () => {
+    // Resolve the uid AFTER awaiting the runtime so this works even when called
+    // before Firebase finishes booting (otherwise a synchronous null uid here
+    // would silently make the whole "Your devices" list a permanent no-op).
+    const uid = await resolveUid();
+    if (cancelled) return;
+    if (!uid) {
+      onShares([]); // guest → nothing to show
+      return;
+    }
     const db = await getDb();
     if (!db || cancelled) return;
     const sharesRef = ref(db, RTDB_PATHS.userShares(uid));
@@ -124,6 +156,13 @@ export function subscribeUserShares(onShares: (shares: UserShare[]) => void): ()
       },
     );
     detach = () => off();
+    // The unsubscribe returned below may have run while we were awaiting (it saw
+    // `detach` still null and could only flip `cancelled`). Re-check now so we
+    // don't leave an onValue listener attached after the caller unsubscribed.
+    if (cancelled) {
+      detach();
+      detach = null;
+    }
   })();
 
   return () => {

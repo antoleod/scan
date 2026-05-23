@@ -9,7 +9,7 @@ import { FileChip } from '../components/FileChip';
 import { SessionQrView } from '../components/SessionQrView';
 import { TransferProgressView } from '../components/TransferProgressView';
 import { useAirdropNow, useSession, useTransfer } from '../hooks/useAirdrop';
-import { createSession, cancelSession } from '../sessions/sessionService';
+import { createSession, cancelSession, dismissSession } from '../sessions/sessionService';
 import { pickFile } from '../transfer/filePicker';
 import { isWebRtcSupported } from '../webrtc';
 import { TTL_PRESETS, TTL_PRESET_LABEL, DEFAULT_TTL } from '../constants';
@@ -32,6 +32,7 @@ export function SendScreen({ palette }: { palette: Palette }) {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [picking, setPicking] = useState(false);
   const [starting, setStarting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const session = useSession(sessionId);
   const transfer = useTransfer(sessionId);
 
@@ -53,6 +54,7 @@ export function SendScreen({ palette }: { palette: Palette }) {
   const generate = async () => {
     if (!file) return; // QR blocked without a file
     setStarting(true);
+    setError(null);
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => undefined);
     try {
       const created = await createSession({
@@ -61,23 +63,46 @@ export function SendScreen({ palette }: { palette: Palette }) {
         payload: { kind: 'file', title: file.name, byteSize: file.size, mimeType: file.mimeType, fileName: file.name },
       });
       setSessionId(created.id);
+    } catch (e) {
+      // createSession can throw on a signaling publish failure (RTDB rules) —
+      // surface it instead of silently re-enabling the button with no QR.
+      const msg = e instanceof Error ? e.message : 'Could not start the session.';
+      setError(msg);
+      void diag.error('airdrop.send.create_failed', { error: String(e) });
     } finally {
       setStarting(false);
     }
   };
 
+  // End the current session cleanly. A completed session is dismissed (store
+  // cleanup) rather than cancelled — cancelSession would send a spurious `bye`
+  // to a peer that already finished and left.
+  const endSession = async () => {
+    if (sessionId) {
+      if (session?.status === 'completed') await dismissSession(sessionId).catch(() => undefined);
+      else await cancelSession(sessionId).catch(() => undefined);
+    }
+  };
+
   // Cancel: clear session + QR, keep the selected file.
   const cancelShare = async () => {
-    if (sessionId) await cancelSession(sessionId).catch(() => undefined);
+    await endSession();
     setSessionId(null);
     await Haptics.selectionAsync().catch(() => undefined);
   };
 
   // Back to file selection: clear everything including the file.
   const changeFile = async () => {
-    if (sessionId) await cancelSession(sessionId).catch(() => undefined);
+    await endSession();
     setSessionId(null);
     setFile(null);
+  };
+
+  // After a finished transfer: dismiss and reset to the file-selection step.
+  const finishDone = async () => {
+    await endSession();
+    setSessionId(null);
+    await Haptics.selectionAsync().catch(() => undefined);
   };
 
   // ── Active session: QR + status + transfer progress ──
@@ -113,10 +138,16 @@ export function SendScreen({ palette }: { palette: Palette }) {
           </AirdropCard>
         )}
 
-        <View style={{ flexDirection: 'row', gap: 10, justifyContent: 'center' }}>
-          <SecondaryButton palette={palette} label="Cancel" onPress={() => void cancelShare()} />
-          <SecondaryButton palette={palette} label="Change file" onPress={() => void changeFile()} />
-        </View>
+        {transfer?.status === 'done' ? (
+          <View style={{ alignItems: 'center' }}>
+            <PrimaryButton palette={palette} icon="checkmark-circle-outline" label="Done" onPress={() => void finishDone()} />
+          </View>
+        ) : (
+          <View style={{ flexDirection: 'row', gap: 10, justifyContent: 'center' }}>
+            <SecondaryButton palette={palette} label="Cancel" onPress={() => void cancelShare()} />
+            <SecondaryButton palette={palette} label="Change file" onPress={() => void changeFile()} />
+          </View>
+        )}
       </ScrollView>
     );
   }
@@ -173,6 +204,11 @@ export function SendScreen({ palette }: { palette: Palette }) {
         loading={starting}
         onPress={() => void generate()}
       />
+      {error ? (
+        <Text style={{ color: '#EF4444', fontSize: 12, textAlign: 'center', lineHeight: 17 }}>
+          {error}
+        </Text>
+      ) : null}
       {!file ? (
         <Text style={{ color: palette.muted, fontSize: 12, textAlign: 'center' }}>
           Select a file first to generate the QR.
