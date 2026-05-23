@@ -46,6 +46,13 @@ export async function scheduleReminder(
     { noteId, medIndex, followUpAt, medicationName, dismissed: false },
   ];
   await saveReminders(next);
+  const { scheduleLocalNotification } = await import('./notifications');
+  await scheduleLocalNotification({
+    title: 'Medication reminder',
+    body: medicationName,
+    at: followUpAt,
+    data: { noteId, medIndex, kind: 'medication' },
+  });
 }
 
 export async function dismissReminder(noteId: string, medIndex: number): Promise<void> {

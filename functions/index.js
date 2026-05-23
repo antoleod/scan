@@ -189,3 +189,144 @@ exports.pinSession = onCall({ region: REGION }, async (request) => {
     const customToken = await admin.auth().createCustomToken(json.localId);
     return { customToken };
 });
+
+function requireSignedIn(request) {
+  if (!request.auth?.uid) {
+    throw new HttpsError("unauthenticated", "Sign in required.");
+  }
+  return request.auth.uid;
+}
+
+function limitString(value, max) {
+  return String(value || "").trim().slice(0, max);
+}
+
+exports.generateAiNote = onCall({ region: REGION, timeoutSeconds: 60 }, async (request) => {
+  const uid = requireSignedIn(request);
+  if (!(await allowPersistent("ai-note", uid, 20, 60_000))) {
+    throw new HttpsError("resource-exhausted", "Too many AI requests. Wait a minute.");
+  }
+
+  const apiKey = process.env.OPENAI_API_KEY || "";
+  const model = process.env.OPENAI_MODEL || "";
+  if (!apiKey || !model) {
+    throw new HttpsError("failed-precondition", "AI integration is not configured.");
+  }
+
+  const prompt = limitString(request.data?.prompt, 4000);
+  if (prompt.length < 2) {
+    throw new HttpsError("invalid-argument", "Prompt is required.");
+  }
+
+  const res = await fetch("https://api.openai.com/v1/responses", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model,
+      input: [
+        {
+          role: "system",
+          content: "Return concise, structured text for a private productivity/scanning app. Do not invent facts.",
+        },
+        { role: "user", content: prompt },
+      ],
+    }),
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    logger.warn("openai request failed", { status: res.status, body: JSON.stringify(json).slice(0, 500) });
+    throw new HttpsError("unavailable", "AI generation failed.");
+  }
+
+  const text = Array.isArray(json.output)
+    ? json.output
+        .flatMap((item) => Array.isArray(item.content) ? item.content : [])
+        .map((part) => part.text || "")
+        .join("\n")
+        .trim()
+    : String(json.output_text || "").trim();
+  return { text };
+});
+
+exports.sendProductEmail = onCall({ region: REGION }, async (request) => {
+  const uid = requireSignedIn(request);
+  if (!(await allowPersistent("email", uid, 20, 60_000))) {
+    throw new HttpsError("resource-exhausted", "Too many email requests. Wait a minute.");
+  }
+
+  const apiKey = process.env.SENDGRID_API_KEY || "";
+  const from = process.env.INTEGRATION_EMAIL_FROM || "";
+  if (!apiKey || !from) {
+    throw new HttpsError("failed-precondition", "Email integration is not configured.");
+  }
+
+  const to = limitString(request.data?.to, 320);
+  const subject = limitString(request.data?.subject, 200);
+  const text = limitString(request.data?.text, 20_000);
+  const html = request.data?.html ? limitString(request.data.html, 40_000) : undefined;
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to) || !subject || !text) {
+    throw new HttpsError("invalid-argument", "Valid to, subject, and text are required.");
+  }
+
+  const res = await fetch("https://api.sendgrid.com/v3/mail/send", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      personalizations: [{ to: [{ email: to }] }],
+      from: { email: from },
+      subject,
+      content: [
+        { type: "text/plain", value: text },
+        ...(html ? [{ type: "text/html", value: html }] : []),
+      ],
+    }),
+  });
+  if (!res.ok) {
+    logger.warn("sendgrid request failed", { status: res.status, body: (await res.text()).slice(0, 500) });
+    throw new HttpsError("unavailable", "Email delivery failed.");
+  }
+  return { ok: true };
+});
+
+exports.serviceNowProxy = onCall({ region: REGION, timeoutSeconds: 30 }, async (request) => {
+  const uid = requireSignedIn(request);
+  if (!(await allowPersistent("servicenow", uid, 60, 60_000))) {
+    throw new HttpsError("resource-exhausted", "Too many ServiceNow requests. Wait a minute.");
+  }
+
+  const baseUrl = String(process.env.SERVICENOW_BASE_URL || "").replace(/\/+$/, "");
+  const token = process.env.SERVICENOW_TOKEN || "";
+  const user = process.env.SERVICENOW_USER || "";
+  const password = process.env.SERVICENOW_PASSWORD || "";
+  if (!baseUrl || (!token && (!user || !password))) {
+    throw new HttpsError("failed-precondition", "ServiceNow integration is not configured.");
+  }
+
+  const path = limitString(request.data?.path, 500);
+  const method = ["GET", "POST", "PATCH"].includes(request.data?.method) ? request.data.method : "GET";
+  if (!path.startsWith("/api/")) {
+    throw new HttpsError("invalid-argument", "Only ServiceNow API paths are allowed.");
+  }
+
+  const headers = { "Accept": "application/json", "Content-Type": "application/json" };
+  headers.Authorization = token
+    ? `Bearer ${token}`
+    : `Basic ${Buffer.from(`${user}:${password}`).toString("base64")}`;
+
+  const res = await fetch(`${baseUrl}${path}`, {
+    method,
+    headers,
+    body: method === "GET" ? undefined : JSON.stringify(request.data?.body || {}),
+  });
+  const contentType = res.headers.get("content-type") || "";
+  const data = contentType.includes("application/json")
+    ? await res.json().catch(() => null)
+    : await res.text().catch(() => "");
+  return { ok: res.ok, status: res.status, data };
+});

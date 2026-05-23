@@ -1,6 +1,7 @@
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { FirebaseApp, getApp, getApps, initializeApp } from 'firebase/app';
+import { FirebaseStorage, getStorage } from 'firebase/storage';
 import {
   Auth,
   browserLocalPersistence,
@@ -78,6 +79,8 @@ const OPTIONAL_FIREBASE_ENV = [
   'EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID',
   'EXPO_PUBLIC_FIREBASE_FUNCTIONS_REGION',
   'EXPO_PUBLIC_FIREBASE_DATABASE_URL',
+  'EXPO_PUBLIC_FIREBASE_APPCHECK_RECAPTCHA_SITE_KEY',
+  'EXPO_PUBLIC_ENABLE_ANALYTICS',
 ] as const;
 
 export type FirebaseRequiredEnvKey = (typeof REQUIRED_FIREBASE_ENV)[number];
@@ -102,6 +105,9 @@ export interface FirebaseRuntime {
   auth: Auth | null;
   db: Firestore | null;
   rtdb: Database | null;
+  storage: FirebaseStorage | null;
+  appCheckEnabled: boolean;
+  analyticsEnabled: boolean;
   source: 'env' | 'none';
   missingRequiredEnv: FirebaseRequiredEnvKey[];
   missingOptionalEnv: FirebaseOptionalEnvKey[];
@@ -120,6 +126,8 @@ function env(name: string): string {
     EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID: process.env.EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID,
     EXPO_PUBLIC_FIREBASE_FUNCTIONS_REGION: process.env.EXPO_PUBLIC_FIREBASE_FUNCTIONS_REGION,
     EXPO_PUBLIC_FIREBASE_DATABASE_URL: process.env.EXPO_PUBLIC_FIREBASE_DATABASE_URL,
+    EXPO_PUBLIC_FIREBASE_APPCHECK_RECAPTCHA_SITE_KEY: process.env.EXPO_PUBLIC_FIREBASE_APPCHECK_RECAPTCHA_SITE_KEY,
+    EXPO_PUBLIC_ENABLE_ANALYTICS: process.env.EXPO_PUBLIC_ENABLE_ANALYTICS,
   };
   return String(vars[name] || '').trim();
 }
@@ -127,6 +135,10 @@ function env(name: string): string {
 function firebaseFunctionsRegion(): string {
   const r = env('EXPO_PUBLIC_FIREBASE_FUNCTIONS_REGION');
   return r || 'us-central1';
+}
+
+function isEnvEnabled(name: string): boolean {
+  return ['1', 'true', 'yes', 'on'].includes(env(name).toLowerCase());
 }
 
 function resolveFirebaseConfig() {
@@ -206,6 +218,39 @@ function createAuthInstance(app: FirebaseApp): Auth {
   }
 }
 
+async function tryEnableAppCheck(app: FirebaseApp): Promise<boolean> {
+  const siteKey = env('EXPO_PUBLIC_FIREBASE_APPCHECK_RECAPTCHA_SITE_KEY');
+  if (Platform.OS !== 'web' || !siteKey || typeof window === 'undefined') return false;
+
+  try {
+    const { initializeAppCheck, ReCaptchaV3Provider } = await import('firebase/app-check');
+    initializeAppCheck(app, {
+      provider: new ReCaptchaV3Provider(siteKey),
+      isTokenAutoRefreshEnabled: true,
+    });
+    await diag.info('firebase.appCheck.enabled', {});
+    return true;
+  } catch (error) {
+    await diag.warn('firebase.appCheck.error', { message: String(error) });
+    return false;
+  }
+}
+
+async function tryEnableAnalytics(app: FirebaseApp): Promise<boolean> {
+  if (Platform.OS !== 'web' || !isEnvEnabled('EXPO_PUBLIC_ENABLE_ANALYTICS')) return false;
+
+  try {
+    const { getAnalytics, isSupported } = await import('firebase/analytics');
+    if (!(await isSupported())) return false;
+    getAnalytics(app);
+    await diag.info('firebase.analytics.enabled', {});
+    return true;
+  } catch (error) {
+    await diag.warn('firebase.analytics.error', { message: String(error) });
+    return false;
+  }
+}
+
 export async function initFirebaseRuntime(): Promise<FirebaseRuntime> {
   if (runtime) return runtime;
 
@@ -218,6 +263,9 @@ export async function initFirebaseRuntime(): Promise<FirebaseRuntime> {
       auth: null,
       db: null,
       rtdb: null,
+      storage: null,
+      appCheckEnabled: false,
+      analyticsEnabled: false,
       source: 'none',
       missingRequiredEnv,
       missingOptionalEnv,
@@ -234,10 +282,15 @@ export async function initFirebaseRuntime(): Promise<FirebaseRuntime> {
   const app = getApps().length ? getApp() : initializeApp(config);
   const auth = createAuthInstance(app);
   const db = getFirestore(app);
+  const storage = config.storageBucket ? getStorage(app) : null;
   let rtdb: Database | null = null;
   if (config.databaseURL) {
     try { rtdb = getDatabase(app); } catch { rtdb = null; }
   }
+  const [appCheckEnabled, analyticsEnabled] = await Promise.all([
+    tryEnableAppCheck(app),
+    tryEnableAnalytics(app),
+  ]);
 
   runtime = {
     enabled: true,
@@ -245,6 +298,9 @@ export async function initFirebaseRuntime(): Promise<FirebaseRuntime> {
     auth,
     db,
     rtdb,
+    storage,
+    appCheckEnabled,
+    analyticsEnabled,
     source: 'env',
     missingRequiredEnv,
     missingOptionalEnv,
@@ -269,6 +325,20 @@ export async function getFirebaseRuntimeSnapshot(): Promise<FirebaseRuntime> {
 
 export function getFirebaseRuntime(): FirebaseRuntime | null {
   return runtime;
+}
+
+export async function callFirebaseFunction<TRequest = unknown, TResponse = unknown>(
+  name: string,
+  data: TRequest,
+): Promise<TResponse> {
+  const rt = await initFirebaseRuntime();
+  if (!rt.enabled || !rt.app) {
+    throw new Error(buildFirebaseDisabledErrorMessage(rt));
+  }
+
+  const callable = httpsCallable<TRequest, TResponse>(getFunctions(rt.app, firebaseFunctionsRegion()), name);
+  const result = await callable(data);
+  return result.data;
 }
 
 export async function onFirebaseAuthState(cb: (user: User | null) => void) {

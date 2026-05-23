@@ -2,7 +2,7 @@ import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { ref, set, get, remove } from 'firebase/database';
-import { getFirebaseRuntime } from './firebase';
+import { getFirebaseRuntime, initFirebaseRuntime } from './firebase';
 import { diag } from './diagnostics';
 
 // Max size we target after compression (bytes of base64 string)
@@ -88,11 +88,12 @@ export async function compressImage(dataUri: string): Promise<string> {
 
 // ─── RTDB helpers ────────────────────────────────────────────────────────────
 
-function getRtdb() {
+async function getRtdb() {
   // Reuse the already-initialized RTDB from the runtime singleton. This honors
   // the databaseURL guard in initFirebaseRuntime (rt.rtdb is null when
   // EXPO_PUBLIC_FIREBASE_DATABASE_URL is absent) instead of re-initializing.
-  const rt = getFirebaseRuntime();
+  let rt = getFirebaseRuntime();
+  if (!rt) rt = await initFirebaseRuntime();
   return rt?.enabled ? (rt.rtdb ?? null) : null;
 }
 
@@ -106,9 +107,10 @@ export async function uploadImageToRTDB(
   dataUri: string,
   imageId: string,
 ): Promise<string | null> {
-  const rt = getFirebaseRuntime();
+  let rt = getFirebaseRuntime();
+  if (!rt) rt = await initFirebaseRuntime();
   if (!rt?.enabled || !rt.auth?.currentUser) return null;
-  const db = getRtdb();
+  const db = await getRtdb();
   if (!db) return null;
 
   try {
@@ -131,9 +133,10 @@ export async function uploadImageToRTDB(
 // ─── Download ────────────────────────────────────────────────────────────────
 
 export async function downloadImageFromRTDB(rtdbPath: string): Promise<string | null> {
-  const rt = getFirebaseRuntime();
+  let rt = getFirebaseRuntime();
+  if (!rt) rt = await initFirebaseRuntime();
   if (!rt?.enabled || !rt.app) return null;
-  const db = getRtdb();
+  const db = await getRtdb();
   if (!db) return null;
 
   try {
@@ -148,7 +151,7 @@ export async function downloadImageFromRTDB(rtdbPath: string): Promise<string | 
 }
 
 export async function deleteImageFromRTDB(rtdbPath: string): Promise<void> {
-  const db = getRtdb();
+  const db = await getRtdb();
   if (!db) return;
   try {
     await remove(ref(db, rtdbPath));
