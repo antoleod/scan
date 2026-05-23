@@ -15,6 +15,17 @@ import { createTrieFromWords } from "../src/utils/trie";
 import { AppError, AuthError, SyncError, ValidationError, toAppError, isRetryable } from "../src/core/errors";
 import { sanitizeScanInput, sanitizeNoteText, sanitizeTemplatePattern } from "../src/core/validation";
 import { computeNotesChecksum } from "../src/core/syncChecksum";
+import {
+  applyMarkTaken,
+  applySnooze,
+  applyDismiss,
+  applyReactivate,
+  deriveNoteStatusFromMeds,
+  syncMetadataFromMeds,
+  clampMedIndex,
+  ensureMedicationsList,
+} from "../src/core/medicationCycle";
+import type { NoteItem, MedicationCycleEntry, WorkflowMetadata } from "../src/core/notes";
 import { getAuthRedirectPath, LOGIN_ROUTE, MAIN_APP_ROUTE } from "../src/core/routes";
 import { encodeQrPayload, decodeQrPayload, isAirdropQr } from "../src/features/airdrop/utils/qr";
 import { filterIncomingShares, isValidShare } from "../src/features/airdrop/presence/shareFilter";
@@ -863,6 +874,211 @@ run("airdrop token uses unambiguous alphabet and requested length", () => {
   assert.equal(t.length, 10);
   // No ambiguous 0/O/1/I in the alphabet.
   assert.equal(/[01OI]/.test(t), false, `token had ambiguous chars: ${t}`);
+});
+
+// ── Medication cycle: pure helpers ──────────────────────────────────────────
+
+run("deriveNoteStatusFromMeds: any active med → 'active'", () => {
+  assert.equal(deriveNoteStatusFromMeds([
+    { name: "ibuprofen", status: "dismissed" },
+    { name: "paracetamol", status: "active" },
+  ]), "active");
+});
+
+run("deriveNoteStatusFromMeds: all dismissed → 'dismissed'", () => {
+  assert.equal(deriveNoteStatusFromMeds([
+    { name: "a", status: "dismissed" },
+    { name: "b", status: "dismissed" },
+  ]), "dismissed");
+});
+
+run("deriveNoteStatusFromMeds: snoozed (no active) → 'snoozed'", () => {
+  assert.equal(deriveNoteStatusFromMeds([
+    { name: "a", status: "snoozed" },
+    { name: "b", status: "dismissed" },
+  ]), "snoozed");
+});
+
+run("deriveNoteStatusFromMeds: empty / missing status default to 'active'", () => {
+  assert.equal(deriveNoteStatusFromMeds([]), "active");
+  assert.equal(deriveNoteStatusFromMeds([{ name: "a" }]), "active");
+});
+
+run("clampMedIndex: clamps out-of-range and non-finite to valid bounds", () => {
+  const meds: MedicationCycleEntry[] = [{ name: "a" }, { name: "b" }];
+  assert.equal(clampMedIndex([], 0), 0);
+  assert.equal(clampMedIndex(meds, -1), 0);
+  assert.equal(clampMedIndex(meds, 5), 1);
+  assert.equal(clampMedIndex(meds, 1), 1);
+  assert.equal(clampMedIndex(meds, NaN), 0);
+});
+
+run("ensureMedicationsList: synthesizes a single entry from legacy top-level fields", () => {
+  const meds = ensureMedicationsList({
+    medicationName: "ibuprofen",
+    doseText: "400 mg",
+    takenAt: 1_000,
+    followUpAt: 5_000,
+  });
+  assert.equal(meds.length, 1);
+  assert.equal(meds[0].name, "ibuprofen");
+  assert.equal(meds[0].dose, "400 mg");
+  assert.equal(meds[0].takenAt, 1_000);
+  assert.equal(meds[0].nextSuggestedAt, 5_000);
+  assert.equal(meds[0].status, "active");
+});
+
+run("ensureMedicationsList: returns [] when there is no name and no array", () => {
+  assert.equal(ensureMedicationsList({ doseText: "400 mg" }).length, 0);
+  assert.equal(ensureMedicationsList(undefined).length, 0);
+});
+
+run("ensureMedicationsList: explicit medications array wins over top-level fields", () => {
+  const meds = ensureMedicationsList({
+    medicationName: "ibuprofen",
+    medications: [{ name: "paracetamol", status: "active" }],
+  });
+  assert.equal(meds.length, 1);
+  assert.equal(meds[0].name, "paracetamol");
+});
+
+run("ensureMedicationsList: normalizes legacy minIntervalHours → minimumIntervalHours", () => {
+  const meds = ensureMedicationsList({
+    medications: [{ name: "aspirin", minIntervalHours: 4 } as unknown as MedicationCycleEntry],
+  });
+  assert.equal(meds[0].minimumIntervalHours, 4);
+});
+
+run("syncMetadataFromMeds: focus = nearest future active med", () => {
+  const now = 1_000_000;
+  const meta = syncMetadataFromMeds({}, [
+    { name: "aspirin", status: "active", nextSuggestedAt: now + 3_600_000 },
+    { name: "ibuprofen", status: "active", nextSuggestedAt: now + 7_200_000 },
+  ]);
+  assert.equal(meta.medicationName, "aspirin");
+  assert.equal(meta.medications?.length, 2);
+});
+
+run("syncMetadataFromMeds: skips dismissed meds when choosing focus", () => {
+  const now = Date.now();
+  const meta = syncMetadataFromMeds({}, [
+    { name: "aspirin", status: "dismissed", nextSuggestedAt: now + 60_000 },
+    { name: "ibuprofen", status: "active", nextSuggestedAt: now + 3_600_000 },
+  ]);
+  assert.equal(meta.medicationName, "ibuprofen");
+});
+
+// ── Medication cycle: mutation invariants (dose-never-mutated, single medIndex) ──
+
+function makeMedNote(meds: MedicationCycleEntry[], extraMeta: Partial<WorkflowMetadata> = {}): NoteItem {
+  return {
+    id: "note-med",
+    kind: "text",
+    category: "health",
+    text: "med note",
+    pinned: false,
+    createdAt: 1_000,
+    updatedAt: 1_000,
+    smartType: "medication",
+    workflowStatus: "active",
+    workflowMetadata: { medications: meds.map((m) => ({ ...m })), ...extraMeta },
+  };
+}
+
+run("applyMarkTaken: advances ONLY the target med; sibling is byte-for-byte untouched", () => {
+  const note = makeMedNote([
+    { name: "ibuprofen", status: "active", dose: "400 mg", recommendedIntervalHours: 6, nextSuggestedAt: 50 },
+    { name: "paracetamol", status: "active", dose: "500 mg", nextSuggestedAt: 7_200_000, takenAt: 123 },
+  ]);
+  const result = applyMarkTaken(note, 0, 1_000_000, 1_000_500);
+  assert.ok(result);
+  const out = result!.workflowMetadata!.medications!;
+  // Target advanced
+  assert.equal(out[0].takenAt, 1_000_000);
+  assert.equal(out[0].nextSuggestedAt, 1_000_000 + 6 * 3_600_000);
+  assert.equal(out[0].status, "active");
+  assert.equal(out[0].dose, "400 mg"); // dose NEVER mutated
+  // Sibling untouched
+  assert.equal(out[1].dose, "500 mg");
+  assert.equal(out[1].takenAt, 123);
+  assert.equal(out[1].nextSuggestedAt, 7_200_000);
+  assert.equal(out[1].status, "active");
+});
+
+run("applyMarkTaken: no interval → followPrescription + undefined nextSuggestedAt", () => {
+  const note = makeMedNote([{ name: "amoxicillin", status: "active", dose: "1 g" }]);
+  const result = applyMarkTaken(note, 0, 2_000_000, 2_000_000);
+  const med = result!.workflowMetadata!.medications![0];
+  assert.equal(med.followPrescription, true);
+  assert.equal(med.nextSuggestedAt, undefined);
+  assert.equal(med.dose, "1 g"); // still untouched
+});
+
+run("applyMarkTaken: returns null when the note has no medications", () => {
+  const note = makeMedNote([], { medications: undefined });
+  assert.equal(applyMarkTaken(note, 0), null);
+});
+
+run("applySnooze: snoozes ONLY the target; clamps to 60s; preserves takenAt + dose", () => {
+  const note = makeMedNote([
+    { name: "ibuprofen", status: "active", dose: "400 mg", takenAt: 777, nextSuggestedAt: 50 },
+    { name: "paracetamol", status: "active", dose: "500 mg" },
+  ]);
+  const result = applySnooze(note, 0, 0, 9_000); // snoozeMs=0 must clamp to 60_000
+  const out = result!.workflowMetadata!.medications!;
+  assert.equal(out[0].status, "snoozed");
+  assert.equal(out[0].snoozedUntil, 9_000 + 60_000);
+  assert.equal(out[0].nextSuggestedAt, 9_000 + 60_000);
+  assert.equal(out[0].takenAt, 777); // preserved
+  assert.equal(out[0].dose, "400 mg"); // never mutated
+  assert.equal(out[1].status, "active"); // sibling untouched
+  assert.equal(out[1].dose, "500 mg");
+});
+
+run("applySnooze: honors snooze durations >= 60s", () => {
+  const note = makeMedNote([{ name: "ibuprofen", status: "active" }]);
+  const result = applySnooze(note, 0, 30 * 60_000, 1_000); // +30m
+  assert.equal(result!.workflowMetadata!.medications![0].snoozedUntil, 1_000 + 30 * 60_000);
+});
+
+run("applyDismiss: cancels ONLY the target; sibling stays active; note is NOT deleted", () => {
+  const note = makeMedNote([
+    { name: "ibuprofen", status: "active", dose: "400 mg", nextSuggestedAt: 5_000 },
+    { name: "paracetamol", status: "active", dose: "500 mg" },
+  ]);
+  const result = applyDismiss(note, 0, 3_000);
+  const out = result!.workflowMetadata!.medications!;
+  assert.equal(out[0].status, "dismissed");
+  assert.equal(out[0].nextSuggestedAt, undefined);
+  assert.equal(out[1].status, "active"); // sibling untouched
+  assert.equal(result!.id, "note-med"); // same note — never deleted
+  assert.equal(result!.text, "med note");
+});
+
+run("applyDismiss: legacy note (no meds array) dismisses the whole note, keeps the note", () => {
+  const note = makeMedNote([], { medications: undefined });
+  const result = applyDismiss(note, 0, 3_000);
+  assert.equal(result!.workflowStatus, "dismissed");
+  assert.equal(result!.id, "note-med");
+  assert.equal(result!.text, "med note"); // not deleted
+});
+
+run("applyReactivate: a dismissed med returns to active and recomputes nextSuggestedAt", () => {
+  const note = makeMedNote([
+    { name: "ibuprofen", status: "dismissed", lastTakenAt: 1_000, recommendedIntervalHours: 6 },
+  ]);
+  const result = applyReactivate(note, 0, 9_999);
+  const med = result!.workflowMetadata!.medications![0];
+  assert.equal(med.status, "active");
+  assert.equal(med.nextSuggestedAt, 1_000 + 6 * 3_600_000);
+});
+
+// ── Notes / sync: checksum only tracks identity fields ──────────────────────
+
+run("computeChecksum ignores content/title changes (tracks only id/updatedAt/deletedAt)", () => {
+  const a = { id: "n1", updatedAt: 1000, deletedAt: undefined, text: "hello", title: "A" };
+  const b = { id: "n1", updatedAt: 1000, deletedAt: undefined, text: "WORLD", title: "Z" };
+  assert.equal(computeNotesChecksum([a] as unknown as NoteItem[]), computeNotesChecksum([b] as unknown as NoteItem[]));
 });
 
 console.log("\n-------------------");
