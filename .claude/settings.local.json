@@ -38,7 +38,8 @@
     ],
     "additionalDirectories": [
       "c:\\Users\\X1\\Downloads\\scan\\scan\\.claude",
-      "\\tmp"
+      "\\tmp",
+      "C:\\Users\\X1\\Downloads\\scan\\scan\\.git"
     ]
   }
 }

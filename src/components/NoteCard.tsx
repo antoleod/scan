@@ -574,6 +574,28 @@ function NoteCardBase({
                   textAlignVertical: 'top',
                 }}
               />
+            ) : note.smartType === 'medication' || note.smartType === 'shopping' ? (
+              // A persisted smartType (set at creation by the classifier) takes
+              // priority over re-detected entities/ServiceNow. Otherwise a med or
+              // shopping note that merely MENTIONS an IP/office/ticket would lose
+              // its MedicationCard/ShoppingList to the generic entity block.
+              <NoteContentRenderer
+                note={note}
+                expanded={expanded}
+                smartNoteModel={model}
+                shoppingModel={shoppingModel}
+                preview={preview}
+                palette={palette}
+                onRawTextChange={onChangeEditingText}
+                onPressOffice={onPressOffice}
+                onCopyValue={onCopyValue}
+                onMedicationComplete={() => onUpdateWorkflowStatus?.(note.id, 'completed')}
+                onMedicationDismiss={() => onUpdateWorkflowStatus?.(note.id, 'dismissed')}
+                onMedicationTaken={onMedicationTaken ? (idx) => onMedicationTaken(note.id, idx) : undefined}
+                onMedicationSnooze={onMedicationSnooze ? (idx, ms) => onMedicationSnooze(note.id, idx, ms) : undefined}
+                onMedicationDismissCycle={onMedicationDismissCycle ? (idx) => onMedicationDismissCycle(note.id, idx) : undefined}
+                onMedicationReactivate={onMedicationReactivate ? (idx) => onMedicationReactivate(note.id, idx) : undefined}
+              />
             ) : sfModel.isStructured ? (
               <ServiceNowBlock
                 sfModel={sfModel}

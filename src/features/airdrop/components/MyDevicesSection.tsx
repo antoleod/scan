@@ -8,7 +8,7 @@ import { AirdropCard } from './AirdropCard';
 import { iconForFile } from './FileChip';
 import { TransferProgressView } from './TransferProgressView';
 import { useSession, useTransfer, useUserShares } from '../hooks/useAirdrop';
-import { joinUserShare, cancelSession } from '../sessions/sessionService';
+import { joinUserShare, cancelSession, dismissSession } from '../sessions/sessionService';
 import { formatBytes } from '../utils/format';
 import type { ReceiverHandlers } from '../transfer/transferService';
 import type { UserShare } from '../types';
@@ -181,7 +181,11 @@ function ShareRow({
             </Pressable>
           ) : (
             <Pressable
-              onPress={onDone}
+              onPress={() => {
+                // Dismiss the finished session to clean up store state, then reset.
+                void dismissSession(share.sessionId).catch(() => undefined);
+                onDone();
+              }}
               accessibilityRole="button"
               accessibilityLabel="Done"
               style={({ pressed }) => ({

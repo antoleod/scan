@@ -131,21 +131,51 @@ export function ReceiveScreen({
     const transferring =
       transfer && (transfer.status === 'active' || transfer.status === 'done');
     const showConfirm = offer && (!transfer || transfer.status === 'offered');
+    // Only call it "Connected" once the WebRTC channel is actually up — status
+    // is 'pairing' immediately after join, before the handshake completes.
+    const isConnected =
+      session.status === 'connected' ||
+      session.status === 'transferring' ||
+      session.status === 'completed';
+    const isErrored = session.status === 'error';
 
     return (
       <ScrollView contentContainerStyle={{ flexGrow: 1, padding: 18, gap: 16, paddingBottom: 130 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-          <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#22C55E' }} />
-          <Text style={{ color: palette.fg, fontSize: 16, fontWeight: '800' }}>Connected</Text>
+          <View
+            style={{
+              width: 8,
+              height: 8,
+              borderRadius: 4,
+              backgroundColor: isErrored ? '#EF4444' : isConnected ? '#22C55E' : '#F59E0B',
+            }}
+          />
+          <Text style={{ color: palette.fg, fontSize: 16, fontWeight: '800' }}>
+            {isErrored ? 'Connection failed' : isConnected ? 'Connected' : 'Connecting…'}
+          </Text>
         </View>
+
+        {/* Surface a connection error (WebRTC failed / peer left) — otherwise the
+            user waits forever with no feedback. session.error is set by onPeerState. */}
+        {isErrored ? (
+          <ErrorBanner
+            palette={palette}
+            message={session.error ?? 'Connection failed (the network may block direct transfer).'}
+            onDismiss={() => void leave()}
+          />
+        ) : null}
+
+        {!isErrored && !isConnected ? (
+          <PairingIndicator palette={palette} />
+        ) : null}
 
         {offer ? (
           <FileChip palette={palette} name={offer.name} size={offer.size} mimeType={offer.mimeType} />
-        ) : (
+        ) : !isErrored && isConnected ? (
           <Text style={{ color: palette.muted, fontSize: 13 }}>
             Waiting for the sender to offer a file…
           </Text>
-        )}
+        ) : null}
 
         {showConfirm ? (
           <AirdropCard palette={palette} accent>

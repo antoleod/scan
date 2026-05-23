@@ -92,7 +92,7 @@ export function AirDropScreen({ palette }: { palette: Palette }) {
             {self?.name ?? 'AirDrop'}
           </Text>
           <Text style={{ color: palette.muted, fontSize: 13 }}>
-            {self ? 'Visible to nearby devices' : 'Discovering your identity…'}
+            {self ? 'Ready to share via QR or your account' : 'Discovering your identity…'}
           </Text>
         </View>
 
