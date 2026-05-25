@@ -33,6 +33,38 @@ type ThemeOption = {
 type BarcodeOption = { name: string; label: string; description: string; hardwareOnly: boolean };
 type SupportedTheme = AppSettings['theme'];
 type AppThemeName = 'euBlue' | 'dark' | 'light' | 'parliament' | 'custom' | 'noirGraphite' | 'midnightSteel' | 'obsidianGold';
+type SettingsSectionId =
+  | 'password'
+  | 'theme'
+  | 'scan'
+  | 'notes-features'
+  | 'smart-notes'
+  | 'security'
+  | 'clipboard'
+  | 'shared-groups'
+  | 'pwa'
+  | 'barcode'
+  | 'cleanup'
+  | 'data-sync'
+  | 'diagnostics'
+  | 'advanced';
+
+const SECTION_SEARCH: Record<SettingsSectionId, string> = {
+  password: 'password generator private note copy save key',
+  theme: 'theme selector color palette custom accent dark light noir',
+  scan: 'scan options auto detect open url ocr correction camera',
+  'notes-features': 'notes features smart type medication shopping reminder draft',
+  'smart-notes': 'smart notes entity detection ip hostname office pi regex',
+  security: 'security pin private notes vault lock',
+  clipboard: 'clipboard cloud sync background capture paste',
+  'shared-groups': 'shared groups invite code join create notes',
+  pwa: 'pwa install desktop browser diagnostics',
+  barcode: 'barcode formats qr code128 code39 ean scan types',
+  cleanup: 'auto cleanup retention notes history archive delete',
+  'data-sync': 'data sync backup export import firebase cloud local clear hard delete',
+  diagnostics: 'production logs diagnostics logger errors warn info copy export clear behavior buttons functions',
+  advanced: 'advanced prefixes urls servicenow raw text stay signed laser profile',
+};
 
 const PASSWORD_WORDS = ['choco', 'milk', 'sun', 'river', 'cloud', 'mint', 'lemon', 'tiger', 'magic', 'honey', 'rocket', 'ocean', 'forest', 'happy', 'coffee', 'pixel', 'anchor', 'velvet'];
 const SYMBOLS = ['!', '@', '#', '$', '%', '&', '*', '?'];
@@ -129,6 +161,7 @@ function useSectionState(sectionIds: string[], initial?: Record<string, boolean>
 }
 
 function SectionCard({
+  visible = true,
   open,
   onToggle,
   title,
@@ -142,6 +175,7 @@ function SectionCard({
   cardBorder,
   children,
 }: {
+  visible?: boolean;
   open: boolean;
   onToggle: () => void;
   title: string;
@@ -155,6 +189,8 @@ function SectionCard({
   cardBorder: string;
   children: React.ReactNode;
 }) {
+  if (!visible) return null;
+
   const badgeColors: Record<NonNullable<typeof badgeTone>, { bg: string; fg: string }> = {
     success: { bg: 'rgba(34,197,94,0.16)', fg: '#22c55e' },
     warn:    { bg: 'rgba(245,158,11,0.16)', fg: '#f59e0b' },
@@ -301,8 +337,9 @@ export function SettingsTab({
   const [pinExists, setPinExists] = useState(false);
   const [diagnosticLogs, setDiagnosticLogs] = useState<LogEntry[]>([]);
   const [diagnosticFilter, setDiagnosticFilter] = useState<'all' | LogEntry['level']>('all');
+  const [settingsSearch, setSettingsSearch] = useState('');
 
-  const SECTION_IDS = useMemo<string[]>(() => [
+  const SECTION_IDS = useMemo<SettingsSectionId[]>(() => [
     'password',
     'theme',
     'scan',
@@ -327,6 +364,12 @@ export function SettingsTab({
     'smart-notes': true,
   }), []);
   const { state: sectionOpen, toggle: toggleSection, setAll: setAllSections, openCount, total: totalSections } = useSectionState(SECTION_IDS, DEFAULT_OPEN);
+  const normalizedSettingsSearch = settingsSearch.trim().toLowerCase();
+  const matchedSectionIds = useMemo(() => {
+    if (!normalizedSettingsSearch) return SECTION_IDS;
+    return SECTION_IDS.filter((id) => `${id} ${SECTION_SEARCH[id]}`.includes(normalizedSettingsSearch));
+  }, [SECTION_IDS, normalizedSettingsSearch]);
+  const matchesSection = useCallback((id: SettingsSectionId) => matchedSectionIds.includes(id), [matchedSectionIds]);
 
   useEffect(() => diag.subscribe(setDiagnosticLogs), []);
 
@@ -362,6 +405,12 @@ export function SettingsTab({
       : diagnosticLogs.filter((entry) => entry.level === diagnosticFilter);
     return source.slice(-80).reverse();
   }, [diagnosticFilter, diagnosticLogs]);
+
+  useEffect(() => {
+    if (!normalizedSettingsSearch || matchedSectionIds.length !== 1) return;
+    const id = matchedSectionIds[0];
+    if (!sectionOpen[id]) toggleSection(id);
+  }, [matchedSectionIds, normalizedSettingsSearch, sectionOpen, toggleSection]);
 
   useEffect(() => {
     let cancelled = false;
@@ -687,8 +736,10 @@ export function SettingsTab({
         <View style={[styles.toolbar, { backgroundColor: palette.card, borderColor: palette.border }]}>
           <View style={styles.toolbarLeft}>
             <View style={[styles.toolbarPill, { borderColor: `${activeAccent}55`, backgroundColor: `${activeAccent}14` }]}>
-              <Ionicons name="options-outline" size={12} color={activeAccent} />
-              <Text style={[styles.toolbarPillText, { color: activeAccent }]}>{openCount}/{totalSections} OPEN</Text>
+              <Ionicons name={normalizedSettingsSearch ? 'search-outline' : 'options-outline'} size={12} color={activeAccent} />
+              <Text style={[styles.toolbarPillText, { color: activeAccent }]}>
+                {normalizedSettingsSearch ? `${matchedSectionIds.length} FOUND` : `${openCount}/${totalSections} OPEN`}
+              </Text>
             </View>
           </View>
           <View style={styles.toolbarRight}>
@@ -711,7 +762,41 @@ export function SettingsTab({
           </View>
         </View>
 
+        <View style={[styles.searchBox, { backgroundColor: palette.card, borderColor: palette.border }]}>
+          <Ionicons name="search-outline" size={16} color={palette.muted} />
+          <TextInput
+            value={settingsSearch}
+            onChangeText={setSettingsSearch}
+            placeholder="Search settings, logs, OCR, Firebase..."
+            placeholderTextColor={palette.muted}
+            autoCapitalize="none"
+            autoCorrect={false}
+            accessibilityLabel="Search settings"
+            style={[styles.searchInput, { color: palette.fg }]}
+          />
+          {settingsSearch ? (
+            <Pressable
+              onPress={() => setSettingsSearch('')}
+              accessibilityRole="button"
+              accessibilityLabel="Clear settings search"
+              hitSlop={8}
+              style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}
+            >
+              <Ionicons name="close-circle" size={18} color={palette.muted} />
+            </Pressable>
+          ) : null}
+        </View>
+
+        {normalizedSettingsSearch && matchedSectionIds.length === 0 ? (
+          <View style={[styles.emptySearch, { backgroundColor: palette.card, borderColor: palette.border }]}>
+            <Ionicons name="search-outline" size={20} color={palette.muted} />
+            <Text style={{ color: palette.fg, fontSize: 13, fontWeight: '700' }}>No settings found</Text>
+            <Text style={{ color: palette.muted, fontSize: 11, textAlign: 'center' }}>Try logs, OCR, backup, Firebase, PIN or barcode.</Text>
+          </View>
+        ) : null}
+
         <SectionCard
+          visible={matchesSection('password')}
           open={sectionOpen['password']}
           onToggle={() => toggleSettingsSection('password')}
           title="Password generator"
@@ -791,6 +876,7 @@ export function SettingsTab({
         </SectionCard>
 
         <SectionCard
+          visible={matchesSection('theme')}
           open={sectionOpen['theme']}
           onToggle={() => toggleSettingsSection('theme')}
           title="Theme selector"
@@ -822,6 +908,7 @@ export function SettingsTab({
         </SectionCard>
 
         <SectionCard
+          visible={matchesSection('scan')}
           open={sectionOpen['scan']}
           onToggle={() => toggleSettingsSection('scan')}
           title="Scan options"
@@ -838,6 +925,7 @@ export function SettingsTab({
         </SectionCard>
 
         <SectionCard
+          visible={matchesSection('notes-features')}
           open={sectionOpen['notes-features']}
           onToggle={() => toggleSettingsSection('notes-features')}
           title="Notes features"
@@ -899,6 +987,7 @@ export function SettingsTab({
         </SectionCard>
 
         <SectionCard
+          visible={matchesSection('smart-notes')}
           open={sectionOpen['smart-notes']}
           onToggle={() => toggleSettingsSection('smart-notes')}
           title="Smart notes"
@@ -1080,6 +1169,7 @@ export function SettingsTab({
         </SectionCard>
 
         <SectionCard
+          visible={matchesSection('security')}
           open={sectionOpen['security']}
           onToggle={() => toggleSettingsSection('security')}
           title="Security"
@@ -1132,6 +1222,7 @@ export function SettingsTab({
         </SectionCard>
 
         <SectionCard
+          visible={matchesSection('clipboard')}
           open={sectionOpen['clipboard']}
           onToggle={() => toggleSettingsSection('clipboard')}
           title="Clipboard"
@@ -1169,6 +1260,7 @@ export function SettingsTab({
         </SectionCard>
 
         <SectionCard
+          visible={matchesSection('shared-groups')}
           open={sectionOpen['shared-groups']}
           onToggle={() => toggleSettingsSection('shared-groups')}
           title="Shared groups"
@@ -1221,6 +1313,7 @@ export function SettingsTab({
 
         {Platform.OS === 'web' ? (
           <SectionCard
+            visible={matchesSection('pwa')}
             open={sectionOpen['pwa']}
             onToggle={() => toggleSettingsSection('pwa')}
             title="PWA"
@@ -1284,6 +1377,7 @@ export function SettingsTab({
         ) : null}
 
         <SectionCard
+          visible={matchesSection('barcode')}
           open={sectionOpen['barcode']}
           onToggle={() => toggleSettingsSection('barcode')}
           title="Barcode formats"
@@ -1311,6 +1405,7 @@ export function SettingsTab({
         </SectionCard>
 
         <SectionCard
+          visible={matchesSection('cleanup')}
           open={sectionOpen['cleanup']}
           onToggle={() => toggleSettingsSection('cleanup')}
           title="Auto-cleanup"
@@ -1570,6 +1665,7 @@ export function SettingsTab({
         </SectionCard>
 
         <SectionCard
+          visible={matchesSection('data-sync')}
           open={sectionOpen['data-sync']}
           onToggle={() => toggleSettingsSection('data-sync')}
           title="Data + Sync"
@@ -1599,6 +1695,7 @@ export function SettingsTab({
         </SectionCard>
 
         <SectionCard
+          visible={matchesSection('diagnostics')}
           open={sectionOpen['diagnostics']}
           onToggle={() => toggleSettingsSection('diagnostics')}
           title="Production logs"
@@ -1674,6 +1771,7 @@ export function SettingsTab({
         </SectionCard>
 
         <SectionCard
+          visible={matchesSection('advanced')}
           open={sectionOpen['advanced']}
           onToggle={() => toggleSettingsSection('advanced')}
           title="Advanced"
@@ -1821,6 +1919,9 @@ const styles = StyleSheet.create({
   toolbarPillText: { fontSize: 10, fontWeight: '900', letterSpacing: 1, fontFamily: 'monospace' },
   toolbarBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, borderWidth: 1, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 },
   toolbarBtnText: { fontSize: 11, fontWeight: '800', letterSpacing: 0.5 },
+  searchBox: { minHeight: 46, borderWidth: 1, borderRadius: 12, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  searchInput: { flex: 1, minWidth: 0, fontSize: 13, paddingVertical: 10 },
+  emptySearch: { borderWidth: 1, borderRadius: 12, padding: 16, alignItems: 'center', gap: 8 },
   toggleHint: { fontSize: 11, lineHeight: 15, marginTop: 2 },
   statusRow: { flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1, borderRadius: 12, padding: 12 },
   statusTitle: { fontSize: 13, fontWeight: '700' },
