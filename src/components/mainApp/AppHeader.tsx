@@ -80,7 +80,11 @@ function SyncChip({
 
   if (syncBusy) {
     return (
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+      <View
+        accessibilityRole="progressbar"
+        accessibilityLabel="Sync in progress"
+        style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}
+      >
         <ActivityIndicator size={12} color={accent} />
         <Text style={{ color: accent, fontSize: 11 }}>sync…</Text>
       </View>
@@ -88,7 +92,15 @@ function SyncChip({
   }
 
   return (
-    <Pressable onPress={onPress} hitSlop={10} onPressIn={() => setPressed(true)} onPressOut={() => setPressed(false)} style={{ flexDirection: 'row', alignItems: 'center', gap: 4, opacity: pressed ? 0.85 : 1 }}>
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={persistenceMode === 'firebase' ? 'Sync now' : 'Local storage status'}
+      hitSlop={10}
+      onPressIn={() => setPressed(true)}
+      onPressOut={() => setPressed(false)}
+      style={{ flexDirection: 'row', alignItems: 'center', gap: 4, opacity: pressed ? 0.85 : 1 }}
+    >
       <Animated.View style={{ opacity: fadeAnim, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
         <Ionicons name="sync-circle-outline" size={14} color={accent} />
         <Text style={{ color: muted, fontSize: 11 }}>
@@ -156,6 +168,9 @@ export function AppHeader({
 
           <Pressable
             onPress={onToggleProfileMenu}
+            accessibilityRole="button"
+            accessibilityLabel="Open profile menu"
+            accessibilityState={{ expanded: profileMenuVisible }}
             hitSlop={8}
             style={{ flexDirection: 'row', alignItems: 'center', gap: 6, maxWidth: 160, flexShrink: 1 }}
           >

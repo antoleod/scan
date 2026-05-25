@@ -29,6 +29,7 @@ import { Ionicons } from '@expo/vector-icons';
 import {
   ShoppingItemV2,
   ShoppingListV2,
+  parseShoppingListV2,
   getCategoryLabel,
   getCategoryEmoji,
   shoppingListV2ToText,
@@ -712,7 +713,6 @@ function QtyEditorSheet({
 
 function MenuButton({
   palette,
-  onPrices,
   onShare,
   onEditRaw,
   onReset,
@@ -721,7 +721,6 @@ function MenuButton({
   hasChecked,
 }: {
   palette: Palette;
-  onPrices: () => void;
   onShare: () => void;
   onEditRaw: () => void;
   onReset: () => void;
@@ -735,6 +734,9 @@ function MenuButton({
     <>
       <Pressable
         onPress={() => setShowMenu(!showMenu)}
+        accessibilityRole="button"
+        accessibilityLabel="Open shopping list actions"
+        accessibilityState={{ expanded: showMenu }}
         style={({ pressed }) => ({
           width: 32,
           height: 32,
@@ -762,14 +764,6 @@ function MenuButton({
             zIndex: 100,
           }}
         >
-          <MenuItem
-            icon="pricetag-outline"
-            label="Prices"
-            onPress={() => {
-              setShowMenu(false);
-              onPrices();
-            }}
-          />
           <MenuItem
             icon="share-social-outline"
             label="Share list"
@@ -824,6 +818,8 @@ function MenuItem({
   return (
     <Pressable
       onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={label}
       style={({ pressed }) => ({
         flexDirection: 'row',
         alignItems: 'center',
@@ -1077,6 +1073,8 @@ export function ShoppingListBlockV2({
   const [favorites, setFavorites] = useState<FavoriteItem[]>([]);
   const [qtyMemory, setQtyMemory] = useState<Record<string, { qty: number; unit: string }>>({});
   const [templateModalVisible, setTemplateModalVisible] = useState(false);
+  const [rawEditorVisible, setRawEditorVisible] = useState(false);
+  const [rawEditorText, setRawEditorText] = useState('');
   const [allDoneBannerVisible, setAllDoneBannerVisible] = useState(false);
   const [duplicateWarning, setDuplicateWarning] = useState<ShoppingItemV2 | null>(null);
   const [qtyEditorInitialQty, setQtyEditorInitialQty] = useState<number | undefined>();
@@ -1199,6 +1197,18 @@ export function ShoppingListBlockV2({
     setItems(next);
     onRawTextChange(shoppingListV2ToText(next));
   }, [items, onRawTextChange]);
+
+  const handleOpenRawEditor = useCallback(() => {
+    setRawEditorText(shoppingListV2ToText(items));
+    setRawEditorVisible(true);
+  }, [items]);
+
+  const handleSaveRawEditor = useCallback(() => {
+    const parsed = parseShoppingListV2(rawEditorText, model.language);
+    setItems(parsed.items);
+    onRawTextChange(shoppingListV2ToText(parsed.items));
+    setRawEditorVisible(false);
+  }, [model.language, onRawTextChange, rawEditorText]);
 
   const handleResetAll = useCallback(() => {
     const next = items.map((it) => ({ ...it, checked: false }));
@@ -1592,9 +1602,8 @@ export function ShoppingListBlockV2({
 
         <MenuButton
           palette={palette}
-          onPrices={() => { /* TODO: implement prices */ }}
           onShare={handleShare}
-          onEditRaw={() => { /* TODO: implement edit raw */ }}
+          onEditRaw={handleOpenRawEditor}
           onReset={handleResetAll}
           onClearDone={handleClearDone}
           onLoadTemplate={() => setTemplateModalVisible(true)}
@@ -1828,6 +1837,96 @@ export function ShoppingListBlockV2({
         onClose={() => setTemplateModalVisible(false)}
         onSelect={handleLoadTemplate}
       />
+
+      <Modal visible={rawEditorVisible} transparent animationType="fade" onRequestClose={() => setRawEditorVisible(false)}>
+        <View
+          style={{
+            flex: 1,
+            backgroundColor: 'rgba(0,0,0,0.5)',
+            justifyContent: 'center',
+            padding: 16,
+          }}
+        >
+          <View
+            style={{
+              backgroundColor: palette.surface,
+              borderRadius: 16,
+              borderWidth: 1,
+              borderColor: palette.border,
+              padding: 16,
+              gap: 12,
+              maxWidth: 520,
+              width: '100%',
+              alignSelf: 'center',
+            }}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+              <Text style={{ color: palette.textBody, fontSize: 16, fontWeight: '700' }}>Edit raw list</Text>
+              <Pressable
+                onPress={() => setRawEditorVisible(false)}
+                accessibilityRole="button"
+                accessibilityLabel="Close raw list editor"
+                hitSlop={8}
+              >
+                <Ionicons name="close" size={20} color={palette.textDim} />
+              </Pressable>
+            </View>
+            <TextInput
+              value={rawEditorText}
+              onChangeText={setRawEditorText}
+              multiline
+              autoFocus={Platform.OS === 'web'}
+              placeholder="One item per line"
+              placeholderTextColor={palette.textDim}
+              style={{
+                minHeight: 180,
+                maxHeight: 340,
+                borderWidth: 1,
+                borderColor: palette.border,
+                borderRadius: 12,
+                color: palette.textBody,
+                backgroundColor: palette.surfaceAlt,
+                paddingHorizontal: 12,
+                paddingVertical: 10,
+                textAlignVertical: 'top',
+                fontSize: 13,
+                lineHeight: 18,
+              }}
+            />
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+              <Pressable
+                onPress={() => setRawEditorVisible(false)}
+                style={({ pressed }) => ({
+                  flex: 1,
+                  minHeight: 44,
+                  borderRadius: 10,
+                  borderWidth: 1,
+                  borderColor: palette.border,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  opacity: pressed ? 0.75 : 1,
+                })}
+              >
+                <Text style={{ color: palette.textBody, fontSize: 12, fontWeight: '700' }}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                onPress={handleSaveRawEditor}
+                style={({ pressed }) => ({
+                  flex: 1,
+                  minHeight: 44,
+                  borderRadius: 10,
+                  backgroundColor: CART,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  opacity: pressed ? 0.82 : 1,
+                })}
+              >
+                <Text style={{ color: '#fff', fontSize: 12, fontWeight: '800' }}>Apply</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }

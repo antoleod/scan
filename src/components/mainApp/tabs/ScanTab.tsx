@@ -455,12 +455,15 @@ const styles = StyleSheet.create({
   },
   modeRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 8,
     marginHorizontal: 16,
     marginBottom: 4,
   },
   modeBtn: {
     flex: 1,
+    flexBasis: '31%',
+    minWidth: 96,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',

@@ -49,6 +49,8 @@ export function ProfileMenu({
       >
         <Pressable
           onPress={() => undefined}
+          accessibilityRole="menu"
+          accessibilityLabel="Profile menu"
           style={{
             position: 'absolute',
             top: 56,
@@ -80,6 +82,8 @@ export function ProfileMenu({
               <Pressable
                 key={index}
                 onPress={() => handleMenuPress(item.onPress)}
+                accessibilityRole="menuitem"
+                accessibilityLabel={item.label}
                 style={({ pressed }) => ({
                   flexDirection: 'row',
                   alignItems: 'center',

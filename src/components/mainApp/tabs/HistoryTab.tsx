@@ -405,7 +405,12 @@ export function HistoryTab({
             </View>
 
             <View style={[mainAppStyles.filterRow, { marginTop: 0, flexWrap: 'nowrap', alignItems: 'center' }]}>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, paddingRight: 8 }}>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={{ flex: 1, minWidth: 0 }}
+                contentContainerStyle={{ gap: 6, paddingRight: 8 }}
+              >
                 {PRIMARY_FILTERS.map((type) => (
                   <Pressable
                     key={type}

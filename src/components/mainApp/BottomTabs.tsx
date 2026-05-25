@@ -52,6 +52,9 @@ export function BottomTabs({
               {idx === 2 && <View style={{ flex: 1.2 }} />} {/* Spacer para el FAB del centro */}
               <Pressable
                 onPress={() => onTabPress(tab.key)}
+                accessibilityRole="tab"
+                accessibilityLabel={tab.label}
+                accessibilityState={{ selected: active }}
                 style={({ pressed }) => ({
                   flex: 1,
                   alignItems: 'center',
@@ -75,6 +78,8 @@ export function BottomTabs({
       <View pointerEvents="box-none" style={{ position: 'absolute', left: 0, right: 0, top: -14, alignItems: 'center' }}>
         <Pressable
           onPress={onAdd}
+          accessibilityRole="button"
+          accessibilityLabel="Add new item"
           hitSlop={10}
           style={({ pressed }) => ({
             width: 56,
