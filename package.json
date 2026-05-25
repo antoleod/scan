@@ -12,7 +12,7 @@
     "build:web": "expo export --platform web && node scripts/inject-pwa.js",
     "postexport": "node scripts/inject-pwa.js",
     "typecheck": "tsc --noEmit",
-    "test": "tsc -p tsconfig.tests.json && node .test-dist/tests/run-tests.js"
+    "test": "tsc -p tsconfig.tests.json && node .test-dist/tests/run-tests.js && node scripts/audit-ui-actions.js"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.2",

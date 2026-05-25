@@ -40,7 +40,7 @@ export const ComposerSection = forwardRef<TextInput, {
   onChangeGroup: (groupId: string) => void;
   onChangeText: (value: string) => void;
   onGenerate: () => void;
-  onOcr?: () => void;
+  onOcr: () => void;
   onAddImage: () => void;
   onTakePhoto: () => void;
   onPasteImage: () => void;
@@ -364,7 +364,7 @@ export const ComposerSection = forwardRef<TextInput, {
                   <Text style={{ color: palette.textBody, fontSize: 11, fontWeight: '600', textAlign: 'center' }}>OCR</Text>
                 </View>
               )}
-              <ThemedActionIconButton icon="text-recognition" label="OCR" accentColor="#4DA3FF" onPress={onOcr ?? (() => {})} onHoverIn={() => setHoveredAction('ocr')} onHoverOut={() => setHoveredAction((current) => (current === 'ocr' ? null : current))} palette={palette} compact={isCompact} entranceDelay={120} />
+              <ThemedActionIconButton icon="text-recognition" label="OCR" accentColor="#4DA3FF" onPress={onOcr} onHoverIn={() => setHoveredAction('ocr')} onHoverOut={() => setHoveredAction((current) => (current === 'ocr' ? null : current))} palette={palette} compact={isCompact} entranceDelay={120} />
             </View>
 
             <View style={{ alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
