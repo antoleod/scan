@@ -26,6 +26,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as Clipboard from 'expo-clipboard';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 
 import { AppSettings, BootStatus, PersistenceMode, ScanRecord, ScanState, Tab, TemplateRule, isValidTab } from '../types';
@@ -53,6 +54,7 @@ import { filterAndSortHistory, HistorySort } from '../core/smartSearch';
 import { playSuccessfulScanFeedback } from '../core/feedback';
 import { useAuth } from '../auth/useAuth';
 import { AppHeader } from '../components/mainApp/AppHeader';
+import { CommandPalette, type CommandPaletteItem } from '../components/mainApp/CommandPalette';
 import { AppLayout } from '../components/mainApp/AppLayout';
 import { BarcodeModal } from '../components/mainApp/BarcodeModal';
 import { BottomTabs } from '../components/mainApp/BottomTabs';
@@ -68,7 +70,7 @@ import { ScanHistoryToggle } from '../components/mainApp/ScanHistoryToggle';
 import { AirDropScreen } from '../features/airdrop';
 import { SelectionFooter } from '../components/mainApp/SelectionFooter';
 import { SettingsTab } from '../components/mainApp/tabs/SettingsTab';
-import { hardDeleteAllNotes, hardDeleteAllTemplates, clearArchivedNotes, clearUnpinnedNotes, clearNotesOlderThan, loadNotes, saveNotes as saveWorkNotes, saveTemplates as saveNoteTemplates } from '../core/notes';
+import { hardDeleteAllNotes, hardDeleteAllTemplates, clearArchivedNotes, clearUnpinnedNotes, clearNotesOlderThan, loadNotes, saveNotes as saveWorkNotes, saveTemplates as saveNoteTemplates, type NoteItem } from '../core/notes';
 import { clearClipboardEntries, reinitClipboardFirebaseSync } from '../core/clipboard';
 import { Toast, useToast } from '../components/Toast';
 import { BatchSessionModal } from '../components/mainApp/BatchSessionModal';
@@ -104,6 +106,8 @@ const SCAN_TUNING = {
   cooldownAfterDuplicateMs: 320, // was 500
   cooldownAfterSuccessMs: 500,  // was 700 — ready for next scan sooner
 };
+
+const LAST_BACKUP_AT_KEY = '@MyKit_last_backup_at';
 
 class SimpleErrorBoundary extends React.Component<{ children: React.ReactNode }, { error: Error | null; componentStack: string }> {
   constructor(props: { children: React.ReactNode }) {
@@ -199,7 +203,11 @@ function MainApp() {
   const [backupImportVisible, setBackupImportVisible] = useState(false);
   const [backupImportText, setBackupImportText] = useState('');
   const [backupBusy, setBackupBusy] = useState(false);
+  const [lastBackupAt, setLastBackupAt] = useState<number | null>(null);
   const [profileMenuVisible, setProfileMenuVisible] = useState(false);
+  const [commandPaletteVisible, setCommandPaletteVisible] = useState(false);
+  const [commandPaletteQuery, setCommandPaletteQuery] = useState('');
+  const [commandPaletteNotes, setCommandPaletteNotes] = useState<NoteItem[]>([]);
 
   const { toast, show: showToast, hide: hideToast } = useToast();
 
@@ -210,6 +218,43 @@ function MainApp() {
       mode: __DEV__ ? 'development' : 'production',
     });
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    AsyncStorage.getItem(LAST_BACKUP_AT_KEY)
+      .then((raw) => {
+        if (cancelled) return;
+        const parsed = raw ? Number(raw) : NaN;
+        setLastBackupAt(Number.isFinite(parsed) ? parsed : null);
+      })
+      .catch(() => undefined);
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+    const handler = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault();
+        setCommandPaletteVisible(true);
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
+
+  useEffect(() => {
+    if (!commandPaletteVisible) return;
+    let cancelled = false;
+    loadNotes()
+      .then((notes) => {
+        if (!cancelled) setCommandPaletteNotes(notes.filter((note) => !note.deletedAt).slice(0, 80));
+      })
+      .catch(() => {
+        if (!cancelled) setCommandPaletteNotes([]);
+      });
+    return () => { cancelled = true; };
+  }, [commandPaletteVisible]);
 
   // ── Batch mode ─────────────────────────────────────────────────────────────
   const [batchMode, setBatchMode] = useState(false);
@@ -1027,6 +1072,15 @@ function MainApp() {
   async function exportBackup() {
     const bundle = buildBackupBundle({ settings, templates, history });
     const json = serializeBackupBundle(bundle);
+    const exportedAt = Date.now();
+
+    await AsyncStorage.setItem(LAST_BACKUP_AT_KEY, String(exportedAt)).catch(() => undefined);
+    setLastBackupAt(exportedAt);
+    void diag.info('backup.exported', {
+      history: history.length,
+      templates: templates.length,
+      bytes: json.length,
+    });
 
     if (Platform.OS === 'web') {
       const blob = new Blob([json], { type: 'application/json' });
@@ -1678,6 +1732,54 @@ function MainApp() {
     });
   }, [history, query, filterType, dateFilter, selectedDate, historySort]);
 
+  const commandPaletteItems = useMemo<CommandPaletteItem[]>(() => {
+    const navigate = (tab: Tab) => () => setActiveTab(tab);
+    const baseItems: CommandPaletteItem[] = [
+      { id: 'nav-notes', title: 'Open Notes', subtitle: 'Saved notes and OCR tools', icon: 'document-text-outline', keywords: 'notes ocr draft private', onPress: navigate('notes') },
+      { id: 'nav-scan', title: 'Open Scanner', subtitle: 'Camera, image scan, NFC and batch mode', icon: 'scan-outline', keywords: 'scan camera barcode qr nfc batch', onPress: navigate('scan') },
+      { id: 'nav-history', title: 'Open History', subtitle: `${history.length} scan record(s)`, icon: 'time-outline', keywords: 'history records search filter', onPress: navigate('history') },
+      { id: 'nav-airdrop', title: 'Open AirDrop', subtitle: 'Local device sharing', icon: 'radio-outline', keywords: 'airdrop share transfer', onPress: navigate('airdrop') },
+      { id: 'nav-settings', title: 'Open Settings', subtitle: 'Preferences, logs, backup and maintenance', icon: 'settings-outline', keywords: 'settings logs health backup maintenance', onPress: navigate('settings') },
+      { id: 'cmd-backup', title: 'Export backup', subtitle: lastBackupAt ? `Last backup ${new Date(lastBackupAt).toLocaleString()}` : 'Create a local JSON backup', icon: 'cloud-upload-outline', keywords: 'backup export json local', onPress: () => { void exportBackup(); } },
+      { id: 'cmd-sync', title: syncBusy ? 'Sync in progress' : 'Sync now', subtitle: persistenceMode === 'firebase' ? 'Push/pull Firebase data' : 'Refresh local mode status', icon: 'sync-outline', keywords: 'sync firebase cloud', onPress: () => { if (!syncBusy) void syncNow(false); } },
+      { id: 'cmd-logs', title: 'Copy production logs', subtitle: 'Copy local behavior logs to clipboard', icon: 'bug-outline', keywords: 'logs diagnostics buttons functions', onPress: () => { void copyLogs(); } },
+      { id: 'cmd-health', title: 'Open Health Status', subtitle: 'Runtime, backup, logs and persistence status', icon: 'pulse-outline', keywords: 'health status maintenance', onPress: navigate('settings') },
+    ];
+
+    const historyItems = history.slice(0, 40).map((record): CommandPaletteItem => ({
+      id: `history-${record.id}`,
+      title: record.label || record.codeValue || record.codeNormalized || record.codeOriginal || 'Scan record',
+      subtitle: `History - ${visibleScanType(record.type)} - ${record.source}`,
+      icon: 'barcode-outline',
+      keywords: `${record.codeOriginal} ${record.codeNormalized} ${record.ticketNumber ?? ''} ${record.notes ?? ''} ${record.officeCode ?? ''}`,
+      onPress: () => {
+        setQuery(record.codeValue || record.codeNormalized || record.codeOriginal || '');
+        setFilterType('ALL');
+        setActiveTab('history');
+      },
+    }));
+
+    const noteItems = commandPaletteNotes.slice(0, 40).map((note): CommandPaletteItem => ({
+      id: `note-${note.id}`,
+      title: note.title || note.text.split('\n')[0] || 'Untitled note',
+      subtitle: `Note - ${note.category}${note.pinned ? ' - pinned' : ''}${note.isSecret ? ' - private' : ''}`,
+      icon: note.isSecret ? 'lock-closed-outline' : 'document-outline',
+      keywords: `${note.text} ${note.smartType ?? ''} ${note.smartLabel ?? ''}`,
+      onPress: () => setActiveTab('notes'),
+    }));
+
+    const templateItems = templates.slice(0, 25).map((template): CommandPaletteItem => ({
+      id: `template-${template.id}`,
+      title: template.name || 'Template',
+      subtitle: `Template - ${template.type}`,
+      icon: 'albums-outline',
+      keywords: `${template.type} ${Object.values(template.regexRules).join(' ')} ${Object.values(template.mappingRules).join(' ')}`,
+      onPress: () => setActiveTab('settings'),
+    }));
+
+    return [...baseItems, ...historyItems, ...noteItems, ...templateItems];
+  }, [commandPaletteNotes, history, lastBackupAt, persistenceMode, settings, syncBusy, templates]);
+
   const cameraBarcodeTypes = useMemo(() => {
     const enabledTypes = settings.barcodeTypes || SCAN_BARCODE_TYPES;
     const mergedTypes = ['qr', ...enabledTypes.filter((type) => type !== 'qr')] as BarcodeType[];
@@ -1722,6 +1824,7 @@ function MainApp() {
           lastSyncedAt={lastSyncedAt}
           persistenceMode={persistenceMode}
           onSyncNow={() => syncNow(false)}
+          onOpenCommandPalette={() => setCommandPaletteVisible(true)}
           profileMenuVisible={profileMenuVisible}
           onToggleProfileMenu={() => setProfileMenuVisible((v) => !v)}
           profileMenuItems={[
@@ -1863,6 +1966,7 @@ function MainApp() {
               onHardDeleteTemplates={hardDeleteTemplatesNow}
               onClearArchivedNotes={clearArchivedNotesNow}
               onClearUnpinnedNotes={clearUnpinnedNotesNow}
+              lastBackupAt={lastBackupAt}
               syncBusy={syncBusy}
               userEmail={user?.email || null}
               userUidPrefix={user ? user.uid.substring(0, 8) : null}
@@ -1941,6 +2045,14 @@ function MainApp() {
         onImport={runBackupImport}
         onClose={() => setBackupImportVisible(false)}
       />
+        <CommandPalette
+          visible={commandPaletteVisible}
+          palette={palette}
+          query={commandPaletteQuery}
+          items={commandPaletteItems}
+          onQueryChange={setCommandPaletteQuery}
+          onClose={() => setCommandPaletteVisible(false)}
+        />
         <Toast toast={toast} onHide={hideToast} />
         <BatchSessionModal
           visible={batchModalVisible}

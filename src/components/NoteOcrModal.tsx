@@ -19,7 +19,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 
 import { detectNoteEntities } from '../core/smartNotes';
-import { blobToDataUrl, extractTextFromImage } from '../core/ocr';
+import { blobToDataUrl, extractTextFromImage, type OcrCropMode } from '../core/ocr';
 import { diag } from '../core/diagnostics';
 import { defaultSettings } from '../core/settings';
 import type { AppSettings } from '../types';
@@ -51,6 +51,12 @@ const FIELD_LABELS: { key: FieldKey; label: string; icon: string }[] = [
   { key: 'hostname', label: 'Hostnames', icon: 'server-outline' },
   { key: 'ip', label: 'IP addresses', icon: 'wifi-outline' },
   { key: 'office', label: 'Office codes', icon: 'business-outline' },
+];
+
+const CROP_OPTIONS: { key: OcrCropMode; label: string; icon: React.ComponentProps<typeof Ionicons>['name'] }[] = [
+  { key: 'full', label: 'Full', icon: 'expand-outline' },
+  { key: 'center', label: 'Center crop', icon: 'scan-outline' },
+  { key: 'top', label: 'Top crop', icon: 'crop-outline' },
 ];
 
 function buildNoteFromFields(rawText: string, fields: FieldState, settings: AppSettings): string {
@@ -85,8 +91,8 @@ function buildNoteFromFields(rawText: string, fields: FieldState, settings: AppS
   return parts.join('\n').trim();
 }
 
-async function runOcr(imageUri: string, onProgress?: (p: number) => void): Promise<string> {
-  const result = await extractTextFromImage(imageUri, { onProgress });
+async function runOcr(imageUri: string, cropMode: OcrCropMode, onProgress?: (p: number) => void): Promise<string> {
+  const result = await extractTextFromImage(imageUri, { cropMode, onProgress });
   return result.text;
 }
 
@@ -144,6 +150,7 @@ export function NoteOcrModal({ visible, palette, settings, onClose, onCreateNote
     office: true,
   });
   const [error, setError] = useState<string | null>(null);
+  const [cropMode, setCropMode] = useState<OcrCropMode>('full');
   const abortRef = useRef(false);
 
   const reset = useCallback(() => {
@@ -170,8 +177,8 @@ export function NoteOcrModal({ visible, palette, settings, onClose, onCreateNote
     setImagePreviewUri(uri);
     abortRef.current = false;
     try {
-      await diag.info('notes.ocr.start', { platform: Platform.OS });
-      const text = await runOcr(uri, (p) => {
+      await diag.info('notes.ocr.start', { platform: Platform.OS, cropMode });
+      const text = await runOcr(uri, cropMode, (p) => {
         if (!abortRef.current) setProgress(p);
       });
       if (abortRef.current) return;
@@ -181,7 +188,7 @@ export function NoteOcrModal({ visible, palette, settings, onClose, onCreateNote
         setStep('idle');
         return;
       }
-      await diag.info('notes.ocr.success', { chars: text.trim().length });
+      await diag.info('notes.ocr.success', { chars: text.trim().length, cropMode });
       setRawText(text);
       setEditedText(text);
       setStep('review');
@@ -191,7 +198,7 @@ export function NoteOcrModal({ visible, palette, settings, onClose, onCreateNote
       setError(message);
       setStep('idle');
     }
-  }, []);
+  }, [cropMode]);
 
   const handlePickImage = useCallback(async () => {
     const uri = await pickImage();
@@ -289,6 +296,23 @@ export function NoteOcrModal({ visible, palette, settings, onClose, onCreateNote
                 {error && (
                   <Text style={[s.errorText, { color: '#f87171' }]}>{error}</Text>
                 )}
+                <View style={s.cropGroup}>
+                  {CROP_OPTIONS.map((option) => {
+                    const active = cropMode === option.key;
+                    return (
+                      <Pressable
+                        key={option.key}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: active }}
+                        onPress={() => setCropMode(option.key)}
+                        style={[s.cropChip, { borderColor: active ? accent : border, backgroundColor: active ? `${accent}24` : card }]}
+                      >
+                        <Ionicons name={option.icon} size={14} color={active ? accent : muted} />
+                        <Text style={[s.cropText, { color: active ? accent : muted }]}>{option.label}</Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
                 <Pressable style={[s.btn, { backgroundColor: accent }]} onPress={handlePickImage}>
                   <Ionicons name="folder-open-outline" size={18} color="#fff" />
                   <Text style={s.btnText}>Choose Image</Text>
@@ -305,6 +329,9 @@ export function NoteOcrModal({ visible, palette, settings, onClose, onCreateNote
               <View style={s.center}>
                 <ActivityIndicator size="large" color={accent} />
                 <Text style={[s.hint, { color: muted }]}>Extracting text… {progress}%</Text>
+                <Text style={[s.cropText, { color: accent }]}>
+                  {CROP_OPTIONS.find((option) => option.key === cropMode)?.label}
+                </Text>
                 {imagePreviewUri ? (
                   <Image source={{ uri: imagePreviewUri }} style={[s.imagePreview, { borderColor: border }]} resizeMode="contain" />
                 ) : null}
@@ -439,6 +466,9 @@ const s = StyleSheet.create({
   center: { alignItems: 'center', gap: 16, paddingVertical: 24 },
   hint: { fontSize: 14, textAlign: 'center', lineHeight: 20 },
   errorText: { fontSize: 13, textAlign: 'center' },
+  cropGroup: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'center' },
+  cropChip: { flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 1, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 8 },
+  cropText: { fontSize: 12, fontWeight: '800' },
   imagePreview: {
     width: '100%',
     maxWidth: 420,

@@ -5,6 +5,7 @@ declare const require: (moduleName: string) => any;
 
 const OCR_LANGUAGES = 'eng+spa+fra+nld';
 const OCR_MAX_DIMENSION = 2200;
+export type OcrCropMode = 'full' | 'center' | 'top';
 
 export interface OcrResult {
   text: string;
@@ -15,9 +16,27 @@ export interface OcrResult {
 export interface OcrOptions {
   onProgress?: (progress: number) => void;
   signal?: AbortSignal;
+  cropMode?: OcrCropMode;
 }
 
-async function preprocessImageForOcr(imageUri: string): Promise<string> {
+function getCropRect(width: number, height: number, cropMode: OcrCropMode) {
+  if (cropMode === 'center') {
+    const marginX = Math.round(width * 0.12);
+    const marginY = Math.round(height * 0.16);
+    return {
+      sx: marginX,
+      sy: marginY,
+      sw: Math.max(1, width - marginX * 2),
+      sh: Math.max(1, height - marginY * 2),
+    };
+  }
+  if (cropMode === 'top') {
+    return { sx: 0, sy: 0, sw: width, sh: Math.max(1, Math.round(height * 0.58)) };
+  }
+  return { sx: 0, sy: 0, sw: width, sh: height };
+}
+
+async function preprocessImageForOcr(imageUri: string, cropMode: OcrCropMode = 'full'): Promise<string> {
   if (Platform.OS !== 'web' || typeof document === 'undefined') return imageUri;
 
   return new Promise((resolve) => {
@@ -31,9 +50,10 @@ async function preprocessImageForOcr(imageUri: string): Promise<string> {
           return;
         }
 
-        const scale = Math.min(1, OCR_MAX_DIMENSION / Math.max(sourceWidth, sourceHeight));
-        const width = Math.max(1, Math.round(sourceWidth * scale));
-        const height = Math.max(1, Math.round(sourceHeight * scale));
+        const crop = getCropRect(sourceWidth, sourceHeight, cropMode);
+        const scale = Math.min(1, OCR_MAX_DIMENSION / Math.max(crop.sw, crop.sh));
+        const width = Math.max(1, Math.round(crop.sw * scale));
+        const height = Math.max(1, Math.round(crop.sh * scale));
         const canvas = document.createElement('canvas');
         canvas.width = width;
         canvas.height = height;
@@ -46,7 +66,7 @@ async function preprocessImageForOcr(imageUri: string): Promise<string> {
 
         ctx.fillStyle = '#ffffff';
         ctx.fillRect(0, 0, width, height);
-        ctx.drawImage(image, 0, 0, width, height);
+        ctx.drawImage(image, crop.sx, crop.sy, crop.sw, crop.sh, 0, 0, width, height);
 
         const frame = ctx.getImageData(0, 0, width, height);
         for (let i = 0; i < frame.data.length; i += 4) {
@@ -105,7 +125,7 @@ export async function extractTextFromImage(
     });
 
     try {
-      const preparedImageUri = await preprocessImageForOcr(imageUri);
+      const preparedImageUri = await preprocessImageForOcr(imageUri, options?.cropMode ?? 'full');
       const { data } = await worker.recognize(preparedImageUri, {
         preserve_interword_spaces: '1',
       });

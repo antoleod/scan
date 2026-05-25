@@ -46,6 +46,8 @@ type SettingsSectionId =
   | 'barcode'
   | 'cleanup'
   | 'data-sync'
+  | 'health'
+  | 'maintenance'
   | 'diagnostics'
   | 'advanced';
 
@@ -62,6 +64,8 @@ const SECTION_SEARCH: Record<SettingsSectionId, string> = {
   barcode: 'barcode formats qr code128 code39 ean scan types',
   cleanup: 'auto cleanup retention notes history archive delete',
   'data-sync': 'data sync backup export import firebase cloud local clear hard delete',
+  health: 'health status runtime sync backup logs errors storage app state',
+  maintenance: 'maintenance mode repair check backup sync logs clear firebase',
   diagnostics: 'production logs diagnostics logger errors warn info copy export clear behavior buttons functions',
   advanced: 'advanced prefixes urls servicenow raw text stay signed laser profile',
 };
@@ -267,6 +271,7 @@ export function SettingsTab({
   onHardDeleteTemplates,
   onClearArchivedNotes,
   onClearUnpinnedNotes,
+  lastBackupAt,
   onExportBackup,
   onCopyLogs,
   onExportLogs,
@@ -293,6 +298,7 @@ export function SettingsTab({
   onHardDeleteTemplates: () => void;
   onClearArchivedNotes: () => void;
   onClearUnpinnedNotes: () => void;
+  lastBackupAt?: number | null;
   onExportBackup: () => void;
   onCopyLogs: () => void | Promise<void>;
   onExportLogs: () => void | Promise<void>;
@@ -338,6 +344,8 @@ export function SettingsTab({
   const [diagnosticLogs, setDiagnosticLogs] = useState<LogEntry[]>([]);
   const [diagnosticFilter, setDiagnosticFilter] = useState<'all' | LogEntry['level']>('all');
   const [settingsSearch, setSettingsSearch] = useState('');
+  const [maintenanceMode, setMaintenanceMode] = useState(false);
+  const [maintenanceSummary, setMaintenanceSummary] = useState<string | null>(null);
 
   const SECTION_IDS = useMemo<SettingsSectionId[]>(() => [
     'password',
@@ -352,6 +360,8 @@ export function SettingsTab({
     'barcode',
     'cleanup',
     'data-sync',
+    'health',
+    'maintenance',
     'diagnostics',
     'advanced',
   ], []);
@@ -405,6 +415,32 @@ export function SettingsTab({
       : diagnosticLogs.filter((entry) => entry.level === diagnosticFilter);
     return source.slice(-80).reverse();
   }, [diagnosticFilter, diagnosticLogs]);
+
+  const diagnosticErrorCount = useMemo(() => diagnosticLogs.filter((entry) => entry.level === 'error').length, [diagnosticLogs]);
+  const diagnosticWarnCount = useMemo(() => diagnosticLogs.filter((entry) => entry.level === 'warn').length, [diagnosticLogs]);
+  const lastBackupLabel = lastBackupAt ? new Date(lastBackupAt).toLocaleString() : 'No local backup recorded';
+  const healthItems = useMemo(() => [
+    { label: 'Runtime', value: Platform.OS === 'web' ? 'Web/PWA' : Platform.OS, tone: 'info' as const },
+    { label: 'Persistence', value: persistenceMode === 'firebase' ? 'Firebase' : 'Local', tone: persistenceMode === 'firebase' ? 'success' as const : 'muted' as const },
+    { label: 'Account', value: isGuest ? 'Guest' : 'Signed in', tone: isGuest ? 'warn' as const : 'success' as const },
+    { label: 'Sync', value: syncBusy ? 'Syncing' : 'Idle', tone: syncBusy ? 'info' as const : 'success' as const },
+    { label: 'Backup', value: lastBackupLabel, tone: lastBackupAt ? 'success' as const : 'warn' as const },
+    { label: 'Logs', value: `${diagnosticLogs.length} events / ${diagnosticErrorCount} errors`, tone: diagnosticErrorCount ? 'warn' as const : 'success' as const },
+    { label: 'Barcode types', value: `${visibleBarcodeTypes.length} active`, tone: visibleBarcodeTypes.length ? 'success' as const : 'warn' as const },
+  ], [diagnosticErrorCount, diagnosticLogs.length, isGuest, lastBackupAt, lastBackupLabel, persistenceMode, syncBusy, visibleBarcodeTypes.length]);
+
+  const runMaintenanceCheck = useCallback(() => {
+    const summary = [
+      `${diagnosticLogs.length} log event(s)`,
+      `${diagnosticWarnCount} warning(s)`,
+      `${diagnosticErrorCount} error(s)`,
+      `${visibleBarcodeTypes.length} barcode type(s)`,
+      lastBackupAt ? `backup ${new Date(lastBackupAt).toLocaleDateString()}` : 'backup missing',
+    ].join(' | ');
+    setMaintenanceSummary(summary);
+    void diag.info('settings.maintenance.check', { summary });
+    showToast('Maintenance check completed', diagnosticErrorCount ? 'info' : 'success');
+  }, [diagnosticErrorCount, diagnosticLogs.length, diagnosticWarnCount, lastBackupAt, showToast, visibleBarcodeTypes.length]);
 
   useEffect(() => {
     if (!normalizedSettingsSearch || matchedSectionIds.length !== 1) return;
@@ -1695,6 +1731,81 @@ export function SettingsTab({
         </SectionCard>
 
         <SectionCard
+          visible={matchesSection('health')}
+          open={sectionOpen['health']}
+          onToggle={() => toggleSettingsSection('health')}
+          title="Health status"
+          subtitle="Runtime status, backup state and local diagnostics."
+          icon="pulse-outline"
+          badge={diagnosticErrorCount ? `${diagnosticErrorCount} ERRORS` : 'OK'}
+          badgeTone={diagnosticErrorCount ? 'warn' : 'success'}
+          accent={palette.accent}
+          subtitleColor={palette.muted}
+          cardBackground={palette.card}
+          cardBorder={palette.border}
+        >
+          <View style={[styles.healthGrid, isDesktop ? styles.healthGridDesktop : null]}>
+            {healthItems.map((item) => {
+              const toneColor = item.tone === 'success' ? '#22c55e' : item.tone === 'warn' ? '#f59e0b' : item.tone === 'info' ? palette.accent : palette.muted;
+              return (
+                <View key={item.label} style={[styles.healthTile, isDesktop ? styles.healthTileDesktop : null, { borderColor: palette.border, backgroundColor: `${palette.bg}80` }]}>
+                  <Text style={[styles.healthLabel, { color: palette.muted }]}>{item.label}</Text>
+                  <Text style={[styles.healthValue, { color: toneColor }]} numberOfLines={2}>{item.value}</Text>
+                </View>
+              );
+            })}
+          </View>
+        </SectionCard>
+
+        <SectionCard
+          visible={matchesSection('maintenance')}
+          open={sectionOpen['maintenance']}
+          onToggle={() => toggleSettingsSection('maintenance')}
+          title="Maintenance mode"
+          subtitle="Focused repair actions for backup, sync, Firebase and logs."
+          icon="construct-outline"
+          badge={maintenanceMode ? 'ON' : 'OFF'}
+          badgeTone={maintenanceMode ? 'warn' : 'muted'}
+          accent={palette.accent}
+          subtitleColor={palette.muted}
+          cardBackground={palette.card}
+          cardBorder={palette.border}
+        >
+          <View style={styles.toggleRow}>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={[styles.toggleLabel, { color: palette.fg }]}>Maintenance mode</Text>
+              <Text style={[styles.toggleHint, { color: palette.muted }]}>Keeps health, backup, sync and logs visible while testing production issues.</Text>
+            </View>
+            <Switch
+              accessibilityLabel="Maintenance mode"
+              value={maintenanceMode}
+              onValueChange={(value) => {
+                setMaintenanceMode(value);
+                void diag.info('settings.maintenance.mode', { enabled: value });
+              }}
+            />
+          </View>
+
+          <View style={[styles.bulkGrid, isDesktop ? styles.bulkGridDesktop : null]}>
+            <Pressable onPress={runMaintenanceCheck} style={({ pressed }) => [styles.bulkButton, styles.bulkGridItem, isDesktop ? styles.bulkGridItemDesktop : styles.bulkGridItemMobile, { backgroundColor: activeAccent, opacity: pressed ? 0.8 : 1 }]}><Text style={[styles.bulkButtonText, { color: '#111' }]}>Run check</Text></Pressable>
+            <Pressable onPress={() => runDataSyncAction('Maintenance backup', onExportBackup)} style={({ pressed }) => [styles.bulkButton, styles.bulkGridItem, isDesktop ? styles.bulkGridItemDesktop : styles.bulkGridItemMobile, { backgroundColor: activeAccent, opacity: pressed ? 0.8 : 1 }]}><Text style={[styles.bulkButtonText, { color: '#111' }]}>Backup now</Text></Pressable>
+            <Pressable disabled={syncBusy} onPress={() => runDataSyncAction('Maintenance sync', onSyncNow)} style={({ pressed }) => [styles.bulkButton, styles.bulkGridItem, isDesktop ? styles.bulkGridItemDesktop : styles.bulkGridItemMobile, { backgroundColor: activeAccent, opacity: syncBusy ? 0.6 : pressed ? 0.8 : 1 }]}><Text style={[styles.bulkButtonText, { color: '#111' }]}>{syncBusy ? 'Syncing' : 'Sync now'}</Text></Pressable>
+            <Pressable onPress={() => runDataSyncAction('Maintenance Firebase check', onRecheckFirebase)} style={({ pressed }) => [styles.bulkButton, styles.bulkGridItem, isDesktop ? styles.bulkGridItemDesktop : styles.bulkGridItemMobile, { backgroundColor: activeAccent, opacity: pressed ? 0.8 : 1 }]}><Text style={[styles.bulkButtonText, { color: '#111' }]}>Firebase check</Text></Pressable>
+            <Pressable onPress={() => runDiagnosticAction('Maintenance copy logs', onCopyLogs)} style={({ pressed }) => [styles.bulkButton, styles.bulkGridItem, isDesktop ? styles.bulkGridItemDesktop : styles.bulkGridItemMobile, { backgroundColor: activeAccent, opacity: pressed ? 0.8 : 1 }]}><Text style={[styles.bulkButtonText, { color: '#111' }]}>Copy logs</Text></Pressable>
+            <Pressable
+              onPress={() => runDiagnosticAction('Maintenance clear logs', async () => {
+                await diag.clear();
+                showToast('Logs cleared', 'success');
+              })}
+              style={({ pressed }) => [styles.bulkButton, styles.bulkGridItem, isDesktop ? styles.bulkGridItemDesktop : styles.bulkGridItemMobile, { backgroundColor: '#991b1b', opacity: pressed ? 0.8 : 1 }]}
+            >
+              <Text style={[styles.bulkButtonText, { color: '#fff' }]}>Clear logs</Text>
+            </Pressable>
+          </View>
+          {maintenanceSummary ? <Text style={[styles.helperLine, { color: palette.muted }]}>{maintenanceSummary}</Text> : null}
+        </SectionCard>
+
+        <SectionCard
           visible={matchesSection('diagnostics')}
           open={sectionOpen['diagnostics']}
           onToggle={() => toggleSettingsSection('diagnostics')}
@@ -1926,6 +2037,12 @@ const styles = StyleSheet.create({
   statusRow: { flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1, borderRadius: 12, padding: 12 },
   statusTitle: { fontSize: 13, fontWeight: '700' },
   statusSubtitle: { fontSize: 11, lineHeight: 15, marginTop: 2 },
+  healthGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, width: '100%', minWidth: 0 },
+  healthGridDesktop: { gap: 10 },
+  healthTile: { flexGrow: 1, flexBasis: '100%', minWidth: 0, borderWidth: 1, borderRadius: 12, padding: 12, gap: 4 },
+  healthTileDesktop: { flexBasis: '31%' },
+  healthLabel: { fontSize: 10, fontWeight: '900', textTransform: 'uppercase', letterSpacing: 1, fontFamily: 'monospace' },
+  healthValue: { fontSize: 13, fontWeight: '800', lineHeight: 18 },
   divider: { height: 1, marginVertical: 6, opacity: 0.6 },
   chevron: { fontWeight: '800', fontSize: 14 },
   themeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, width: '100%', minWidth: 0 },
