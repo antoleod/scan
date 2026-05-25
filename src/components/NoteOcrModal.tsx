@@ -5,6 +5,7 @@
 import React, { useCallback, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Image,
   Modal,
   Platform,
   Pressable,
@@ -19,6 +20,7 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { detectNoteEntities } from '../core/smartNotes';
 import { blobToDataUrl, extractTextFromImage } from '../core/ocr';
+import { diag } from '../core/diagnostics';
 import { defaultSettings } from '../core/settings';
 import type { AppSettings } from '../types';
 import type { Palette } from '../theme/theme';
@@ -131,6 +133,7 @@ export function NoteOcrModal({ visible, palette, settings, onClose, onCreateNote
 
   const [step, setStep] = useState<'idle' | 'ocr' | 'review'>('idle');
   const [progress, setProgress] = useState(0);
+  const [imagePreviewUri, setImagePreviewUri] = useState('');
   const [rawText, setRawText] = useState('');
   const [editedText, setEditedText] = useState('');
   const [fields, setFields] = useState<FieldState>({
@@ -146,6 +149,7 @@ export function NoteOcrModal({ visible, palette, settings, onClose, onCreateNote
   const reset = useCallback(() => {
     setStep('idle');
     setProgress(0);
+    setImagePreviewUri('');
     setRawText('');
     setEditedText('');
     setError(null);
@@ -163,17 +167,28 @@ export function NoteOcrModal({ visible, palette, settings, onClose, onCreateNote
     setError(null);
     setStep('ocr');
     setProgress(0);
+    setImagePreviewUri(uri);
     abortRef.current = false;
     try {
+      await diag.info('notes.ocr.start', { platform: Platform.OS });
       const text = await runOcr(uri, (p) => {
         if (!abortRef.current) setProgress(p);
       });
       if (abortRef.current) return;
+      if (!text.trim()) {
+        await diag.warn('notes.ocr.empty_result', {});
+        setError('No text was detected. Try a sharper image, better lighting, or crop closer to the document.');
+        setStep('idle');
+        return;
+      }
+      await diag.info('notes.ocr.success', { chars: text.trim().length });
       setRawText(text);
       setEditedText(text);
       setStep('review');
     } catch (err) {
-      setError(String((err as Error)?.message ?? err));
+      const message = String((err as Error)?.message ?? err);
+      await diag.warn('notes.ocr.error', { message });
+      setError(message);
       setStep('idle');
     }
   }, []);
@@ -268,6 +283,9 @@ export function NoteOcrModal({ visible, palette, settings, onClose, onCreateNote
               <View style={s.center}>
                 <Ionicons name="image-outline" size={56} color={muted} />
                 <Text style={[s.hint, { color: muted }]}>Pick an image or paste from clipboard to extract text with OCR</Text>
+                {imagePreviewUri ? (
+                  <Image source={{ uri: imagePreviewUri }} style={[s.imagePreview, { borderColor: border }]} resizeMode="contain" />
+                ) : null}
                 {error && (
                   <Text style={[s.errorText, { color: '#f87171' }]}>{error}</Text>
                 )}
@@ -287,6 +305,9 @@ export function NoteOcrModal({ visible, palette, settings, onClose, onCreateNote
               <View style={s.center}>
                 <ActivityIndicator size="large" color={accent} />
                 <Text style={[s.hint, { color: muted }]}>Extracting text… {progress}%</Text>
+                {imagePreviewUri ? (
+                  <Image source={{ uri: imagePreviewUri }} style={[s.imagePreview, { borderColor: border }]} resizeMode="contain" />
+                ) : null}
                 <View style={[s.progressBar, { borderColor: border }]}>
                   <View style={[s.progressFill, { backgroundColor: accent, width: `${progress}%` as any }]} />
                 </View>
@@ -418,6 +439,14 @@ const s = StyleSheet.create({
   center: { alignItems: 'center', gap: 16, paddingVertical: 24 },
   hint: { fontSize: 14, textAlign: 'center', lineHeight: 20 },
   errorText: { fontSize: 13, textAlign: 'center' },
+  imagePreview: {
+    width: '100%',
+    maxWidth: 420,
+    height: 180,
+    borderRadius: 12,
+    borderWidth: 1,
+    backgroundColor: 'rgba(0,0,0,0.18)',
+  },
   progressBar: {
     width: '100%',
     height: 6,
