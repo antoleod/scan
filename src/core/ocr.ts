@@ -7,6 +7,56 @@ const OCR_LANGUAGES = 'eng+spa+fra+nld';
 const OCR_MAX_DIMENSION = 2200;
 export type OcrCropMode = 'full' | 'center' | 'top';
 
+// Pin to the installed tesseract.js version so the worker/core/lang assets all
+// match. Keep in sync with package.json ("tesseract.js": "^7.0.0").
+const TESSERACT_VERSION = '7.0.0';
+
+// Production logs showed the default jsdelivr worker script failing to load
+// ("NetworkError ... importScripts ... worker.min.js failed to load"), which
+// broke OCR entirely. We try a primary CDN and fall back to a mirror so a
+// transient outage on one host no longer kills the feature. `langPath` points
+// at the canonical tessdata host (one directory holding every <lang>.traineddata)
+// rather than jsdelivr's per-language packages.
+type OcrCdnConfig = { name: string; workerPath: string; corePath: string; langPath: string };
+
+const OCR_CDNS: OcrCdnConfig[] = [
+  {
+    name: 'jsdelivr',
+    workerPath: `https://cdn.jsdelivr.net/npm/tesseract.js@${TESSERACT_VERSION}/dist/worker.min.js`,
+    corePath: `https://cdn.jsdelivr.net/npm/tesseract.js-core@${TESSERACT_VERSION}`,
+    langPath: 'https://tessdata.projectnaptha.com/4.0.0',
+  },
+  {
+    name: 'unpkg',
+    workerPath: `https://unpkg.com/tesseract.js@${TESSERACT_VERSION}/dist/worker.min.js`,
+    corePath: `https://unpkg.com/tesseract.js-core@${TESSERACT_VERSION}`,
+    langPath: 'https://tessdata.projectnaptha.com/4.0.0',
+  },
+];
+
+async function createOcrWorker(
+  createWorker: (langs: string, oem: number, options: Record<string, unknown>) => Promise<any>,
+  logger: (m: { status: string; progress: number }) => void,
+): Promise<any> {
+  let lastError: unknown;
+  for (const cdn of OCR_CDNS) {
+    try {
+      return await createWorker(OCR_LANGUAGES, 1, {
+        workerPath: cdn.workerPath,
+        corePath: cdn.corePath,
+        langPath: cdn.langPath,
+        logger,
+      });
+    } catch (error) {
+      lastError = error;
+      // Try the next mirror before giving up.
+    }
+  }
+  throw lastError instanceof Error
+    ? new Error(`OCR engine could not load (network). ${lastError.message}`)
+    : new Error('OCR engine could not load. Check your connection and retry.');
+}
+
 export interface OcrResult {
   text: string;
   confidence?: number;
@@ -113,15 +163,13 @@ export async function extractTextFromImage(
       throw new Error('Tesseract not available');
     }
 
-    const worker = await createWorker(OCR_LANGUAGES, 1, {
-      logger: (m: { status: string; progress: number }) => {
-        if (options?.signal?.aborted) {
-          throw new Error('OCR cancelled');
-        }
-        if (m.status === 'recognizing text') {
-          options?.onProgress?.(Math.round(m.progress * 100));
-        }
-      },
+    const worker = await createOcrWorker(createWorker, (m) => {
+      if (options?.signal?.aborted) {
+        throw new Error('OCR cancelled');
+      }
+      if (m.status === 'recognizing text') {
+        options?.onProgress?.(Math.round(m.progress * 100));
+      }
     });
 
     try {

@@ -15,6 +15,7 @@ import { createTrieFromWords } from "../src/utils/trie";
 import { AppError, AuthError, SyncError, ValidationError, toAppError, isRetryable } from "../src/core/errors";
 import { sanitizeScanInput, sanitizeNoteText, sanitizeTemplatePattern } from "../src/core/validation";
 import { computeNotesChecksum } from "../src/core/syncChecksum";
+import { stripUndefinedDeep } from "../src/core/firestoreSanitize";
 import {
   applyMarkTaken,
   applySnooze,
@@ -762,6 +763,48 @@ run("Note payload should include required fields for Firebase", () => {
   assert.equal(typeof payload.workflowMetadata, "string");
   assert.equal(payload.isSecret, true);
   assert.equal(payload.draft, false);
+});
+
+run("stripUndefinedDeep removes nested undefined (workflowMetadata.doseText) — the Firestore sync bug", () => {
+  // Mirrors the production failure: a medication note whose workflowMetadata
+  // (and nested medications[]) carry undefined optional fields. Firestore
+  // rejected these with "Unsupported field value: undefined".
+  const payload = {
+    id: "note-1",
+    text: "took ibuprofen",
+    workflowMetadata: {
+      medicationName: "ibuprofen",
+      doseText: undefined,
+      followUpAt: undefined,
+      medications: [
+        { name: "ibuprofen", dose: "400mg", takenAt: 123, snoozedUntil: undefined },
+      ],
+    },
+    deletedAt: undefined,
+  };
+
+  const clean = stripUndefinedDeep(payload) as any;
+
+  // No undefined anywhere in the output (top-level or nested).
+  assert.ok(!("deletedAt" in clean), "top-level undefined should be dropped");
+  assert.ok(!("doseText" in clean.workflowMetadata), "nested undefined should be dropped");
+  assert.ok(!("followUpAt" in clean.workflowMetadata), "nested undefined should be dropped");
+  assert.ok(!("snoozedUntil" in clean.workflowMetadata.medications[0]), "undefined inside array element should be dropped");
+
+  // Real values (including falsy ones) survive.
+  assert.equal(clean.id, "note-1");
+  assert.equal(clean.workflowMetadata.medicationName, "ibuprofen");
+  assert.equal(clean.workflowMetadata.medications[0].dose, "400mg");
+  assert.equal(clean.workflowMetadata.medications[0].takenAt, 123);
+});
+
+run("stripUndefinedDeep preserves null and falsy values", () => {
+  const clean = stripUndefinedDeep({ a: null, b: 0, c: false, d: "", e: undefined }) as any;
+  assert.equal(clean.a, null);
+  assert.equal(clean.b, 0);
+  assert.equal(clean.c, false);
+  assert.equal(clean.d, "");
+  assert.ok(!("e" in clean));
 });
 
 run("airdrop QR encodes a deep-link URL that roundtrips", () => {

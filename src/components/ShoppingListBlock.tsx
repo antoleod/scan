@@ -71,12 +71,21 @@ async function shareText(text: string) {
 // We extend ShoppingItem with an optional `price` field stored in-component.
 type ExtItem = ShoppingItem & { price?: string };
 
+// Keep the active ("still to buy") items at the top and sink checked ones to the
+// bottom — the standard shopping-list pattern. Stable within each group, so the
+// stored order (and raw-text round-trip) stays predictable.
+function uncheckedFirst(list: ExtItem[]): ExtItem[] {
+  const unchecked = list.filter((it) => !it.checked);
+  const checked = list.filter((it) => it.checked);
+  return checked.length === 0 ? list : [...unchecked, ...checked];
+}
+
 // ─── Single item row ──────────────────────────────────────────────────────────
 
 function ItemRow({
   item,
-  index,
-  total,
+  canMoveUp,
+  canMoveDown,
   showPrice,
   palette,
   onToggle,
@@ -86,8 +95,8 @@ function ItemRow({
   onMoveDown,
 }: {
   item: ExtItem;
-  index: number;
-  total: number;
+  canMoveUp: boolean;
+  canMoveDown: boolean;
   showPrice: boolean;
   palette: Palette;
   onToggle: (id: string) => void;
@@ -123,12 +132,12 @@ function ItemRow({
         backgroundColor: done ? DONE_BG : 'transparent',
       }}>
 
-        {/* Reorder arrows */}
+        {/* Reorder arrows (stay within the checked / unchecked group) */}
         <View style={{ gap: 0, width: 12, alignItems: 'center' }}>
-          <Pressable onPress={() => onMoveUp(item.id)} hitSlop={6} style={{ opacity: index === 0 ? 0.18 : 0.58 }} disabled={index === 0}>
+          <Pressable onPress={() => onMoveUp(item.id)} hitSlop={6} style={{ opacity: canMoveUp ? 0.58 : 0.18 }} disabled={!canMoveUp}>
             <Ionicons name="chevron-up" size={10} color={palette.textDim} />
           </Pressable>
-          <Pressable onPress={() => onMoveDown(item.id)} hitSlop={6} style={{ opacity: index >= total - 1 ? 0.18 : 0.58 }} disabled={index >= total - 1}>
+          <Pressable onPress={() => onMoveDown(item.id)} hitSlop={6} style={{ opacity: canMoveDown ? 0.58 : 0.18 }} disabled={!canMoveDown}>
             <Ionicons name="chevron-down" size={10} color={palette.textDim} />
           </Pressable>
         </View>
@@ -218,11 +227,15 @@ function Header({
   done, total, subtotal, showPrice, palette,
 }: { done: number; total: number; subtotal: number | null; showPrice: boolean; palette: Palette }) {
   const pct = total === 0 ? 0 : Math.round((done / total) * 100);
+  const remaining = total - done;
+  const allDone = total > 0 && remaining === 0;
+  // Shopper-friendly status: count what's *left* to buy, not what's done.
+  const statusText = total === 0 ? '' : allDone ? 'All done' : `${remaining} left`;
   return (
     <View style={{ gap: 4 }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 4 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
-          <Ionicons name="cart-outline" size={13} color={CART} />
+          <Ionicons name={allDone ? 'checkmark-circle' : 'cart-outline'} size={13} color={CART} />
           <Text style={{ color: CART, fontSize: 10, fontWeight: '800' }}>Shopping</Text>
         </View>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
@@ -231,9 +244,11 @@ function Header({
               Σ {subtotal.toFixed(2)} €
             </Text>
           ) : null}
-          <Text style={{ color: palette.textDim, fontSize: 10, fontWeight: '600' }}>
-            {done}/{total}
-          </Text>
+          {statusText ? (
+            <Text style={{ color: allDone ? CART : palette.textDim, fontSize: 10, fontWeight: '700' }}>
+              {statusText}
+            </Text>
+          ) : null}
         </View>
       </View>
       {/* Track */}
@@ -314,7 +329,8 @@ export function ShoppingListBlock({
 
   const handleToggle = useCallback((id: string) => {
     setItems((prev) => {
-      const next = prev.map((it) => it.id === id ? { ...it, checked: !it.checked } : it);
+      const flipped = prev.map((it) => it.id === id ? { ...it, checked: !it.checked } : it);
+      const next = uncheckedFirst(flipped); // ticked item sinks to the bottom
       onRawTextChange(shoppingListToText(next));
       return next;
     });
@@ -358,7 +374,9 @@ export function ShoppingListBlock({
   const handleMoveUp = useCallback((id: string) => {
     setItems((prev) => {
       const idx = prev.findIndex((it) => it.id === id);
-      if (idx <= 0) return prev;
+      // Only swap with a neighbour in the same (checked / unchecked) group so
+      // the unchecked-first partition is never broken by a reorder.
+      if (idx <= 0 || prev[idx - 1].checked !== prev[idx].checked) return prev;
       const next = [...prev];
       [next[idx - 1], next[idx]] = [next[idx], next[idx - 1]];
       onRawTextChange(shoppingListToText(next));
@@ -369,7 +387,7 @@ export function ShoppingListBlock({
   const handleMoveDown = useCallback((id: string) => {
     setItems((prev) => {
       const idx = prev.findIndex((it) => it.id === id);
-      if (idx < 0 || idx >= prev.length - 1) return prev;
+      if (idx < 0 || idx >= prev.length - 1 || prev[idx + 1].checked !== prev[idx].checked) return prev;
       const next = [...prev];
       [next[idx], next[idx + 1]] = [next[idx + 1], next[idx]];
       onRawTextChange(shoppingListToText(next));
@@ -382,7 +400,8 @@ export function ShoppingListBlock({
       id: `sl_new_${Date.now()}`,
       label: '', quantity: '', unit: '', checked: false, rawLine: '',
     };
-    push([...items, newItem]);
+    // New items are unbought → keep them above any ticked-off items.
+    push(uncheckedFirst([...items, newItem]));
   }, [items, push]);
 
   const handleClearDone = useCallback(() => {
@@ -446,28 +465,54 @@ export function ShoppingListBlock({
   const visible  = expanded ? items : items.slice(0, 7);
   const hidden   = items.length - visible.length;
   const hasDone  = done > 0;
+  const allDone  = items.length > 0 && done === items.length;
 
   return (
     <View style={{ gap: 6 }}>
       <Header done={done} total={items.length} subtotal={subtotal} showPrice={showPrice} palette={palette} />
 
+      {/* Empty state — nudge the user to start the list */}
+      {items.length === 0 ? (
+        <Text style={{ color: palette.textMuted, fontSize: 11, paddingVertical: 4, textAlign: 'center' }}>
+          No items yet — tap “Add item” to start your list.
+        </Text>
+      ) : null}
+
+      {/* All-done celebration banner */}
+      {allDone ? (
+        <View style={{
+          flexDirection: 'row', alignItems: 'center', gap: 6,
+          paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8,
+          borderWidth: 1, borderColor: DONE_BORDER, backgroundColor: DONE_BG,
+        }}>
+          <Ionicons name="checkmark-done-circle" size={14} color={CART} />
+          <Text style={{ color: CART, fontSize: 11, fontWeight: '700' }}>
+            {`All ${items.length} item${items.length === 1 ? '' : 's'} bought`}
+          </Text>
+        </View>
+      ) : null}
+
       {/* Item rows */}
       <View>
-        {visible.map((item, index) => (
-          <ItemRow
-            key={item.id}
-            item={item}
-            index={index}
-            total={visible.length}
-            showPrice={showPrice}
-            palette={palette}
-            onToggle={handleToggle}
-            onUpdate={handleUpdate}
-            onDelete={handleDelete}
-            onMoveUp={handleMoveUp}
-            onMoveDown={handleMoveDown}
-          />
-        ))}
+        {visible.map((item, index) => {
+          const prevItem = visible[index - 1];
+          const nextItem = visible[index + 1];
+          return (
+            <ItemRow
+              key={item.id}
+              item={item}
+              canMoveUp={!!prevItem && prevItem.checked === item.checked}
+              canMoveDown={!!nextItem && nextItem.checked === item.checked}
+              showPrice={showPrice}
+              palette={palette}
+              onToggle={handleToggle}
+              onUpdate={handleUpdate}
+              onDelete={handleDelete}
+              onMoveUp={handleMoveUp}
+              onMoveDown={handleMoveDown}
+            />
+          );
+        })}
         {hidden > 0 ? (
           <Text style={{ color: palette.textMuted, fontSize: 10, paddingLeft: 4 }}>
             +{hidden} more
