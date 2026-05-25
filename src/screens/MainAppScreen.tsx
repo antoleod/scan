@@ -203,6 +203,14 @@ function MainApp() {
 
   const { toast, show: showToast, hide: hideToast } = useToast();
 
+  useEffect(() => {
+    diag.installGlobalHandlers();
+    void diag.info('diagnostics.production_logger.ready', {
+      platform: Platform.OS,
+      mode: __DEV__ ? 'development' : 'production',
+    });
+  }, []);
+
   // ── Batch mode ─────────────────────────────────────────────────────────────
   const [batchMode, setBatchMode] = useState(false);
   const [batchItems, setBatchItems] = useState<ScanRecord[]>([]);
@@ -1833,6 +1841,8 @@ function MainApp() {
               onExportCsv={exportCsv}
               onClearHistory={clearAllHistory}
               onExportBackup={exportBackup}
+              onCopyLogs={copyLogs}
+              onExportLogs={exportLogs}
               onOpenBackupImport={async () => {
                 if (Platform.OS === 'web') {
                   const text = await openFilePicker('.json');

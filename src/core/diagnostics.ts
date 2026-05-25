@@ -1,7 +1,8 @@
 ﻿import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const KEY = 'barra_diag_logs';
-const MAX = 200;
+const MAX = 500;
+const MAX_DATA_CHARS = 1200;
 
 export interface LogEntry {
   ts: string;
@@ -13,6 +14,7 @@ export interface LogEntry {
 class Diagnostics {
   private logs: LogEntry[] = [];
   private loaded = false;
+  private globalHandlersInstalled = false;
   private listeners = new Set<(logs: LogEntry[]) => void>();
 
   /**
@@ -47,6 +49,93 @@ class Diagnostics {
     this.notify();
   }
 
+  installGlobalHandlers() {
+    if (this.globalHandlersInstalled) return;
+    this.globalHandlersInstalled = true;
+
+    const originalConsole = {
+      warn: console.warn?.bind(console),
+      error: console.error?.bind(console),
+    };
+
+    console.warn = (...args: unknown[]) => {
+      originalConsole.warn?.(...args);
+      void this.warn('console.warn', { args: this.serializeData(args) });
+    };
+
+    console.error = (...args: unknown[]) => {
+      originalConsole.error?.(...args);
+      void this.error('console.error', { args: this.serializeData(args) });
+    };
+
+    const target = globalThis as typeof globalThis & {
+      addEventListener?: (type: string, listener: (event: Event) => void) => void;
+      ErrorUtils?: { getGlobalHandler?: () => unknown; setGlobalHandler?: (handler: unknown) => void };
+    };
+
+    target.addEventListener?.('error', (event) => {
+      const err = event as ErrorEvent;
+      void this.error('runtime.error', {
+        message: err.message,
+        filename: err.filename,
+        lineno: err.lineno,
+        colno: err.colno,
+      });
+    });
+
+    target.addEventListener?.('unhandledrejection', (event) => {
+      const rejection = event as PromiseRejectionEvent;
+      void this.error('runtime.unhandled_rejection', { reason: this.serializeData(rejection.reason) });
+    });
+
+    if (target.ErrorUtils?.setGlobalHandler && target.ErrorUtils?.getGlobalHandler) {
+      const previousHandler = target.ErrorUtils.getGlobalHandler();
+      target.ErrorUtils.setGlobalHandler((error: Error, isFatal?: boolean) => {
+        void this.error('runtime.native_error', {
+          message: String(error?.message || error),
+          name: String(error?.name || ''),
+          stack: String(error?.stack || ''),
+          isFatal: Boolean(isFatal),
+        });
+        if (typeof previousHandler === 'function') {
+          previousHandler(error, isFatal);
+        }
+      });
+    }
+  }
+
+  private serializeData(value: unknown): unknown {
+    try {
+      return JSON.parse(JSON.stringify(value, (_key, item) => {
+        if (item instanceof Error) {
+          return { name: item.name, message: item.message, stack: item.stack };
+        }
+        if (typeof item === 'function') return `[Function ${item.name || 'anonymous'}]`;
+        if (typeof item === 'string' && item.length > MAX_DATA_CHARS) return `${item.slice(0, MAX_DATA_CHARS)}...`;
+        return item;
+      }));
+    } catch {
+      const fallback = String(value);
+      return fallback.length > MAX_DATA_CHARS ? `${fallback.slice(0, MAX_DATA_CHARS)}...` : fallback;
+    }
+  }
+
+  async track<T>(event: string, data: unknown, action: () => T | Promise<T>): Promise<T> {
+    await this.info(`${event}.start`, data);
+    const startedAt = Date.now();
+    try {
+      const result = await action();
+      await this.info(`${event}.success`, { durationMs: Date.now() - startedAt });
+      return result;
+    } catch (error) {
+      await this.error(`${event}.error`, {
+        durationMs: Date.now() - startedAt,
+        message: String(error),
+      });
+      throw error;
+    }
+  }
+
   private async persist() {
     try {
       await AsyncStorage.setItem(KEY, JSON.stringify(this.logs));
@@ -57,7 +146,7 @@ class Diagnostics {
 
   async write(level: LogEntry['level'], event: string, data?: unknown) {
     await this.init();
-    this.logs.push({ ts: new Date().toISOString(), level, event, data });
+    this.logs.push({ ts: new Date().toISOString(), level, event, data: this.serializeData(data) });
     if (this.logs.length > MAX) this.logs = this.logs.slice(this.logs.length - MAX);
     this.notify();
     await this.persist();
@@ -89,4 +178,3 @@ class Diagnostics {
 }
 
 export const diag = new Diagnostics();
-

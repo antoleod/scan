@@ -11,6 +11,7 @@ import { createSharedNoteGroup, fetchSharedGroupsForCurrentUser, joinSharedNoteG
 import { useAppTheme } from '../../../constants/theme';
 import { addRichNoteUnique, loadNotes, removeNote, setNoteSecret, type NoteItem } from '../../../core/notes';
 import { clearPin, hasPin } from '../../../core/secretPin';
+import { diag, type LogEntry } from '../../../core/diagnostics';
 import { SecretPinModal } from '../../SecretPinModal';
 import { Toast, useToast } from '../../Toast';
 
@@ -231,6 +232,8 @@ export function SettingsTab({
   onClearArchivedNotes,
   onClearUnpinnedNotes,
   onExportBackup,
+  onCopyLogs,
+  onExportLogs,
   onOpenBackupImport,
   onRecheckFirebase,
   onSyncNow,
@@ -255,6 +258,8 @@ export function SettingsTab({
   onClearArchivedNotes: () => void;
   onClearUnpinnedNotes: () => void;
   onExportBackup: () => void;
+  onCopyLogs: () => void | Promise<void>;
+  onExportLogs: () => void | Promise<void>;
   onOpenBackupImport: () => void;
   onRecheckFirebase: () => void;
   onSyncNow: () => void;
@@ -294,6 +299,8 @@ export function SettingsTab({
   const [pinFlow, setPinFlow] = useState<'note-secret' | 'set' | 'change-unlock' | 'change-set' | 'remove-unlock' | null>(null);
   const [pendingSecretNoteId, setPendingSecretNoteId] = useState<string | null>(null);
   const [pinExists, setPinExists] = useState(false);
+  const [diagnosticLogs, setDiagnosticLogs] = useState<LogEntry[]>([]);
+  const [diagnosticFilter, setDiagnosticFilter] = useState<'all' | LogEntry['level']>('all');
 
   const SECTION_IDS = useMemo<string[]>(() => [
     'password',
@@ -308,6 +315,7 @@ export function SettingsTab({
     'barcode',
     'cleanup',
     'data-sync',
+    'diagnostics',
     'advanced',
   ], []);
   const DEFAULT_OPEN = useMemo<Record<string, boolean>>(() => ({
@@ -319,6 +327,41 @@ export function SettingsTab({
     'smart-notes': true,
   }), []);
   const { state: sectionOpen, toggle: toggleSection, setAll: setAllSections, openCount, total: totalSections } = useSectionState(SECTION_IDS, DEFAULT_OPEN);
+
+  useEffect(() => diag.subscribe(setDiagnosticLogs), []);
+
+  const logSettingsAction = useCallback((label: string, data?: Record<string, unknown>) => {
+    void diag.info('settings.ui.action', { label, ...data });
+  }, []);
+
+  const patchSettingsLogged = useCallback((next: Partial<AppSettings>) => {
+    const keys = Object.keys(next);
+    void diag.info('settings.patch', { keys });
+    onPatchSettings(next);
+  }, [onPatchSettings]);
+
+  const toggleSettingsSection = useCallback((id: string) => {
+    logSettingsAction('toggle section', { section: id, nextOpen: !sectionOpen[id] });
+    toggleSection(id);
+  }, [logSettingsAction, sectionOpen, toggleSection]);
+
+  const setAllSectionsLogged = useCallback((open: boolean) => {
+    logSettingsAction(open ? 'expand all sections' : 'collapse all sections');
+    setAllSections(open);
+  }, [logSettingsAction, setAllSections]);
+
+  const runDiagnosticAction = useCallback((label: string, action: () => void | Promise<void>) => {
+    void diag.track('settings.diagnostics.action', { label }, action).catch((error) => {
+      showToast(`${label} failed: ${String(error)}`, 'error');
+    });
+  }, [showToast]);
+
+  const filteredDiagnosticLogs = useMemo(() => {
+    const source = diagnosticFilter === 'all'
+      ? diagnosticLogs
+      : diagnosticLogs.filter((entry) => entry.level === diagnosticFilter);
+    return source.slice(-80).reverse();
+  }, [diagnosticFilter, diagnosticLogs]);
 
   useEffect(() => {
     let cancelled = false;
@@ -497,13 +540,13 @@ export function SettingsTab({
   };
 
   const patchNotesFeatures = useCallback((partial: Partial<NonNullable<AppSettings['notesFeatures']>>) => {
-    onPatchSettings({
+    patchSettingsLogged({
       notesFeatures: {
         ...notesFeatures,
         ...partial,
       },
     });
-  }, [notesFeatures, onPatchSettings]);
+  }, [notesFeatures, patchSettingsLogged]);
 
   const openReviewPanel = useCallback(async () => {
     setReviewOpen(true);
@@ -650,7 +693,7 @@ export function SettingsTab({
           </View>
           <View style={styles.toolbarRight}>
             <Pressable
-              onPress={() => setAllSections(true)}
+              onPress={() => setAllSectionsLogged(true)}
               style={({ pressed }) => [styles.toolbarBtn, { borderColor: palette.border, opacity: pressed ? 0.75 : 1 }]}
               accessibilityLabel="Expand all sections"
             >
@@ -658,7 +701,7 @@ export function SettingsTab({
               <Text style={[styles.toolbarBtnText, { color: palette.fg }]}>Expand</Text>
             </Pressable>
             <Pressable
-              onPress={() => setAllSections(false)}
+              onPress={() => setAllSectionsLogged(false)}
               style={({ pressed }) => [styles.toolbarBtn, { borderColor: palette.border, opacity: pressed ? 0.75 : 1 }]}
               accessibilityLabel="Collapse all sections"
             >
@@ -670,7 +713,7 @@ export function SettingsTab({
 
         <SectionCard
           open={sectionOpen['password']}
-          onToggle={() => toggleSection('password')}
+          onToggle={() => toggleSettingsSection('password')}
           title="Password generator"
           subtitle="Generate, copy and save as private note."
           icon="key-outline"
@@ -749,7 +792,7 @@ export function SettingsTab({
 
         <SectionCard
           open={sectionOpen['theme']}
-          onToggle={() => toggleSection('theme')}
+          onToggle={() => toggleSettingsSection('theme')}
           title="Theme selector"
           subtitle="Animated active border."
           icon="color-palette-outline"
@@ -768,19 +811,19 @@ export function SettingsTab({
                 active={settings.theme === item.key}
                 desktop={isDesktop}
                 onPress={() => {
-                  onPatchSettings({ theme: item.key as SupportedTheme });
+                  patchSettingsLogged({ theme: item.key as SupportedTheme });
                   const mapped: AppThemeName = item.key === 'eu_blue' ? 'euBlue' : (item.key as AppThemeName);
                   setThemeName(mapped);
                 }}
               />
             ))}
           </View>
-          {settings.theme === 'custom' ? <TextInput style={[styles.input, { borderColor: palette.border, color: palette.fg, backgroundColor: palette.card }]} placeholder="#00D4FF" placeholderTextColor={palette.muted} value={settings.customAccent} onChangeText={(value) => onPatchSettings({ customAccent: value })} /> : null}
+          {settings.theme === 'custom' ? <TextInput style={[styles.input, { borderColor: palette.border, color: palette.fg, backgroundColor: palette.card }]} placeholder="#00D4FF" placeholderTextColor={palette.muted} value={settings.customAccent} onChangeText={(value) => patchSettingsLogged({ customAccent: value })} /> : null}
         </SectionCard>
 
         <SectionCard
           open={sectionOpen['scan']}
-          onToggle={() => toggleSection('scan')}
+          onToggle={() => toggleSettingsSection('scan')}
           title="Scan options"
           subtitle="Core behavior."
           icon="scan-outline"
@@ -789,14 +832,14 @@ export function SettingsTab({
           cardBackground={palette.card}
           cardBorder={palette.border}
         >
-          <View style={styles.toggleRow}><Text style={[styles.toggleLabel, { color: palette.fg }]}>Auto detect</Text><Switch accessibilityLabel="Auto detect" value={settings.autoDetect} onValueChange={(value) => onPatchSettings({ autoDetect: value, scanProfile: value ? 'auto' : settings.scanProfile })} /></View>
-          <View style={styles.toggleRow}><Text style={[styles.toggleLabel, { color: palette.fg }]}>Open URL</Text><Switch accessibilityLabel="Open URL" value={settings.openUrls ?? true} onValueChange={(value) => onPatchSettings({ openUrls: value })} /></View>
-          <View style={styles.toggleRow}><Text style={[styles.toggleLabel, { color: palette.fg }]}>OCR correction</Text><Switch accessibilityLabel="OCR correction" value={settings.ocrCorrection} onValueChange={(value) => onPatchSettings({ ocrCorrection: value })} /></View>
+          <View style={styles.toggleRow}><Text style={[styles.toggleLabel, { color: palette.fg }]}>Auto detect</Text><Switch accessibilityLabel="Auto detect" value={settings.autoDetect} onValueChange={(value) => patchSettingsLogged({ autoDetect: value, scanProfile: value ? 'auto' : settings.scanProfile })} /></View>
+          <View style={styles.toggleRow}><Text style={[styles.toggleLabel, { color: palette.fg }]}>Open URL</Text><Switch accessibilityLabel="Open URL" value={settings.openUrls ?? true} onValueChange={(value) => patchSettingsLogged({ openUrls: value })} /></View>
+          <View style={styles.toggleRow}><Text style={[styles.toggleLabel, { color: palette.fg }]}>OCR correction</Text><Switch accessibilityLabel="OCR correction" value={settings.ocrCorrection} onValueChange={(value) => patchSettingsLogged({ ocrCorrection: value })} /></View>
         </SectionCard>
 
         <SectionCard
           open={sectionOpen['notes-features']}
-          onToggle={() => toggleSection('notes-features')}
+          onToggle={() => toggleSettingsSection('notes-features')}
           title="Notes features"
           subtitle="Toggle workflows available in the Notes tab."
           icon="document-text-outline"
@@ -857,7 +900,7 @@ export function SettingsTab({
 
         <SectionCard
           open={sectionOpen['smart-notes']}
-          onToggle={() => toggleSection('smart-notes')}
+          onToggle={() => toggleSettingsSection('smart-notes')}
           title="Smart notes"
           subtitle="Entity detection and card rendering."
           icon="sparkles-outline"
@@ -871,7 +914,7 @@ export function SettingsTab({
             <Switch
               accessibilityLabel="IP detection"
               value={settings.smartNotes?.ipDetectionEnabled ?? true}
-              onValueChange={(value) => onPatchSettings({
+              onValueChange={(value) => patchSettingsLogged({
                 smartNotes: {
                   ...settings.smartNotes!,
                   ipDetectionEnabled: value,
@@ -884,7 +927,7 @@ export function SettingsTab({
             <Switch
               accessibilityLabel="Detect IP"
               value={settings.smartNotes?.detectionEnabled.ip ?? true}
-              onValueChange={(value) => onPatchSettings({
+              onValueChange={(value) => patchSettingsLogged({
                 smartNotes: {
                   ...settings.smartNotes!,
                   detectionEnabled: {
@@ -900,7 +943,7 @@ export function SettingsTab({
             <Switch
               accessibilityLabel="Detect hostname"
               value={settings.smartNotes?.detectionEnabled.hostname ?? true}
-              onValueChange={(value) => onPatchSettings({
+              onValueChange={(value) => patchSettingsLogged({
                 smartNotes: {
                   ...settings.smartNotes!,
                   detectionEnabled: {
@@ -916,7 +959,7 @@ export function SettingsTab({
             <Switch
               accessibilityLabel="Detect office"
               value={settings.smartNotes?.detectionEnabled.office ?? true}
-              onValueChange={(value) => onPatchSettings({
+              onValueChange={(value) => patchSettingsLogged({
                 smartNotes: {
                   ...settings.smartNotes!,
                   detectionEnabled: {
@@ -932,7 +975,7 @@ export function SettingsTab({
             <Switch
               accessibilityLabel="Detect PI"
               value={settings.smartNotes?.detectionEnabled.asset ?? true}
-              onValueChange={(value) => onPatchSettings({
+              onValueChange={(value) => patchSettingsLogged({
                 smartNotes: {
                   ...settings.smartNotes!,
                   detectionEnabled: {
@@ -948,7 +991,7 @@ export function SettingsTab({
           <TextInput
             style={[styles.input, { borderColor: palette.border, color: palette.fg, backgroundColor: palette.card }]}
             value={settings.smartNotes?.regex.ip || ''}
-            onChangeText={(value) => onPatchSettings({
+            onChangeText={(value) => patchSettingsLogged({
               smartNotes: {
                 ...settings.smartNotes!,
                 regex: { ...settings.smartNotes!.regex, ip: value },
@@ -962,7 +1005,7 @@ export function SettingsTab({
           <TextInput
             style={[styles.input, { borderColor: palette.border, color: palette.fg, backgroundColor: palette.card }]}
             value={settings.smartNotes?.regex.hostname || ''}
-            onChangeText={(value) => onPatchSettings({
+            onChangeText={(value) => patchSettingsLogged({
               smartNotes: {
                 ...settings.smartNotes!,
                 regex: { ...settings.smartNotes!.regex, hostname: value },
@@ -976,7 +1019,7 @@ export function SettingsTab({
           <TextInput
             style={[styles.input, { borderColor: palette.border, color: palette.fg, backgroundColor: palette.card }]}
             value={settings.smartNotes?.regex.pi || ''}
-            onChangeText={(value) => onPatchSettings({
+            onChangeText={(value) => patchSettingsLogged({
               smartNotes: {
                 ...settings.smartNotes!,
                 regex: { ...settings.smartNotes!.regex, pi: value },
@@ -1006,7 +1049,7 @@ export function SettingsTab({
                   setOfficeDraft('');
                   return;
                 }
-                onPatchSettings({
+                patchSettingsLogged({
                   smartNotes: {
                     ...settings.smartNotes!,
                     offices: [...current, nextOffice],
@@ -1022,7 +1065,7 @@ export function SettingsTab({
             {(settings.smartNotes?.offices || []).map((office) => (
               <Pressable
                 key={office}
-                onPress={() => onPatchSettings({
+                onPress={() => patchSettingsLogged({
                   smartNotes: {
                     ...settings.smartNotes!,
                     offices: (settings.smartNotes?.offices || []).filter((entry) => entry !== office),
@@ -1038,7 +1081,7 @@ export function SettingsTab({
 
         <SectionCard
           open={sectionOpen['security']}
-          onToggle={() => toggleSection('security')}
+          onToggle={() => toggleSettingsSection('security')}
           title="Security"
           subtitle="PIN to unlock private notes."
           icon="lock-closed-outline"
@@ -1090,7 +1133,7 @@ export function SettingsTab({
 
         <SectionCard
           open={sectionOpen['clipboard']}
-          onToggle={() => toggleSection('clipboard')}
+          onToggle={() => toggleSettingsSection('clipboard')}
           title="Clipboard"
           subtitle="Cloud sync and capture behavior."
           icon="clipboard-outline"
@@ -1109,7 +1152,7 @@ export function SettingsTab({
             <Switch
               accessibilityLabel="Cloud sync"
               value={settings.clipboardCloudSync}
-              onValueChange={(value) => onPatchSettings({ clipboardCloudSync: value })}
+              onValueChange={(value) => patchSettingsLogged({ clipboardCloudSync: value })}
             />
           </View>
           <View style={styles.toggleRow}>
@@ -1120,14 +1163,14 @@ export function SettingsTab({
             <Switch
               accessibilityLabel="Background capture"
               value={settings.clipboardBackgroundCapture}
-              onValueChange={(value) => onPatchSettings({ clipboardBackgroundCapture: value })}
+              onValueChange={(value) => patchSettingsLogged({ clipboardBackgroundCapture: value })}
             />
           </View>
         </SectionCard>
 
         <SectionCard
           open={sectionOpen['shared-groups']}
-          onToggle={() => toggleSection('shared-groups')}
+          onToggle={() => toggleSettingsSection('shared-groups')}
           title="Shared groups"
           subtitle="Create/join note groups."
           icon="people-outline"
@@ -1179,7 +1222,7 @@ export function SettingsTab({
         {Platform.OS === 'web' ? (
           <SectionCard
             open={sectionOpen['pwa']}
-            onToggle={() => toggleSection('pwa')}
+            onToggle={() => toggleSettingsSection('pwa')}
             title="PWA"
             subtitle="Install and desktop mode."
             icon="cloud-download-outline"
@@ -1242,7 +1285,7 @@ export function SettingsTab({
 
         <SectionCard
           open={sectionOpen['barcode']}
-          onToggle={() => toggleSection('barcode')}
+          onToggle={() => toggleSettingsSection('barcode')}
           title="Barcode formats"
           subtitle="Available formats."
           icon="barcode-outline"
@@ -1257,7 +1300,7 @@ export function SettingsTab({
             {barcodeOptions.map((format) => {
               const selected = barcodeOutputFormat === format.name;
               return (
-                <Pressable key={format.name} onPress={() => { const match = BARCODE_FORMAT_OPTIONS.find((opt) => opt.value === format.name); if (!match || format.hardwareOnly) return; onPatchSettings({ barcodeOutputFormat: match.value }); }} style={({ pressed }) => [styles.formatCard, isDesktop ? styles.formatCardDesktop : styles.formatCardMobile, { borderColor: selected ? activeAccent : palette.border, backgroundColor: palette.card, opacity: pressed ? 0.8 : 1 }]}>
+                <Pressable key={format.name} onPress={() => { const match = BARCODE_FORMAT_OPTIONS.find((opt) => opt.value === format.name); if (!match || format.hardwareOnly) return; patchSettingsLogged({ barcodeOutputFormat: match.value }); }} style={({ pressed }) => [styles.formatCard, isDesktop ? styles.formatCardDesktop : styles.formatCardMobile, { borderColor: selected ? activeAccent : palette.border, backgroundColor: palette.card, opacity: pressed ? 0.8 : 1 }]}>
                   <Text style={[styles.formatName, { color: palette.fg }]}>{format.label}</Text>
                   <Text style={[styles.formatDescription, { color: palette.muted }]}>{format.description}</Text>
                 </Pressable>
@@ -1269,7 +1312,7 @@ export function SettingsTab({
 
         <SectionCard
           open={sectionOpen['cleanup']}
-          onToggle={() => toggleSection('cleanup')}
+          onToggle={() => toggleSettingsSection('cleanup')}
           title="Auto-cleanup"
           subtitle="Notes and history retention."
           icon="trash-outline"
@@ -1291,7 +1334,7 @@ export function SettingsTab({
                   return (
                     <Pressable
                       key={days}
-                      onPress={() => onPatchSettings({ notesAutoClearDays: days })}
+                      onPress={() => patchSettingsLogged({ notesAutoClearDays: days })}
                       style={({ pressed }) => ({
                         paddingHorizontal: 12,
                         paddingVertical: 6,
@@ -1321,7 +1364,7 @@ export function SettingsTab({
                   return (
                     <Pressable
                       key={days}
-                      onPress={() => onPatchSettings({ historyAutoClearDays: days })}
+                      onPress={() => patchSettingsLogged({ historyAutoClearDays: days })}
                       style={({ pressed }) => ({
                         paddingHorizontal: 12,
                         paddingVertical: 6,
@@ -1528,7 +1571,7 @@ export function SettingsTab({
 
         <SectionCard
           open={sectionOpen['data-sync']}
-          onToggle={() => toggleSection('data-sync')}
+          onToggle={() => toggleSettingsSection('data-sync')}
           title="Data + Sync"
           subtitle="Backup and synchronization."
           icon="cloud-upload-outline"
@@ -1556,8 +1599,83 @@ export function SettingsTab({
         </SectionCard>
 
         <SectionCard
+          open={sectionOpen['diagnostics']}
+          onToggle={() => toggleSettingsSection('diagnostics')}
+          title="Production logs"
+          subtitle="Live local diagnostics for buttons, settings, functions and runtime errors."
+          icon="bug-outline"
+          badge={`${diagnosticLogs.length} EVENTS`}
+          badgeTone={diagnosticLogs.some((entry) => entry.level === 'error') ? 'warn' : 'info'}
+          accent={palette.accent}
+          subtitleColor={palette.muted}
+          cardBackground={palette.card}
+          cardBorder={palette.border}
+        >
+          <View style={styles.modeRow}>
+            {(['all', 'info', 'warn', 'error'] as const).map((level) => {
+              const active = diagnosticFilter === level;
+              return (
+                <Pressable
+                  key={level}
+                  onPress={() => {
+                    logSettingsAction('filter diagnostics', { level });
+                    setDiagnosticFilter(level);
+                  }}
+                  style={[styles.modeChip, { borderColor: active ? activeAccent : palette.border, backgroundColor: active ? 'rgba(255,216,77,0.16)' : palette.card }]}
+                >
+                  <Text style={[styles.modeChipText, { color: active ? activeAccent : palette.fg, textTransform: 'uppercase' }]}>{level}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+
+          <View style={[styles.bulkGrid, isDesktop ? styles.bulkGridDesktop : null]}>
+            <Pressable
+              onPress={() => runDiagnosticAction('Copy logs', onCopyLogs)}
+              style={({ pressed }) => [styles.bulkButton, styles.bulkGridItem, isDesktop ? styles.bulkGridItemDesktop : styles.bulkGridItemMobile, { backgroundColor: activeAccent, opacity: pressed ? 0.8 : 1 }]}
+            >
+              <Text style={[styles.bulkButtonText, { color: '#111' }]}>Copy logs</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => runDiagnosticAction('Export logs', onExportLogs)}
+              style={({ pressed }) => [styles.bulkButton, styles.bulkGridItem, isDesktop ? styles.bulkGridItemDesktop : styles.bulkGridItemMobile, { backgroundColor: activeAccent, opacity: pressed ? 0.8 : 1 }]}
+            >
+              <Text style={[styles.bulkButtonText, { color: '#111' }]}>Export JSON</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => runDiagnosticAction('Clear logs', async () => {
+                await diag.clear();
+                showToast('Logs cleared', 'success');
+              })}
+              style={({ pressed }) => [styles.bulkButton, styles.bulkGridItem, isDesktop ? styles.bulkGridItemDesktop : styles.bulkGridItemMobile, { backgroundColor: '#991b1b', opacity: pressed ? 0.8 : 1 }]}
+            >
+              <Text style={[styles.bulkButtonText, { color: '#fff' }]}>Clear logs</Text>
+            </Pressable>
+          </View>
+
+          <View style={[styles.logPanel, { borderColor: palette.border, backgroundColor: palette.bg }]}>
+            {filteredDiagnosticLogs.length ? (
+              filteredDiagnosticLogs.map((entry, index) => {
+                const color = entry.level === 'error' ? '#ef4444' : entry.level === 'warn' ? '#f59e0b' : palette.accent;
+                const time = new Date(entry.ts).toLocaleTimeString();
+                const payload = entry.data ? ` ${JSON.stringify(entry.data)}` : '';
+                return (
+                  <View key={`${entry.ts}-${index}`} style={[styles.logRow, { borderBottomColor: palette.border }]}>
+                    <Text style={[styles.logMeta, { color }]}>{time} [{entry.level.toUpperCase()}]</Text>
+                    <Text selectable style={[styles.logText, { color: palette.fg }]}>{entry.event}{payload}</Text>
+                  </View>
+                );
+              })
+            ) : (
+              <Text style={[styles.helperLine, { color: palette.muted }]}>No local diagnostic events yet.</Text>
+            )}
+          </View>
+          <Text style={[styles.helperLine, { color: palette.muted }]}>Stored locally in AsyncStorage and refreshed live while Settings is open.</Text>
+        </SectionCard>
+
+        <SectionCard
           open={sectionOpen['advanced']}
-          onToggle={() => toggleSection('advanced')}
+          onToggle={() => toggleSettingsSection('advanced')}
           title="Advanced"
           subtitle="Prefixes, URLs, and power-user toggles."
           icon="construct-outline"
@@ -1572,7 +1690,7 @@ export function SettingsTab({
           <TextInput
             style={[styles.input, { borderColor: palette.border, color: palette.fg, backgroundColor: palette.card }]}
             value={settings.fullPrefix}
-            onChangeText={(value) => onPatchSettings({ fullPrefix: value.toUpperCase() })}
+            onChangeText={(value) => patchSettingsLogged({ fullPrefix: value.toUpperCase() })}
             placeholder="02PI20"
             placeholderTextColor={palette.muted}
             autoCapitalize="characters"
@@ -1582,7 +1700,7 @@ export function SettingsTab({
           <TextInput
             style={[styles.input, { borderColor: palette.border, color: palette.fg, backgroundColor: palette.card }]}
             value={settings.shortPrefix}
-            onChangeText={(value) => onPatchSettings({ shortPrefix: value.toUpperCase() })}
+            onChangeText={(value) => patchSettingsLogged({ shortPrefix: value.toUpperCase() })}
             placeholder="MUSTBRUN"
             placeholderTextColor={palette.muted}
             autoCapitalize="characters"
@@ -1592,7 +1710,7 @@ export function SettingsTab({
           <TextInput
             style={[styles.input, { borderColor: palette.border, color: palette.fg, backgroundColor: palette.card }]}
             value={settings.serviceNowBaseUrl}
-            onChangeText={(value) => onPatchSettings({ serviceNowBaseUrl: value.trim() })}
+            onChangeText={(value) => patchSettingsLogged({ serviceNowBaseUrl: value.trim() })}
             placeholder="https://your-instance.service-now.com"
             placeholderTextColor={palette.muted}
             autoCapitalize="none"
@@ -1611,7 +1729,7 @@ export function SettingsTab({
             <Switch
               accessibilityLabel="Show raw text"
               value={settings.showRawText}
-              onValueChange={(value) => onPatchSettings({ showRawText: value })}
+              onValueChange={(value) => patchSettingsLogged({ showRawText: value })}
             />
           </View>
           <View style={styles.toggleRow}>
@@ -1622,7 +1740,7 @@ export function SettingsTab({
             <Switch
               accessibilityLabel="Stay signed in"
               value={settings.staySignedIn}
-              onValueChange={(value) => onPatchSettings({ staySignedIn: value })}
+              onValueChange={(value) => patchSettingsLogged({ staySignedIn: value })}
             />
           </View>
 
@@ -1633,7 +1751,7 @@ export function SettingsTab({
               return (
                 <Pressable
                   key={speed}
-                  onPress={() => onPatchSettings({ laserSpeed: speed })}
+                  onPress={() => patchSettingsLogged({ laserSpeed: speed })}
                   style={[styles.modeChip, { borderColor: active ? activeAccent : palette.border, backgroundColor: active ? 'rgba(255,216,77,0.16)' : palette.card }]}
                 >
                   <Text style={[styles.modeChipText, { color: active ? activeAccent : palette.fg, textTransform: 'capitalize' }]}>{speed}</Text>
@@ -1650,7 +1768,7 @@ export function SettingsTab({
               return (
                 <Pressable
                   key={profile}
-                  onPress={() => onPatchSettings({ scanProfile: profile, autoDetect: profile === 'auto' })}
+                  onPress={() => patchSettingsLogged({ scanProfile: profile, autoDetect: profile === 'auto' })}
                   style={[styles.modeChip, { borderColor: active ? activeAccent : palette.border, backgroundColor: active ? 'rgba(255,216,77,0.16)' : palette.card }]}
                 >
                   <Text style={[styles.modeChipText, { color: active ? activeAccent : palette.fg }]}>{label}</Text>
@@ -1725,6 +1843,10 @@ const styles = StyleSheet.create({
   formatName: { fontSize: 12, fontWeight: '900' },
   formatDescription: { fontSize: 11, lineHeight: 15 },
   helperLine: { fontSize: 11, fontFamily: 'monospace', marginTop: 8 },
+  logPanel: { borderWidth: 1, borderRadius: 10, maxHeight: 360, overflow: 'hidden' },
+  logRow: { paddingHorizontal: 10, paddingVertical: 8, borderBottomWidth: 1, gap: 3 },
+  logMeta: { fontSize: 10, fontWeight: '900', fontFamily: 'monospace' },
+  logText: { fontSize: 11, lineHeight: 15, fontFamily: 'monospace' },
   toggleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 12, minHeight: 44 },
   toggleLabel: { fontSize: 13, fontWeight: '700' },
   bulkActions: { flexDirection: 'row', gap: 10, flexWrap: 'wrap' },
@@ -1756,7 +1878,4 @@ const styles = StyleSheet.create({
   counterValueText: { fontSize: 14, fontWeight: '800' },
   input: { minHeight: 42, borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 13 },
 });
-
-
-
 
