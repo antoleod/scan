@@ -198,4 +198,6 @@ html = html.replace(/<script>\s*if\s*\('serviceWorker'[\s\S]*?<\/script>/g, '');
 replaceOrInject('src="' + basePath + '/sw-register.js"', `<script defer src="${basePath}/sw-register.js"></script>`);
 
 fs.writeFileSync(htmlPath, html, 'utf-8');
+fs.writeFileSync(path.join(distDir, '404.html'), html, 'utf-8');
 console.log(`[inject-pwa] Patched ${htmlPath} (base: "${basePath || '/'}")`);
+console.log('[inject-pwa] Generated 404.html SPA fallback for GitHub Pages');
