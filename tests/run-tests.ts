@@ -9,6 +9,10 @@ import { defaultSettings, piLogic } from "../src/core/settings";
 import { detectGroceryItem, formatShoppingList, isLikelyShoppingList, searchGroceryCatalog } from "../src/utils/groceryDetection";
 import { analyzeShoppingListCandidate, isShoppingList, parseShoppingList } from "../src/core/shoppingList";
 import { parseShoppingListV2 } from "../src/core/shoppingListV2";
+import enLocale from "../src/i18n/locales/en";
+import esLocale from "../src/i18n/locales/es";
+import frLocale from "../src/i18n/locales/fr";
+import nlLocale from "../src/i18n/locales/nl";
 import { findProductAlias, getAllShoppingDictionaries, isConnector, isKnownUnit, isNarrativeBlocker } from "../src/core/shoppingDictionary";
 import { detectSmartTypeFromContent } from "../src/core/smartNoteWorkflows";
 import { detectSmartNoteLabel } from "../src/core/noteIntelligence";
@@ -266,6 +270,25 @@ run("shopping formatter preserves accents and user quantities", () => {
 run("health keywords prevent shopping list misclassification", () => {
   const medicationNote = "Took ibuprofen 400mg for headache, doctor recommended rest";
   assert.equal(isShoppingList(medicationNote), false);
+});
+
+run("i18n locales all expose the same key set as the canonical English resource", () => {
+  const flatten = (obj: Record<string, unknown>, prefix = ""): string[] =>
+    Object.entries(obj).flatMap(([key, value]) => {
+      const path = prefix ? `${prefix}.${key}` : key;
+      return value && typeof value === "object"
+        ? flatten(value as Record<string, unknown>, path)
+        : [path];
+    });
+
+  const enKeys = flatten(enLocale as unknown as Record<string, unknown>).sort();
+  for (const [name, locale] of [["es", esLocale], ["fr", frLocale], ["nl", nlLocale]] as const) {
+    const keys = flatten(locale as unknown as Record<string, unknown>).sort();
+    const missing = enKeys.filter((k) => !keys.includes(k));
+    const extra = keys.filter((k) => !enKeys.includes(k));
+    assert.deepEqual(missing, [], `${name} is missing keys: ${missing.join(", ")}`);
+    assert.deepEqual(extra, [], `${name} has unexpected keys: ${extra.join(", ")}`);
+  }
 });
 
 run("parseShoppingListV2 keeps the user's words instead of translating to the catalog", () => {

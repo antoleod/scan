@@ -20,6 +20,8 @@ import { AuthView } from './authTypes';
 import { useAuth } from './useAuth';
 import { useAppTheme } from '../constants/theme';
 import { diag } from '../core/diagnostics';
+import { hasChosenUiLanguage } from '../i18n';
+import { LanguagePromptModal } from '../components/LanguagePromptModal';
 
 function AuthBackgroundEffects() {
   const { theme } = useAppTheme();
@@ -88,7 +90,19 @@ export default function AuthScreen() {
   const { enterAsGuest, isBiometricLocked, verifyMagicLink } = useAuth();
   const [view, setView] = useState<AuthView>('login');
   const [magicLinkProcessing, setMagicLinkProcessing] = useState(false);
+  const [showLanguagePrompt, setShowLanguagePrompt] = useState(false);
   const { theme } = useAppTheme();
+
+  // First run with no account: ask the user to pick a UI language once.
+  useEffect(() => {
+    let mounted = true;
+    void hasChosenUiLanguage().then((chosen) => {
+      if (mounted && !chosen) setShowLanguagePrompt(true);
+    });
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   // Handle magic link verification on web
   useEffect(() => {
@@ -143,6 +157,7 @@ export default function AuthScreen() {
           onSwitchToRegister={() => setView('register')}
           onSwitchToForgot={() => setView('forgot')}
         />
+        <LanguagePromptModal visible={showLanguagePrompt} onDone={() => setShowLanguagePrompt(false)} />
       </View>
     );
   }
@@ -172,6 +187,7 @@ export default function AuthScreen() {
           </Pressable>
         </View>
       </ScrollView>
+      <LanguagePromptModal visible={showLanguagePrompt} onDone={() => setShowLanguagePrompt(false)} />
     </KeyboardAvoidingView>
   );
 }

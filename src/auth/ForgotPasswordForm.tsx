@@ -10,6 +10,7 @@ import {
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 
+import { useTranslation } from 'react-i18next';
 import { useAuth } from './useAuth';
 import { useAppTheme } from '../constants/theme';
 import { isValidEmail } from '../core/validation';
@@ -20,6 +21,7 @@ interface ForgotPasswordFormProps {
 }
 
 export default function ForgotPasswordForm({ onSwitchToLogin }: ForgotPasswordFormProps) {
+  const { t } = useTranslation();
   const { sendPasswordReset, sendMagicLink } = useAuth();
   const { theme } = useAppTheme();
   const [input, setInput] = useState('');
@@ -38,13 +40,13 @@ export default function ForgotPasswordForm({ onSwitchToLogin }: ForgotPasswordFo
     const value = input.trim().toLowerCase();
 
     if (!value) {
-      setError('Enter your username or recovery email.');
+      setError(t('auth.enterUsernameOrRecovery'));
       return;
     }
 
     // For magic link method, email is required
     if (recoveryMethod === 'magic' && !value.includes('@')) {
-      setError('Magic link requires an email address.');
+      setError(t('auth.magicLinkRequiresEmail'));
       return;
     }
 
@@ -53,19 +55,19 @@ export default function ForgotPasswordForm({ onSwitchToLogin }: ForgotPasswordFo
       if (recoveryMethod === 'magic') {
         // Magic link requires email directly
         if (!isValidEmail(value)) {
-          setError('Please enter a valid email address.');
+          setError(t('auth.enterValidEmail'));
           setLoading(false);
           return;
         }
         await sendMagicLink(value);
-        setSuccess('Sign-in link sent to your email!');
+        setSuccess(t('auth.signInLinkSent'));
         setSuccessType('magic');
       } else {
         // Password reset
         if (value.includes('@')) {
           // Direct email path
           await sendPasswordReset(value);
-          setSuccess('Password reset email sent.');
+          setSuccess(t('auth.passwordResetSent'));
           setSuccessType('email');
         } else {
           // Username path — resolve via index
@@ -73,13 +75,13 @@ export default function ForgotPasswordForm({ onSwitchToLogin }: ForgotPasswordFo
           try {
             resolved = await resolveUsernameToAuthEmail(value);
           } catch {
-            setError('Could not connect. If you registered with a recovery email, enter it directly.');
+            setError(t('auth.couldNotConnectRecovery'));
             setLoading(false);
             return;
           }
 
           if (!resolved) {
-            setError('No account found for that username. Try entering your recovery email instead.');
+            setError(t('auth.noAccountForUsername'));
             setLoading(false);
             return;
           }
@@ -88,22 +90,18 @@ export default function ForgotPasswordForm({ onSwitchToLogin }: ForgotPasswordFo
             // The recovery email is not stored in the public username index
             // (PII protection). Ask the user to enter it directly so the reset
             // is sent to a verified address.
-            setError(
-              'For your account, please enter your recovery email directly to receive the reset link.'
-            );
+            setError(t('auth.enterRecoveryDirectly'));
             setLoading(false);
             return;
           } else {
-            setError(
-              'This account has no recovery email. Try "Passwordless login" or sign in and add one in Profile settings.'
-            );
+            setError(t('auth.noRecoveryEmail'));
             setLoading(false);
             return;
           }
         }
       }
     } catch (submitError) {
-      const message = submitError instanceof Error ? submitError.message : 'Failed to send recovery link.';
+      const message = submitError instanceof Error ? submitError.message : t('auth.failedSendRecovery');
       setError(message);
     } finally {
       setLoading(false);
@@ -132,7 +130,7 @@ export default function ForgotPasswordForm({ onSwitchToLogin }: ForgotPasswordFo
       <Animated.View entering={FadeInDown.delay(100).duration(400)} style={styles.methodSelector}>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Password reset"
+          accessibilityLabel={t('auth.passwordReset')}
           accessibilityState={{ selected: recoveryMethod === 'password' }}
           onPress={() => setRecoveryMethod('password')}
           style={[
@@ -145,13 +143,13 @@ export default function ForgotPasswordForm({ onSwitchToLogin }: ForgotPasswordFo
         >
           <Ionicons name="lock-closed-outline" size={18} color={theme.secondary} style={{ marginRight: 8 }} />
           <Text style={[styles.methodLabel, { color: recoveryMethod === 'password' ? theme.secondary : theme.textSecondary }]}>
-            Password reset
+            {t('auth.passwordReset')}
           </Text>
         </Pressable>
 
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Magic link"
+          accessibilityLabel={t('auth.magicLink')}
           accessibilityState={{ selected: recoveryMethod === 'magic' }}
           onPress={() => setRecoveryMethod('magic')}
           style={[
@@ -164,17 +162,17 @@ export default function ForgotPasswordForm({ onSwitchToLogin }: ForgotPasswordFo
         >
           <Ionicons name="mail-outline" size={18} color={theme.secondary} style={{ marginRight: 8 }} />
           <Text style={[styles.methodLabel, { color: recoveryMethod === 'magic' ? theme.secondary : theme.textSecondary }]}>
-            Magic link
+            {t('auth.magicLink')}
           </Text>
         </Pressable>
       </Animated.View>
 
       <Animated.View entering={FadeInDown.delay(200).duration(400)} style={styles.inputGroup}>
         <Text style={[styles.label, { color: theme.secondary }]}>
-          {recoveryMethod === 'magic' ? 'Email address' : 'Username or recovery email'}
+          {recoveryMethod === 'magic' ? t('auth.emailAddress') : t('auth.usernameOrRecoveryEmail')}
         </Text>
         <TextInput
-          accessibilityLabel={recoveryMethod === 'magic' ? 'Email address' : 'Username or recovery email'}
+          accessibilityLabel={recoveryMethod === 'magic' ? t('auth.emailAddress') : t('auth.usernameOrRecoveryEmail')}
           value={input}
           onChangeText={setInput}
           style={[styles.input, { borderColor: theme.border, backgroundColor: theme.inputBg, color: theme.text }]}
@@ -189,7 +187,7 @@ export default function ForgotPasswordForm({ onSwitchToLogin }: ForgotPasswordFo
       <Animated.View entering={FadeInDown.delay(300).duration(400)}>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={recoveryMethod === 'magic' ? 'Send sign-in link' : 'Send reset link'}
+          accessibilityLabel={recoveryMethod === 'magic' ? t('auth.sendSignInLink') : t('auth.sendResetLink')}
           accessibilityState={{ disabled: submitDisabled, busy: loading }}
           onPress={handleSubmit}
           disabled={submitDisabled}
@@ -200,7 +198,7 @@ export default function ForgotPasswordForm({ onSwitchToLogin }: ForgotPasswordFo
               <ActivityIndicator color={theme.primary} />
             ) : (
               <Text style={[styles.primaryButtonText, { color: theme.primary, opacity: pressed ? 0.85 : 1 }]}>
-                {recoveryMethod === 'magic' ? 'Send sign-in link' : 'Send reset link'}
+                {recoveryMethod === 'magic' ? t('auth.sendSignInLink') : t('auth.sendResetLink')}
               </Text>
             )
           }
@@ -208,8 +206,8 @@ export default function ForgotPasswordForm({ onSwitchToLogin }: ForgotPasswordFo
       </Animated.View>
 
       <View style={styles.linksBlock}>
-        <Pressable accessibilityRole="button" accessibilityLabel="Back to login" onPress={onSwitchToLogin}>
-          <Text style={[styles.primaryLink, { color: theme.secondary }]}>Back to login</Text>
+        <Pressable accessibilityRole="button" accessibilityLabel={t('auth.backToLogin')} onPress={onSwitchToLogin}>
+          <Text style={[styles.primaryLink, { color: theme.secondary }]}>{t('auth.backToLogin')}</Text>
         </Pressable>
       </View>
     </View>

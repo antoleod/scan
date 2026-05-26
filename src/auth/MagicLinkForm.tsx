@@ -20,6 +20,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 
+import { useTranslation } from 'react-i18next';
 import { useAuth } from './useAuth';
 import { useAppTheme } from '../constants/theme';
 import { isValidEmail } from '../core/validation';
@@ -29,6 +30,7 @@ interface MagicLinkFormProps {
 }
 
 export default function MagicLinkForm({ onBack }: MagicLinkFormProps) {
+  const { t } = useTranslation();
   const { sendMagicLink } = useAuth();
   const { theme } = useAppTheme();
   const [email, setEmail] = useState('');
@@ -99,12 +101,12 @@ export default function MagicLinkForm({ onBack }: MagicLinkFormProps) {
     const normalizedEmail = email.trim().toLowerCase();
 
     if (!normalizedEmail) {
-      setError('Please enter your email address.');
+      setError(t('auth.enterYourEmail'));
       return;
     }
 
     if (!isValidEmail(normalizedEmail)) {
-      setError('Please enter a valid email address.');
+      setError(t('auth.enterValidEmail'));
       return;
     }
 
@@ -118,7 +120,7 @@ export default function MagicLinkForm({ onBack }: MagicLinkFormProps) {
       const message =
         submitError instanceof Error
           ? submitError.message
-          : 'Could not send link. Please check your email and try again.';
+          : t('auth.magicCouldNotSend');
       setError(message);
     } finally {
       setLoading(false);
@@ -150,7 +152,7 @@ export default function MagicLinkForm({ onBack }: MagicLinkFormProps) {
           </Animated.View>
 
           <Text style={[styles.title, { color: theme.text }]}>
-            Check your email
+            {t('auth.magicCheckEmail')}
           </Text>
 
           {/* Email Display Card */}
@@ -166,7 +168,7 @@ export default function MagicLinkForm({ onBack }: MagicLinkFormProps) {
           >
             <Ionicons name="mail-outline" size={20} color={theme.secondary} />
             <View style={{ flex: 1 }}>
-              <Text style={[styles.emailLabel, { color: theme.textSecondary }]}>Sign-in link sent to</Text>
+              <Text style={[styles.emailLabel, { color: theme.textSecondary }]}>{t('auth.magicLinkSentTo')}</Text>
               <Text style={[styles.emailValue, { color: theme.text }]}>{email}</Text>
             </View>
           </Animated.View>
@@ -178,7 +180,7 @@ export default function MagicLinkForm({ onBack }: MagicLinkFormProps) {
                 <Text style={[styles.stepNumberText, { color: theme.primary }]}>1</Text>
               </View>
               <Text style={[styles.stepText, { color: theme.text }]}>
-                Click the link in your email
+                {t('auth.magicStep1')}
               </Text>
             </View>
 
@@ -189,7 +191,7 @@ export default function MagicLinkForm({ onBack }: MagicLinkFormProps) {
                 <Text style={[styles.stepNumberText, { color: theme.primary }]}>2</Text>
               </View>
               <Text style={[styles.stepText, { color: theme.text }]}>
-                You'll be signed in immediately
+                {t('auth.magicStep2')}
               </Text>
             </View>
           </Animated.View>
@@ -199,14 +201,14 @@ export default function MagicLinkForm({ onBack }: MagicLinkFormProps) {
             <View style={styles.tip}>
               <Ionicons name="alert-circle" size={16} color={theme.textSecondary} />
               <Text style={[styles.tipText, { color: theme.textSecondary }]}>
-                Link expires in 24 hours
+                {t('auth.magicTipExpires')}
               </Text>
             </View>
             {Platform.OS !== 'web' && (
               <View style={[styles.tip, { backgroundColor: theme.secondary + '08', paddingHorizontal: 10, paddingVertical: 8, borderRadius: 8 }]}>
                 <Ionicons name="phone-portrait-outline" size={16} color={theme.secondary} style={{ marginRight: 4 }} />
                 <Text style={[styles.tipText, { color: theme.secondary, fontWeight: '600', flex: 1 }]}>
-                  Tap the link in your email and we'll sign you in instantly
+                  {t('auth.magicTipTapMobile')}
                 </Text>
               </View>
             )}
@@ -214,14 +216,14 @@ export default function MagicLinkForm({ onBack }: MagicLinkFormProps) {
               <View style={[styles.tip, { backgroundColor: theme.secondary + '08', paddingHorizontal: 10, paddingVertical: 8, borderRadius: 8 }]}>
                 <Ionicons name="open-outline" size={16} color={theme.secondary} style={{ marginRight: 4 }} />
                 <Text style={[styles.tipText, { color: theme.secondary, fontWeight: '600', flex: 1 }]}>
-                  The link will open in this browser window
+                  {t('auth.magicTipOpenWeb')}
                 </Text>
               </View>
             )}
             <View style={styles.tip}>
               <Ionicons name="shield-checkmark" size={16} color={theme.secondary} />
               <Text style={[styles.tipText, { color: theme.textSecondary }]}>
-                No password required
+                {t('auth.magicTipNoPassword')}
               </Text>
             </View>
           </Animated.View>
@@ -229,7 +231,7 @@ export default function MagicLinkForm({ onBack }: MagicLinkFormProps) {
           {/* Closing Indicator */}
           <Animated.View entering={FadeInDown.delay(500).duration(500)} style={styles.closingSection}>
             <Text style={[styles.closingText, { color: theme.textSecondary }]}>
-              ✓ Closing in a moment...
+              {t('auth.magicClosingMoment')}
             </Text>
           </Animated.View>
 
@@ -237,12 +239,12 @@ export default function MagicLinkForm({ onBack }: MagicLinkFormProps) {
           <Animated.View entering={FadeInDown.delay(600).duration(500)} style={styles.resendSection}>
             {!canResend && timeRemaining > 0 ? (
               <Text style={[styles.resendWait, { color: theme.textSecondary }]}>
-                Resend available in {timeRemaining}s
+                {t('auth.magicResendAvailableIn', { seconds: timeRemaining })}
               </Text>
             ) : (
               <Pressable onPress={handleResend} disabled={loading}>
                 <Text style={[styles.resendLink, { color: theme.secondary, opacity: loading ? 0.5 : 1 }]}>
-                  Didn't receive? Resend link
+                  {t('auth.magicResendLink')}
                 </Text>
               </Pressable>
             )}
@@ -281,10 +283,10 @@ export default function MagicLinkForm({ onBack }: MagicLinkFormProps) {
         {/* Title & Subtitle */}
         <Animated.View entering={FadeInDown.delay(100).duration(400)} style={styles.headerSection}>
           <Text style={[styles.title, { color: theme.text }]}>
-            Passwordless login
+            {t('auth.passwordlessLogin')}
           </Text>
           <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
-            Enter your email and we'll send you a secure sign-in link
+            {t('auth.magicSubtitle')}
           </Text>
         </Animated.View>
 
@@ -298,7 +300,7 @@ export default function MagicLinkForm({ onBack }: MagicLinkFormProps) {
 
         {/* Input Section */}
         <Animated.View entering={FadeInDown.delay(200).duration(400)} style={styles.inputSection}>
-          <Text style={[styles.label, { color: theme.secondary }]}>Email address</Text>
+          <Text style={[styles.label, { color: theme.secondary }]}>{t('auth.emailAddress')}</Text>
           <View style={[styles.inputWrapper, { borderColor: error ? theme.error : theme.border }]}>
             <Ionicons name="mail-outline" size={20} color={theme.secondary} style={{ marginRight: 10 }} />
             <TextInput
@@ -326,7 +328,7 @@ export default function MagicLinkForm({ onBack }: MagicLinkFormProps) {
           {isValidEmail(email.trim()) && (
             <Animated.View entering={FadeIn.duration(200)} style={styles.validationHint}>
               <Ionicons name="checkmark-circle" size={14} color={theme.secondary} />
-              <Text style={[styles.validationText, { color: theme.secondary }]}>Valid email</Text>
+              <Text style={[styles.validationText, { color: theme.secondary }]}>{t('auth.validEmail')}</Text>
             </Animated.View>
           )}
         </Animated.View>
@@ -344,7 +346,7 @@ export default function MagicLinkForm({ onBack }: MagicLinkFormProps) {
         >
           <Ionicons name="information-circle" size={18} color={theme.secondary} />
           <Text style={[styles.infoText, { color: theme.textSecondary }]}>
-            We'll send a secure link to your email. No password needed.
+            {t('auth.magicInfoBox')}
           </Text>
         </Animated.View>
 
@@ -365,7 +367,7 @@ export default function MagicLinkForm({ onBack }: MagicLinkFormProps) {
             ) : (
               <>
                 <Ionicons name="send-outline" size={18} color={theme.primary} style={{ marginRight: 8 }} />
-                <Text style={[styles.buttonText, { color: theme.primary }]}>Send sign-in link</Text>
+                <Text style={[styles.buttonText, { color: theme.primary }]}>{t('auth.sendSignInLink')}</Text>
               </>
             )}
           </Pressable>
@@ -374,10 +376,10 @@ export default function MagicLinkForm({ onBack }: MagicLinkFormProps) {
         {/* Alternative Login Link */}
         <Animated.View entering={FadeInDown.delay(500).duration(400)} style={styles.alternativeSection}>
           <Text style={[styles.alternativeText, { color: theme.textSecondary }]}>
-            Prefer to use password?
+            {t('auth.magicPreferPassword')}
           </Text>
           <Pressable onPress={onBack}>
-            <Text style={[styles.alternativeLink, { color: theme.secondary }]}>Back to login</Text>
+            <Text style={[styles.alternativeLink, { color: theme.secondary }]}>{t('auth.backToLogin')}</Text>
           </Pressable>
         </Animated.View>
       </Animated.View>

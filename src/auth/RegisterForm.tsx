@@ -22,9 +22,14 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
+import { useTranslation } from 'react-i18next';
 import { useAuth } from './useAuth';
 import { useAppTheme } from '../constants/theme';
 import { isValidEmail } from './validation';
+import i18n, { markUiLanguageChosen } from '../i18n';
+import { normalizeUiLanguage, type UiLanguage } from '../i18n/languages';
+import { LanguagePicker } from '../components/LanguagePicker';
+import { loadSettings, saveSettings } from '../core/settings';
 
 // Floating ambient orb for background depth
 function FloatingOrb({ size, color, delay, dur, startX, startY }: {
@@ -149,6 +154,7 @@ interface RegisterFormProps {
 }
 
 export default function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
+  const { t } = useTranslation();
   const { register, firebase } = useAuth();
   const { theme } = useAppTheme();
   const [username, setUsername] = useState('');
@@ -160,6 +166,7 @@ export default function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
+  const [language, setLanguage] = useState<UiLanguage>(() => normalizeUiLanguage(i18n.language));
   const normalizedUsername = username.trim().toLowerCase().replace(/\s+/g, '');
   const usernameValid = /^[a-z0-9._-]{3,}$/.test(normalizedUsername);
   const normalizedRecoveryEmail = recoveryEmail.trim().toLowerCase();
@@ -253,32 +260,32 @@ export default function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
     setError(null);
     if (!firebase.enabled) {
       const missing = firebase.missingRequiredEnv.join(', ');
-      setError(missing ? `Firebase is not configured. Missing: ${missing}` : 'Firebase is not configured in this build.');
+      setError(missing ? t('auth.firebaseNotConfiguredBuildMissing', { missing }) : t('auth.firebaseNotConfiguredBuild'));
       return;
     }
 
     if (!normalizedUsername) {
-      setError('Username is required.');
+      setError(t('auth.usernameRequired'));
       return;
     }
 
     if (!usernameValid || !isValidEmail(authEmail)) {
-      setError('Username must be at least 3 characters and can include letters, numbers, dots, underscores, and hyphens.');
+      setError(t('auth.usernameInvalid'));
       return;
     }
 
     if (normalizedRecoveryEmail && !isValidEmail(normalizedRecoveryEmail)) {
-      setError('Recovery email format is invalid.');
+      setError(t('auth.recoveryEmailInvalid'));
       return;
     }
 
     if (password.length < 6) {
-      setError('Password must be at least 6 characters.');
+      setError(t('auth.passwordMin6'));
       return;
     }
 
     if (password !== confirmPassword) {
-      setError('Passwords do not match.');
+      setError(t('auth.passwordsNoMatch'));
       return;
     }
 
@@ -290,9 +297,17 @@ export default function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
         phone: phone.trim() || undefined,
         authEmailSource,
       });
+      // Persist the chosen UI language so it survives across sessions/devices.
+      try {
+        const prev = await loadSettings();
+        await saveSettings({ ...prev, uiLanguage: language });
+        await markUiLanguageChosen();
+      } catch {
+        // Non-critical: the live i18next language already applied.
+      }
       setIsSuccess(true);
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : 'Could not create the account.');
+      setError(submitError instanceof Error ? submitError.message : t('auth.accountCreateFailed'));
     } finally {
       setLoading(false);
     }
@@ -330,9 +345,21 @@ export default function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
       {error ? <Text accessibilityLiveRegion="assertive" style={[styles.errorText, { color: theme.error }]}>{error}</Text> : null}
 
       <View style={styles.inputGroup}>
-        <Text style={[styles.label, { color: theme.secondary }]}>Username</Text>
+        <Text style={[styles.label, { color: theme.secondary }]}>{t('language.registerLabel')}</Text>
+        <LanguagePicker
+          value={language}
+          onChange={setLanguage}
+          accentColor={theme.secondary}
+          textColor={theme.textSecondary}
+          borderColor={theme.border}
+          surfaceColor={theme.inputBg}
+        />
+      </View>
+
+      <View style={styles.inputGroup}>
+        <Text style={[styles.label, { color: theme.secondary }]}>{t('auth.username')}</Text>
         <TextInput
-          accessibilityLabel="Username"
+          accessibilityLabel={t('auth.username')}
           value={username}
           onChangeText={setUsername}
           style={[styles.input, { borderColor: theme.border, backgroundColor: theme.inputBg, color: theme.text }]}
@@ -344,37 +371,37 @@ export default function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
           autoCorrect={false}
         />
         <Text style={{ color: theme.textSecondary, fontSize: 11, marginTop: 6 }}>
-          {normalizedRecoveryEmail ? 'Password reset will be sent to this email.' : 'You can add a recovery email later from profile settings.'}
+          {normalizedRecoveryEmail ? t('auth.recoveryHintWithEmail') : t('auth.recoveryHintNoEmail')}
         </Text>
       </View>
 
       <View style={styles.inputGroup}>
         <View style={styles.labelRow}>
-          <Text style={[styles.label, { color: theme.secondary }]}>Password</Text>
+          <Text style={[styles.label, { color: theme.secondary }]}>{t('auth.password')}</Text>
           <View style={{ flexDirection: 'row', gap: 12 }}>
-            <Pressable accessibilityRole="button" accessibilityLabel="Generate a strong password" onPress={handleGeneratePassword} style={styles.generateBtn}>
+            <Pressable accessibilityRole="button" accessibilityLabel={t('auth.generateStrongPassword')} onPress={handleGeneratePassword} style={styles.generateBtn}>
               <Ionicons name="sparkles-outline" size={14} color={theme.secondary} />
-              <Text style={[styles.generateText, { color: theme.secondary }]}>Magic pass</Text>
+              <Text style={[styles.generateText, { color: theme.secondary }]}>{t('auth.magicPass')}</Text>
             </Pressable>
             {password.length > 0 && (
-              <Pressable accessibilityRole="button" accessibilityLabel="Copy password" onPress={handleCopyPassword} style={styles.generateBtn}>
+              <Pressable accessibilityRole="button" accessibilityLabel={t('auth.copyPassword')} onPress={handleCopyPassword} style={styles.generateBtn}>
                 <Ionicons name="copy-outline" size={14} color={theme.secondary} />
-                <Text style={[styles.generateText, { color: theme.secondary }]}>Copy</Text>
+                <Text style={[styles.generateText, { color: theme.secondary }]}>{t('auth.copy')}</Text>
               </Pressable>
             )}
           </View>
           {/* Tooltip Copied Overlay */}
           <Animated.View style={[styles.tooltip, { backgroundColor: theme.secondary }, tooltipStyle, { pointerEvents: 'none' }]}>
-            <Text style={[styles.tooltipText, { color: theme.primary }]}>COPIED!</Text>
+            <Text style={[styles.tooltipText, { color: theme.primary }]}>{t('auth.copied')}</Text>
           </Animated.View>
         </View>
         <View style={styles.passwordWrapper}>
           <TextInput
-            accessibilityLabel="Password"
+            accessibilityLabel={t('auth.password')}
             value={password}
             onChangeText={setPassword}
             style={[styles.input, styles.passwordInput, { borderColor: theme.border, backgroundColor: theme.inputBg, color: theme.text }]}
-            placeholder="At least 6 characters"
+            placeholder={t('auth.passwordMin6Placeholder')}
             secureTextEntry={!showPassword}
             textContentType="newPassword"
             autoComplete="password-new"
@@ -384,7 +411,7 @@ export default function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
           />
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
+            accessibilityLabel={showPassword ? t('auth.hidePassword') : t('auth.showPassword')}
             accessibilityState={{ selected: showPassword }}
             onPress={() => setShowPassword(!showPassword)}
             style={styles.eyeIcon}
@@ -398,7 +425,7 @@ export default function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
             accessibilityLiveRegion="polite"
             accessibilityLabel={`Password strength: ${['very weak', 'weak', 'fair', 'good', 'strong'][passwordStrength] ?? 'very weak'}`}
           >
-            <Text style={[styles.strengthText, { color: theme.textSecondary }]}>STRENGTH</Text>
+            <Text style={[styles.strengthText, { color: theme.textSecondary }]}>{t('auth.strength')}</Text>
             <View style={styles.strengthBar}>
               {[1, 2, 3, 4].map((step) => (
                 <View 
@@ -415,14 +442,14 @@ export default function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
       </View>
 
       <View style={styles.inputGroup}>
-        <Text style={[styles.label, { color: theme.secondary }]}>Confirm password</Text>
+        <Text style={[styles.label, { color: theme.secondary }]}>{t('auth.confirmPassword')}</Text>
         <View style={styles.passwordWrapper}>
           <TextInput
-            accessibilityLabel="Confirm password"
+            accessibilityLabel={t('auth.confirmPassword')}
             value={confirmPassword}
             onChangeText={setConfirmPassword}
             style={[styles.input, styles.passwordInput, { borderColor: theme.border, backgroundColor: theme.inputBg, color: theme.text }]}
-            placeholder="Repeat password"
+            placeholder={t('auth.repeatPasswordPlaceholder')}
             secureTextEntry={!showPassword}
             textContentType="password"
             autoComplete="password"
@@ -434,9 +461,9 @@ export default function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
       </View>
 
       <View style={styles.inputGroup}>
-        <Text style={[styles.label, { color: theme.secondary }]}>Recovery email (optional)</Text>
+        <Text style={[styles.label, { color: theme.secondary }]}>{t('auth.recoveryEmailOptional')}</Text>
         <TextInput
-          accessibilityLabel="Recovery email, optional"
+          accessibilityLabel={t('auth.recoveryEmailA11y')}
           value={recoveryEmail}
           onChangeText={setRecoveryEmail}
           style={[styles.input, { borderColor: theme.border, backgroundColor: theme.inputBg, color: theme.text }]}
@@ -448,9 +475,9 @@ export default function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
       </View>
 
       <View style={styles.inputGroup}>
-        <Text style={[styles.label, { color: theme.secondary }]}>Recovery phone (optional)</Text>
+        <Text style={[styles.label, { color: theme.secondary }]}>{t('auth.recoveryPhoneOptional')}</Text>
         <TextInput
-          accessibilityLabel="Recovery phone, optional"
+          accessibilityLabel={t('auth.recoveryPhoneA11y')}
           value={phone}
           onChangeText={setPhone}
           style={[styles.input, { borderColor: theme.border, backgroundColor: theme.inputBg, color: theme.text }]}
@@ -461,20 +488,20 @@ export default function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
 
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel="Create account"
+        accessibilityLabel={t('auth.createAccount')}
         accessibilityState={{ disabled: submitDisabled, busy: loading }}
         onPress={handleSubmit}
         disabled={submitDisabled}
         style={[styles.primaryButton, { backgroundColor: theme.secondary }, submitDisabled ? styles.primaryButtonDisabled : null]}
       >
         {({ pressed }) =>
-          loading ? <ActivityIndicator color={theme.primary} /> : <Text style={[styles.primaryButtonText, { color: theme.primary, opacity: pressed ? 0.85 : 1 }]}>Create account</Text>
+          loading ? <ActivityIndicator color={theme.primary} /> : <Text style={[styles.primaryButtonText, { color: theme.primary, opacity: pressed ? 0.85 : 1 }]}>{t('auth.createAccount')}</Text>
         }
       </Pressable>
 
       <View style={styles.linksBlock}>
-        <Pressable accessibilityRole="button" accessibilityLabel="I already have an account" onPress={onSwitchToLogin}>
-          <Text style={[styles.primaryLink, { color: theme.secondary }]}>I already have an account</Text>
+        <Pressable accessibilityRole="button" accessibilityLabel={t('auth.alreadyHaveAccount')} onPress={onSwitchToLogin}>
+          <Text style={[styles.primaryLink, { color: theme.secondary }]}>{t('auth.alreadyHaveAccount')}</Text>
         </Pressable>
       </View>
     </View>

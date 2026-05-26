@@ -24,6 +24,7 @@ export const defaultSettings: AppSettings = {
   clipboardCloudSync: false,
   clipboardBackgroundCapture: false,
   showRawText: false,
+  uiLanguage: 'en',
   shoppingListLanguage: 'en',
   smartNotes: {
     offices: ['Spinelli', 'Kohl', 'Strasbourg'],
@@ -90,6 +91,10 @@ export async function loadSettings(): Promise<AppSettings> {
     const allowedShoppingLanguages: AppSettings['shoppingListLanguage'][] = ['en', 'fr', 'es', 'nl'];
     if (!allowedShoppingLanguages.includes(parsed.shoppingListLanguage)) {
       parsed.shoppingListLanguage = 'en';
+    }
+    const allowedUiLanguages: AppSettings['uiLanguage'][] = ['en', 'es', 'fr', 'nl'];
+    if (!allowedUiLanguages.includes(parsed.uiLanguage)) {
+      parsed.uiLanguage = 'en';
     }
     return parsed;
   } catch {

@@ -14,6 +14,9 @@ import { clearPin, hasPin } from '../../../core/secretPin';
 import { diag, type LogEntry } from '../../../core/diagnostics';
 import { SecretPinModal } from '../../SecretPinModal';
 import { Toast, useToast } from '../../Toast';
+import { useTranslation } from 'react-i18next';
+import { setUiLanguage } from '../../../i18n';
+import { UI_LANGUAGES, UI_LANGUAGE_LABELS } from '../../../i18n/languages';
 
 const SECTION_STATE_KEY = '@MyKit_settings_sections_v1';
 
@@ -55,7 +58,7 @@ const SECTION_SEARCH: Record<SettingsSectionId, string> = {
   password: 'password generator private note copy save key',
   theme: 'theme selector color palette custom accent dark light noir',
   scan: 'scan options auto detect open url ocr correction camera',
-  'notes-features': 'notes features smart type medication shopping reminder draft language catalog french spanish dutch english idioma langue',
+  'notes-features': 'notes features smart type medication shopping reminder draft language app interface catalog french spanish dutch english idioma langue taal interface',
   'smart-notes': 'smart notes entity detection ip hostname office pi regex',
   security: 'security pin private notes vault lock',
   clipboard: 'clipboard cloud sync background capture paste',
@@ -318,6 +321,7 @@ export function SettingsTab({
   const { width } = useWindowDimensions();
   const isDesktop = width >= 1024;
   const { setThemeName } = useAppTheme();
+  const { t } = useTranslation();
   const { toast, show: showToast, hide: hideToast } = useToast();
   const [passPhrase, setPassPhrase] = useState('');
   const [passwordMode, setPasswordMode] = useState<'phrases' | 'seed'>('phrases');
@@ -1003,9 +1007,35 @@ export function SettingsTab({
             />
           </View>
 
-          <Text style={[styles.controlLabel, { color: palette.muted }]}>Shopping list language</Text>
+          <Text style={[styles.controlLabel, { color: palette.muted }]}>{t('settings.appLanguageTitle')}</Text>
           <Text style={[styles.toggleLabel, { color: palette.muted, marginBottom: 6 }]}>
-            Catalog used to categorize items. The words you type are always kept as-is.
+            {t('settings.appLanguageHint')}
+          </Text>
+          <View style={styles.modeRow}>
+            {UI_LANGUAGES.map((code) => {
+              const active = settings.uiLanguage === code;
+              const label = UI_LANGUAGE_LABELS[code];
+              return (
+                <Pressable
+                  key={code}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${t('settings.appLanguageTitle')} ${label}`}
+                  accessibilityState={{ selected: active }}
+                  onPress={() => {
+                    patchSettingsLogged({ uiLanguage: code });
+                    setUiLanguage(code);
+                  }}
+                  style={[styles.modeChip, { borderColor: active ? activeAccent : palette.border, backgroundColor: active ? 'rgba(255,216,77,0.16)' : palette.card }]}
+                >
+                  <Text style={[styles.modeChipText, { color: active ? activeAccent : palette.fg }]}>{label}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+
+          <Text style={[styles.controlLabel, { color: palette.muted }]}>{t('settings.shoppingLanguageTitle')}</Text>
+          <Text style={[styles.toggleLabel, { color: palette.muted, marginBottom: 6 }]}>
+            {t('settings.shoppingLanguageHint')}
           </Text>
           <View style={styles.modeRow}>
             {([
@@ -1019,7 +1049,7 @@ export function SettingsTab({
                 <Pressable
                   key={option.code}
                   accessibilityRole="button"
-                  accessibilityLabel={`Shopping list language ${option.label}`}
+                  accessibilityLabel={`${t('settings.shoppingLanguageTitle')} ${option.label}`}
                   accessibilityState={{ selected: active }}
                   onPress={() => patchSettingsLogged({ shoppingListLanguage: option.code })}
                   style={[styles.modeChip, { borderColor: active ? activeAccent : palette.border, backgroundColor: active ? 'rgba(255,216,77,0.16)' : palette.card }]}

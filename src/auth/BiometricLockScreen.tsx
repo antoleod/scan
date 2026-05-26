@@ -19,11 +19,13 @@ import Animated, {
   interpolate,
 } from 'react-native-reanimated';
 
+import { useTranslation } from 'react-i18next';
 import { useAuth } from './useAuth';
 import { useAppTheme } from '../constants/theme';
 import { loadLastIdentifier } from '../core/auth-storage';
 
 export default function BiometricLockScreen() {
+  const { t } = useTranslation();
   const { biometricStatus, unlockWithBiometric } = useAuth();
   const { theme } = useAppTheme();
   const [lastUsername, setLastUsername] = useState<string | null>(null);
@@ -76,7 +78,7 @@ export default function BiometricLockScreen() {
       setIsUnlocking(true);
       const success = await unlockWithBiometric();
       if (!success) {
-        setError('Biometric authentication failed. Try again or use password.');
+        setError(t('auth.biometricAuthFailed'));
         setIsUnlocking(false);
       }
     };
@@ -154,12 +156,12 @@ export default function BiometricLockScreen() {
         </View>
 
         <Text style={[styles.title, { color: theme.text }]}>
-          Unlock MyKit
+          {t('auth.biometricUnlock')}
         </Text>
 
         {lastUsername && (
           <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
-            Welcome back, {lastUsername}
+            {t('auth.biometricWelcomeBack', { name: lastUsername })}
           </Text>
         )}
 
