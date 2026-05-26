@@ -12,7 +12,7 @@
  *  - This module never imports Notes (or any feature) — it is pure platform.
  */
 import { getSignalingChannel } from '../signaling';
-import { publishMyShare, clearMyShare, currentUid } from '../presence/userPresence';
+import { publishMyShare, clearMyShare } from '../presence/userPresence';
 import { createPeerConnection, isWebRtcSupported } from '../webrtc';
 import {
   ensureSelf,
@@ -125,7 +125,7 @@ export async function createSession(opts: CreateSessionOptions = {}): Promise<Sh
   // announce this share so the account's other devices can pull it without a
   // QR scan. Best-effort — guests and disabled Firebase simply skip this and
   // rely on the QR path. Only join coordinates + file meta are published.
-  if (rt.file && currentUid()) {
+  if (rt.file) {
     void publishMyShare({
       sessionId: id,
       token,

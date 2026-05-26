@@ -75,7 +75,7 @@ async function resolveUid(): Promise<string | null> {
  * No-op for guests / disabled Firebase. Idempotent per sessionId.
  */
 export async function publishMyShare(share: UserShare): Promise<void> {
-  const uid = currentUid();
+  const uid = await resolveUid();
   if (!uid) return; // guest mode → QR path only
   const db = await getDb();
   if (!db) return;
@@ -106,7 +106,7 @@ export async function publishMyShare(share: UserShare): Promise<void> {
 
 /** Remove a previously announced share (on cancel / expire / complete). */
 export async function clearMyShare(sessionId: string): Promise<void> {
-  const uid = currentUid();
+  const uid = await resolveUid();
   if (!uid) return;
   const db = await getDb();
   if (!db) return;
@@ -170,4 +170,3 @@ export function subscribeUserShares(onShares: (shares: UserShare[]) => void): ()
     detach?.();
   };
 }
-
