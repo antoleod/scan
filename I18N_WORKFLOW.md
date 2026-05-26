@@ -4,7 +4,7 @@ Internationalization of MyKit's UI into **EN / ES / FR / NL**. Built on
 `i18next` + `react-i18next` + `expo-localization`. This document is the live
 tracker — update the checkboxes and the "Last updated" line as phases land.
 
-**Last updated:** 2026-05-26 — Phases 0-3 done; Phase 4 in progress (ScanTab, HistoryTab, ManualCaptureBar, BarcodeModal, OfficeScanModal migrated).
+**Last updated:** 2026-05-26 — Phases 0-3 done; Phase 4 in progress (ScanTab, HistoryTab, ManualCaptureBar, BarcodeModal, OfficeScanModal, ComposerSection, ClipboardScreen, HistoryItemModal migrated).
 
 ---
 
@@ -77,9 +77,9 @@ Namespaces added: `scan.*`, `history.*`, `capture.*`.
 - [x] [BarcodeModal.tsx](src/components/mainApp/BarcodeModal.tsx) — title, format metas, no-value
 - [x] [OfficeScanModal.tsx](src/components/mainApp/OfficeScanModal.tsx) — full
 - [x] Toast.tsx — no literals (text comes via prop)
-- [ ] [ComposerSection.tsx](src/components/ComposerSection.tsx) (~21) — `navigator.language` is for **speech recognition**, not UI copy; migrate visible labels only
-- [ ] [HistoryItemModal.tsx](src/components/mainApp/HistoryItemModal.tsx) (~11)
-- [ ] [ClipboardScreen.tsx](src/screens/ClipboardScreen.tsx) (~17)
+- [x] [ComposerSection.tsx](src/components/ComposerSection.tsx) — toolbar (Photo/Paste/Dictate/OCR/Templates/Save/Generate tooltips + labels), shopping suggestion, contextual actions, media picker, image viewer. `navigator.language` left for speech recognition. (`'line/lines'`, `'attachment(s)'` plurals + smart-label hints left for Phase 6.)
+- [x] [HistoryItemModal.tsx](src/components/mainApp/HistoryItemModal.tsx) — add/edit title+subtitle, all field labels/placeholders, scan office, footer hint, save. `PI` label left (technical).
+- [x] [ClipboardScreen.tsx](src/screens/ClipboardScreen.tsx) + `ImageThumb` (own useTranslation) — header, search, date filters, delete selected/day, screenshot, action a11y, preview modal, empty states
 - [ ] [MedicationCard.tsx](src/components/MedicationCard.tsx) (~13) + [MedicationWorkflowModal.tsx](src/components/MedicationWorkflowModal.tsx)
 - [ ] [ShoppingListBlockV2.tsx](src/components/ShoppingListBlockV2.tsx) (~11) + [ShoppingListBlock.tsx](src/components/ShoppingListBlock.tsx) + [ShoppingWorkflowModal.tsx](src/components/ShoppingWorkflowModal.tsx)
 - [ ] [QuickTemplatesModal.tsx](src/components/QuickTemplatesModal.tsx) — `navigator.language` here picks catalog names; migrate visible labels only

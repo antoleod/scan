@@ -1,6 +1,7 @@
 import React, { forwardRef, useEffect, useMemo, useRef, useState } from 'react';
 import { Image, Modal, Platform, Pressable, ScrollView, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { useCtrlEnterSave } from '../hooks/useCtrlEnterSave';
 import { QuickTemplatesModal } from './QuickTemplatesModal';
 import { safeText } from '../utils/groceryDetection';
@@ -94,6 +95,7 @@ export const ComposerSection = forwardRef<TextInput, {
     },
     ref
   ) {
+    const { t } = useTranslation();
     const draftTextValue = typeof draftText === 'string' ? draftText : '';
     const [inputHeight, setInputHeight] = useState(68);
     const [pickerVisible, setPickerVisible] = useState(false);
@@ -326,54 +328,54 @@ export const ComposerSection = forwardRef<TextInput, {
 
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             {autoSaveStatus === 'saving' ? (
-              <Text style={{ color: palette.textDim, fontSize: 11, fontWeight: '500', marginRight: 4 }}>Saving…</Text>
+              <Text style={{ color: palette.textDim, fontSize: 11, fontWeight: '500', marginRight: 4 }}>{t('composer.saving')}</Text>
             ) : autoSaveStatus === 'saved' ? (
-              <Text style={{ color: palette.textDim, fontSize: 11, fontWeight: '500', marginRight: 4 }}>Saved</Text>
+              <Text style={{ color: palette.textDim, fontSize: 11, fontWeight: '500', marginRight: 4 }}>{t('composer.saved')}</Text>
             ) : null}
 
             <View style={{ alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
               {hoveredAction === 'media' && (
                 <View pointerEvents="none" style={{ position: 'absolute', top: -30, left: '50%', transform: [{ translateX: -34 }], minWidth: 68, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, backgroundColor: '#111111', borderWidth: 1, borderColor: palette.chipBorder, zIndex: 20 }}>
-                  <Text style={{ color: palette.textBody, fontSize: 11, fontWeight: '600', textAlign: 'center' }}>Photo</Text>
+                  <Text style={{ color: palette.textBody, fontSize: 11, fontWeight: '600', textAlign: 'center' }}>{t('composer.photo')}</Text>
                 </View>
               )}
-              <ThemedActionIconButton icon="camera-plus-outline" label="Photo" accentColor="#FF6B35" active={draftImages.length > 0} onPress={() => setMediaPickerVisible(true)} onHoverIn={() => setHoveredAction('media')} onHoverOut={() => setHoveredAction((current) => (current === 'media' ? null : current))} palette={palette} compact={isCompact} entranceDelay={0} />
+              <ThemedActionIconButton icon="camera-plus-outline" label={t('composer.photo')} accentColor="#FF6B35" active={draftImages.length > 0} onPress={() => setMediaPickerVisible(true)} onHoverIn={() => setHoveredAction('media')} onHoverOut={() => setHoveredAction((current) => (current === 'media' ? null : current))} palette={palette} compact={isCompact} entranceDelay={0} />
             </View>
 
             <View style={{ alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
               {hoveredAction === 'paste' && (
                 <View pointerEvents="none" style={{ position: 'absolute', top: -30, left: '50%', transform: [{ translateX: -34 }], minWidth: 68, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, backgroundColor: '#111111', borderWidth: 1, borderColor: palette.chipBorder, zIndex: 20 }}>
-                  <Text style={{ color: palette.textBody, fontSize: 11, fontWeight: '600', textAlign: 'center' }}>Paste</Text>
+                  <Text style={{ color: palette.textBody, fontSize: 11, fontWeight: '600', textAlign: 'center' }}>{t('composer.paste')}</Text>
                 </View>
               )}
-              <ThemedActionIconButton icon="clipboard-text-outline" label="Paste" accentColor="#F59E0B" onPress={onPasteImage} onHoverIn={() => setHoveredAction('paste')} onHoverOut={() => setHoveredAction((current) => (current === 'paste' ? null : current))} palette={palette} compact={isCompact} entranceDelay={40} />
+              <ThemedActionIconButton icon="clipboard-text-outline" label={t('composer.paste')} accentColor="#F59E0B" onPress={onPasteImage} onHoverIn={() => setHoveredAction('paste')} onHoverOut={() => setHoveredAction((current) => (current === 'paste' ? null : current))} palette={palette} compact={isCompact} entranceDelay={40} />
             </View>
 
             <View style={{ alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
               {hoveredAction === 'dictation' && (
                 <View pointerEvents="none" style={{ position: 'absolute', top: -30, left: '50%', transform: [{ translateX: -34 }], minWidth: 68, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, backgroundColor: '#111111', borderWidth: 1, borderColor: palette.chipBorder, zIndex: 20 }}>
-                  <Text style={{ color: palette.textBody, fontSize: 11, fontWeight: '600', textAlign: 'center' }}>Dictate</Text>
+                  <Text style={{ color: palette.textBody, fontSize: 11, fontWeight: '600', textAlign: 'center' }}>{t('composer.dictate')}</Text>
                 </View>
               )}
-              <ThemedActionIconButton icon="microphone-outline" label="Dictate" accentColor="#00D4FF" onPress={startDictation} onHoverIn={() => setHoveredAction('dictation')} onHoverOut={() => setHoveredAction((current) => (current === 'dictation' ? null : current))} palette={palette} compact={isCompact} entranceDelay={80} />
+              <ThemedActionIconButton icon="microphone-outline" label={t('composer.dictate')} accentColor="#00D4FF" onPress={startDictation} onHoverIn={() => setHoveredAction('dictation')} onHoverOut={() => setHoveredAction((current) => (current === 'dictation' ? null : current))} palette={palette} compact={isCompact} entranceDelay={80} />
             </View>
 
             <View style={{ alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
               {hoveredAction === 'ocr' && (
                 <View pointerEvents="none" style={{ position: 'absolute', top: -30, left: '50%', transform: [{ translateX: -34 }], minWidth: 68, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, backgroundColor: '#111111', borderWidth: 1, borderColor: palette.chipBorder, zIndex: 20 }}>
-                  <Text style={{ color: palette.textBody, fontSize: 11, fontWeight: '600', textAlign: 'center' }}>OCR</Text>
+                  <Text style={{ color: palette.textBody, fontSize: 11, fontWeight: '600', textAlign: 'center' }}>{t('composer.ocr')}</Text>
                 </View>
               )}
-              <ThemedActionIconButton icon="text-recognition" label="OCR" accentColor="#4DA3FF" onPress={onOcr} onHoverIn={() => setHoveredAction('ocr')} onHoverOut={() => setHoveredAction((current) => (current === 'ocr' ? null : current))} palette={palette} compact={isCompact} entranceDelay={120} />
+              <ThemedActionIconButton icon="text-recognition" label={t('composer.ocr')} accentColor="#4DA3FF" onPress={onOcr} onHoverIn={() => setHoveredAction('ocr')} onHoverOut={() => setHoveredAction((current) => (current === 'ocr' ? null : current))} palette={palette} compact={isCompact} entranceDelay={120} />
             </View>
 
             <View style={{ alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
               {hoveredAction === 'templates' && (
                 <View pointerEvents="none" style={{ position: 'absolute', top: -30, left: '50%', transform: [{ translateX: -34 }], minWidth: 68, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, backgroundColor: '#111111', borderWidth: 1, borderColor: palette.chipBorder, zIndex: 20 }}>
-                  <Text style={{ color: palette.textBody, fontSize: 11, fontWeight: '600', textAlign: 'center' }}>Templates</Text>
+                  <Text style={{ color: palette.textBody, fontSize: 11, fontWeight: '600', textAlign: 'center' }}>{t('composer.templates')}</Text>
                 </View>
               )}
-              <ThemedActionIconButton icon="layers-outline" label="Templates" accentColor="#A855F7" onPress={() => setTemplatesModalVisible(true)} onHoverIn={() => setHoveredAction('templates')} onHoverOut={() => setHoveredAction((current) => (current === 'templates' ? null : current))} palette={palette} compact={isCompact} entranceDelay={160} />
+              <ThemedActionIconButton icon="layers-outline" label={t('composer.templates')} accentColor="#A855F7" onPress={() => setTemplatesModalVisible(true)} onHoverIn={() => setHoveredAction('templates')} onHoverOut={() => setHoveredAction((current) => (current === 'templates' ? null : current))} palette={palette} compact={isCompact} entranceDelay={160} />
             </View>
 
             {onToggleSecret && (
@@ -403,19 +405,19 @@ export const ComposerSection = forwardRef<TextInput, {
             <View style={{ alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
               {hoveredAction === 'save' && (
                 <View pointerEvents="none" style={{ position: 'absolute', top: -30, left: '50%', transform: [{ translateX: -34 }], minWidth: 68, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, backgroundColor: '#111111', borderWidth: 1, borderColor: palette.chipBorder, zIndex: 20 }}>
-                  <Text style={{ color: palette.textBody, fontSize: 11, fontWeight: '600', textAlign: 'center' }}>Save</Text>
+                  <Text style={{ color: palette.textBody, fontSize: 11, fontWeight: '600', textAlign: 'center' }}>{t('composer.save')}</Text>
                 </View>
               )}
-              <ThemedActionIconButton icon="content-save-outline" label="Save" accentColor="#7CFF6B" onPress={onSave} onHoverIn={() => setHoveredAction('save')} onHoverOut={() => setHoveredAction((current) => (current === 'save' ? null : current))} palette={palette} compact={isCompact} entranceDelay={200} />
+              <ThemedActionIconButton icon="content-save-outline" label={t('composer.save')} accentColor="#7CFF6B" onPress={onSave} onHoverIn={() => setHoveredAction('save')} onHoverOut={() => setHoveredAction((current) => (current === 'save' ? null : current))} palette={palette} compact={isCompact} entranceDelay={200} />
             </View>
 
             <View style={{ alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
               {hoveredAction === 'generate' && (
                 <View pointerEvents="none" style={{ position: 'absolute', top: -30, left: '50%', transform: [{ translateX: -34 }], minWidth: 68, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, backgroundColor: '#111111', borderWidth: 1, borderColor: palette.chipBorder, zIndex: 20 }}>
-                  <Text style={{ color: palette.textBody, fontSize: 11, fontWeight: '600', textAlign: 'center' }}>Generate</Text>
+                  <Text style={{ color: palette.textBody, fontSize: 11, fontWeight: '600', textAlign: 'center' }}>{t('composer.generate')}</Text>
                 </View>
               )}
-              <ThemedActionIconButton icon="auto-fix" label="Generate" accentColor="#EC4899" active={Boolean(generating)} onPress={onGenerate} onHoverIn={() => setHoveredAction('generate')} onHoverOut={() => setHoveredAction((current) => (current === 'generate' ? null : current))} palette={palette} compact={isCompact} entranceDelay={240} />
+              <ThemedActionIconButton icon="auto-fix" label={t('composer.generate')} accentColor="#EC4899" active={Boolean(generating)} onPress={onGenerate} onHoverIn={() => setHoveredAction('generate')} onHoverOut={() => setHoveredAction((current) => (current === 'generate' ? null : current))} palette={palette} compact={isCompact} entranceDelay={240} />
             </View>
           </View>
         </View>
@@ -444,7 +446,7 @@ export const ComposerSection = forwardRef<TextInput, {
                 }}
                 style={{ minHeight: 44, justifyContent: 'center', borderRadius: 12, paddingHorizontal: 12 }}
               >
-                <Text style={{ color: palette.textBody, fontSize: 14, fontWeight: '500' }}>Personal</Text>
+                <Text style={{ color: palette.textBody, fontSize: 14, fontWeight: '500' }}>{t('composer.personal')}</Text>
               </Pressable>
               {groups.map((group) => (
                 <Pressable
@@ -482,7 +484,7 @@ export const ComposerSection = forwardRef<TextInput, {
             }
           }}
           multiline
-          placeholder="Type here. Auto-save is always on."
+          placeholder={t('composer.typeHerePlaceholder')}
           placeholderTextColor={palette.textMuted}
           onContentSizeChange={(event) => {
             const nextHeight = Math.max(68, Math.min(maxInputHeight, event.nativeEvent.contentSize.height + 20));
@@ -521,22 +523,22 @@ export const ComposerSection = forwardRef<TextInput, {
         {showShoppingSuggestion ? (
           <View style={{ marginTop: 8, padding: 10, borderRadius: 10, borderWidth: 1, borderColor: `${palette.accent}66`, backgroundColor: `${palette.accent}12`, flexDirection: 'row', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
             <Ionicons name="cart-outline" size={15} color={palette.accent} />
-            <Text style={{ color: palette.textBody, fontSize: 12, fontWeight: '600', flex: 1, minWidth: 170 }}>Looks like a shopping list. Convert it?</Text>
+            <Text style={{ color: palette.textBody, fontSize: 12, fontWeight: '600', flex: 1, minWidth: 170 }}>{t('composer.looksLikeShopping')}</Text>
             <Pressable onPress={() => shoppingAnalysis && onConvertShoppingCandidate?.(shoppingAnalysis)} style={({ pressed }) => ({ minHeight: 34, paddingHorizontal: 12, borderRadius: 999, backgroundColor: palette.accent, justifyContent: 'center', opacity: pressed ? 0.82 : 1 })}>
-              <Text style={{ color: '#000', fontSize: 12, fontWeight: '800' }}>Convert</Text>
+              <Text style={{ color: '#000', fontSize: 12, fontWeight: '800' }}>{t('composer.convert')}</Text>
             </Pressable>
             <Pressable onPress={() => setDismissedShoppingSignature(shoppingSignature)} style={({ pressed }) => ({ minHeight: 34, paddingHorizontal: 12, borderRadius: 999, borderWidth: 1, borderColor: palette.border, justifyContent: 'center', opacity: pressed ? 0.82 : 1 })}>
-              <Text style={{ color: palette.textMuted, fontSize: 12, fontWeight: '700' }}>Keep as note</Text>
+              <Text style={{ color: palette.textMuted, fontSize: 12, fontWeight: '700' }}>{t('composer.keepAsNote')}</Text>
             </Pressable>
           </View>
         ) : null}
 
         {showContextualActions ? (
           <View style={{ marginTop: 8, padding: 10, borderRadius: 10, borderWidth: 1, borderColor: palette.border, backgroundColor: palette.surfaceAlt, flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            <Text style={{ color: palette.textMuted, fontSize: 12, fontWeight: '700' }}>Suggested</Text>
+            <Text style={{ color: palette.textMuted, fontSize: 12, fontWeight: '700' }}>{t('composer.suggested')}</Text>
             {contextualWorkflow.type === 'medication' ? (
               <Pressable onPress={() => setTemplatesModalVisible(true)} style={({ pressed }) => ({ minHeight: 32, paddingHorizontal: 10, borderRadius: 999, backgroundColor: '#4DA3FF22', justifyContent: 'center', opacity: pressed ? 0.82 : 1 })}>
-                <Text style={{ color: '#4DA3FF', fontSize: 12, fontWeight: '700' }}>Open Medication Template</Text>
+                <Text style={{ color: '#4DA3FF', fontSize: 12, fontWeight: '700' }}>{t('composer.openMedicationTemplate')}</Text>
               </Pressable>
             ) : null}
             {contextualWorkflow.type === 'shopping' ? (
@@ -544,12 +546,12 @@ export const ComposerSection = forwardRef<TextInput, {
                 onPress={() => onConvertShoppingCandidate?.(shoppingAnalysis || undefined)}
                 style={({ pressed }) => ({ minHeight: 32, paddingHorizontal: 10, borderRadius: 999, backgroundColor: '#22c55e22', justifyContent: 'center', opacity: pressed ? 0.82 : 1 })}
               >
-                <Text style={{ color: '#22c55e', fontSize: 12, fontWeight: '700' }}>Convert to Shopping</Text>
+                <Text style={{ color: '#22c55e', fontSize: 12, fontWeight: '700' }}>{t('composer.convertToShopping')}</Text>
               </Pressable>
             ) : null}
             {contextualWorkflow.type === 'reminder' ? (
               <Pressable onPress={() => onQuickTemplateReminder?.()} style={({ pressed }) => ({ minHeight: 32, paddingHorizontal: 10, borderRadius: 999, backgroundColor: '#f59e0b22', justifyContent: 'center', opacity: pressed ? 0.82 : 1 })}>
-                <Text style={{ color: '#f59e0b', fontSize: 12, fontWeight: '700' }}>Create Reminder</Text>
+                <Text style={{ color: '#f59e0b', fontSize: 12, fontWeight: '700' }}>{t('composer.createReminder')}</Text>
               </Pressable>
             ) : null}
           </View>
@@ -570,7 +572,7 @@ export const ComposerSection = forwardRef<TextInput, {
               );
             }) : activeSmartLabel ? (
               <Pressable onPress={() => onSetSmartLabel?.(null)} style={({ pressed }) => ({ minHeight: 30, paddingHorizontal: 10, borderRadius: 999, borderWidth: 1, borderColor: palette.border, justifyContent: 'center', opacity: pressed ? 0.75 : 1 })}>
-                <Text style={{ color: palette.textMuted, fontSize: 11, fontWeight: '800' }}>Auto</Text>
+                <Text style={{ color: palette.textMuted, fontSize: 11, fontWeight: '800' }}>{t('composer.auto')}</Text>
               </Pressable>
             ) : null}
           </View>
@@ -606,7 +608,7 @@ export const ComposerSection = forwardRef<TextInput, {
                 }}
                 style={{ minHeight: 44, justifyContent: 'center', borderRadius: 12, paddingHorizontal: 12 }}
               >
-                <Text style={{ color: palette.textBody, fontSize: 14, fontWeight: '500' }}>Take photo</Text>
+                <Text style={{ color: palette.textBody, fontSize: 14, fontWeight: '500' }}>{t('composer.takePhoto')}</Text>
               </Pressable>
               <Pressable
                 onPress={() => {
@@ -615,7 +617,7 @@ export const ComposerSection = forwardRef<TextInput, {
                 }}
                 style={{ minHeight: 44, justifyContent: 'center', borderRadius: 12, paddingHorizontal: 12 }}
               >
-                <Text style={{ color: palette.textBody, fontSize: 14, fontWeight: '500' }}>Choose from gallery</Text>
+                <Text style={{ color: palette.textBody, fontSize: 14, fontWeight: '500' }}>{t('composer.chooseFromGallery')}</Text>
               </Pressable>
             </Pressable>
           </Pressable>
@@ -660,7 +662,7 @@ export const ComposerSection = forwardRef<TextInput, {
                           opacity: pressed ? 0.75 : 1,
                         })}
                       >
-                        <Text style={{ color: palette.accent, fontSize: 11, fontWeight: '700' }}>View image</Text>
+                        <Text style={{ color: palette.accent, fontSize: 11, fontWeight: '700' }}>{t('composer.viewImage')}</Text>
                       </Pressable>
                       <Pressable
                         onPress={() => onRemoveImage?.(index)}
@@ -673,7 +675,7 @@ export const ComposerSection = forwardRef<TextInput, {
                           opacity: pressed ? 0.75 : 1,
                         })}
                       >
-                        <Text style={{ color: palette.textMuted, fontSize: 11, fontWeight: '600' }}>Remove</Text>
+                        <Text style={{ color: palette.textMuted, fontSize: 11, fontWeight: '600' }}>{t('composer.remove')}</Text>
                       </Pressable>
                     </View>
                   </View>
@@ -716,7 +718,7 @@ export const ComposerSection = forwardRef<TextInput, {
                   opacity: pressed ? 0.8 : 1,
                 })}
               >
-                <Text style={{ color: palette.textBody, fontSize: 13, fontWeight: '700' }}>Close</Text>
+                <Text style={{ color: palette.textBody, fontSize: 13, fontWeight: '700' }}>{t('composer.close')}</Text>
               </Pressable>
             </Pressable>
           </Pressable>
