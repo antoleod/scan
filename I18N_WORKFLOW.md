@@ -4,7 +4,7 @@ Internationalization of MyKit's UI into **EN / ES / FR / NL**. Built on
 `i18next` + `react-i18next` + `expo-localization`. This document is the live
 tracker — update the checkboxes and the "Last updated" line as phases land.
 
-**Last updated:** 2026-05-26 — Phase 0 + Phase 1 + Phase 2 (Auth) done; register language selector + first-run guest language prompt added.
+**Last updated:** 2026-05-26 — Phase 0 + Phase 1 + Phase 2 (Auth) + Phase 3 (Settings) done; register language selector + first-run guest language prompt added.
 
 ---
 
@@ -65,8 +65,9 @@ Namespace `auth.*` (+ `language.*` for the picker). All visible copy, placeholde
 > New i18n helpers: `hasChosenUiLanguage()` / `markUiLanguageChosen()` in [src/i18n/index.ts](src/i18n/index.ts) (AsyncStorage key `@MyKit_ui_language_chosen`).
 > Locale parity is now guarded by a test in `tests/run-tests.ts` (es/fr/nl must match en's key set).
 
-### ⬜ Phase 3 — Settings (largest: ~101 strings)
-- [ ] [SettingsTab.tsx](src/components/mainApp/tabs/SettingsTab.tsx) — migrate section titles/subtitles, toggles, buttons. Namespace `settings.*` (already started).
+### ✅ Phase 3 — Settings (DONE)
+- [x] [SettingsTab.tsx](src/components/mainApp/tabs/SettingsTab.tsx) — all section titles/subtitles, toggles, buttons, labels, placeholders, destructive Alert confirmations, header/toolbar. ~70 new `settings.*` keys. `ThemeCard` got its own `useTranslation` for the "ACTIVE" badge.
+- [ ] Left in English on purpose (technical/branding): PI prefix placeholders (`02PI20`, `MUSTBRUN`), custom accent hex placeholder, laser-speed (`slow/normal/fast`) and scan-profile (`Auto/PI Full/PI Short`) chip labels, internal `runDataSyncAction` log labels.
 
 ### ⬜ Phase 4 — Main app surfaces
 - [ ] [ComposerSection.tsx](src/components/ComposerSection.tsx) (~21) — note: its `navigator.language` is for **speech recognition**, not UI copy; leave that, migrate visible labels.
