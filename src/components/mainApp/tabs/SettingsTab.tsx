@@ -55,7 +55,7 @@ const SECTION_SEARCH: Record<SettingsSectionId, string> = {
   password: 'password generator private note copy save key',
   theme: 'theme selector color palette custom accent dark light noir',
   scan: 'scan options auto detect open url ocr correction camera',
-  'notes-features': 'notes features smart type medication shopping reminder draft',
+  'notes-features': 'notes features smart type medication shopping reminder draft language catalog french spanish dutch english idioma langue',
   'smart-notes': 'smart notes entity detection ip hostname office pi regex',
   security: 'security pin private notes vault lock',
   clipboard: 'clipboard cloud sync background capture paste',
@@ -1002,6 +1002,34 @@ export function SettingsTab({
               onValueChange={(value) => patchNotesFeatures({ detectShopping: value })}
             />
           </View>
+
+          <Text style={[styles.controlLabel, { color: palette.muted }]}>Shopping list language</Text>
+          <Text style={[styles.toggleLabel, { color: palette.muted, marginBottom: 6 }]}>
+            Catalog used to categorize items. The words you type are always kept as-is.
+          </Text>
+          <View style={styles.modeRow}>
+            {([
+              { code: 'en', label: 'English' },
+              { code: 'fr', label: 'Français' },
+              { code: 'es', label: 'Español' },
+              { code: 'nl', label: 'Nederlands' },
+            ] as const).map((option) => {
+              const active = settings.shoppingListLanguage === option.code;
+              return (
+                <Pressable
+                  key={option.code}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Shopping list language ${option.label}`}
+                  accessibilityState={{ selected: active }}
+                  onPress={() => patchSettingsLogged({ shoppingListLanguage: option.code })}
+                  style={[styles.modeChip, { borderColor: active ? activeAccent : palette.border, backgroundColor: active ? 'rgba(255,216,77,0.16)' : palette.card }]}
+                >
+                  <Text style={[styles.modeChipText, { color: active ? activeAccent : palette.fg }]}>{option.label}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+
           <View style={styles.toggleRow}>
             <Text style={[styles.toggleLabel, { color: notesFeatures.autoDetectSmartType ? palette.fg : palette.muted }]}>Detect reminder</Text>
             <Switch

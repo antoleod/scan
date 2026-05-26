@@ -24,6 +24,7 @@ export const defaultSettings: AppSettings = {
   clipboardCloudSync: false,
   clipboardBackgroundCapture: false,
   showRawText: false,
+  shoppingListLanguage: 'en',
   smartNotes: {
     offices: ['Spinelli', 'Kohl', 'Strasbourg'],
     ipDetectionEnabled: true,
@@ -85,6 +86,10 @@ export async function loadSettings(): Promise<AppSettings> {
     const allowedThemes: AppSettings['theme'][] = ['dark', 'light', 'eu_blue', 'custom', 'parliament', 'noirGraphite', 'midnightSteel', 'obsidianGold'];
     if (!allowedThemes.includes(parsed.theme)) {
       parsed.theme = 'noirGraphite';
+    }
+    const allowedShoppingLanguages: AppSettings['shoppingListLanguage'][] = ['en', 'fr', 'es', 'nl'];
+    if (!allowedShoppingLanguages.includes(parsed.shoppingListLanguage)) {
+      parsed.shoppingListLanguage = 'en';
     }
     return parsed;
   } catch {

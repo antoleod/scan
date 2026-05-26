@@ -8,6 +8,7 @@ import { historyKey } from "../src/core/history";
 import { defaultSettings, piLogic } from "../src/core/settings";
 import { detectGroceryItem, formatShoppingList, isLikelyShoppingList, searchGroceryCatalog } from "../src/utils/groceryDetection";
 import { analyzeShoppingListCandidate, isShoppingList, parseShoppingList } from "../src/core/shoppingList";
+import { parseShoppingListV2 } from "../src/core/shoppingListV2";
 import { findProductAlias, getAllShoppingDictionaries, isConnector, isKnownUnit, isNarrativeBlocker } from "../src/core/shoppingDictionary";
 import { detectSmartTypeFromContent } from "../src/core/smartNoteWorkflows";
 import { detectSmartNoteLabel } from "../src/core/noteIntelligence";
@@ -265,6 +266,22 @@ run("shopping formatter preserves accents and user quantities", () => {
 run("health keywords prevent shopping list misclassification", () => {
   const medicationNote = "Took ibuprofen 400mg for headache, doctor recommended rest";
   assert.equal(isShoppingList(medicationNote), false);
+});
+
+run("parseShoppingListV2 keeps the user's words instead of translating to the catalog", () => {
+  const input = "pommes\nlait\npain";
+  // Even with the default English catalog, the typed French words must survive.
+  const en = parseShoppingListV2(input, "en");
+  const enNames = en.items.map((item) => item.name.toLowerCase());
+  assert.ok(enNames.includes("pommes"), `expected "pommes" preserved, got ${JSON.stringify(enNames)}`);
+  assert.ok(!enNames.includes("apples"), "must NOT rewrite pommes -> apples");
+
+  // With the French catalog the words are still preserved and categorized.
+  const fr = parseShoppingListV2(input, "fr");
+  const apple = fr.items.find((item) => item.catalogId === "apple");
+  assert.ok(apple, "apple should be matched in the catalog");
+  assert.equal(apple!.name.toLowerCase(), "pommes");
+  assert.equal(apple!.category, "fruits");
 });
 
 run("health keywords in Spanish prevent shopping list misclassification", () => {

@@ -318,9 +318,14 @@ export function parseShoppingListV2(
     if (seen.has(key)) continue;
     seen.add(key);
 
+    // Preserve the word the user actually typed (capitalized) as the display
+    // name. The catalog match is used only for category / quantity / dedup —
+    // never to rewrite "pommes" into the canonical "apples". Falls back to the
+    // catalog display name when the user text is empty after stripping qty/tags.
+    const userName = capitalizeWords(removeArticles(remaining).trim());
     items.push({
       id: nextId(),
-      name: catalogMatch.displayName,
+      name: userName || catalogMatch.displayName,
       quantity,
       unit,
       category: catalogMatch.category,

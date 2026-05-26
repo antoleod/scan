@@ -60,9 +60,14 @@ export interface AppSettings {
   /** Force clipboard capture to keep running while the app/tab is in the background. */
   clipboardBackgroundCapture: boolean;
   showRawText: boolean;
+  /** Catalog language used to parse & categorize shopping lists (does not rewrite the items you type). */
+  shoppingListLanguage: ShoppingListLanguage;
   smartNotes?: SmartNoteSettings;
   notesFeatures?: NotesFeatureSettings;
 }
+
+/** Languages supported by the grocery catalog (mirrors AppLanguage in shoppingListV2). */
+export type ShoppingListLanguage = 'en' | 'fr' | 'es' | 'nl';
 
 export interface NotesFeatureSettings {
   autoDetectSmartType: boolean;

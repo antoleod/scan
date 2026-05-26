@@ -13,6 +13,7 @@ import { MedicationCard } from './MedicationCard';
 import { NoteListBlock } from './NoteListBlock';
 import type { NoteItem } from '../core/notes';
 import type { NotePalette as Palette } from '../theme/theme';
+import type { ShoppingListLanguage } from '../types';
 
 interface NoteContentRendererProps {
   note: NoteItem;
@@ -30,6 +31,10 @@ interface NoteContentRendererProps {
   onMedicationSnooze?: (medIndex: number, snoozeMs: number) => void;
   onMedicationDismissCycle?: (medIndex: number) => void;
   onMedicationReactivate?: (medIndex: number) => void;
+  /** Catalog language used to parse/categorize the shopping list. The item names
+   *  the user typed are always preserved (see parseShoppingListV2); this only
+   *  drives category labels and catalog matching. */
+  shoppingLanguage?: ShoppingListLanguage;
 }
 
 /**
@@ -55,12 +60,14 @@ export function NoteContentRenderer({
   onMedicationSnooze,
   onMedicationDismissCycle,
   onMedicationReactivate,
+  shoppingLanguage = 'en',
 }: NoteContentRendererProps): React.ReactNode {
-  // Memoize the V2 shopping parse so it only re-runs when note.text changes,
-  // not on every render triggered by unrelated state updates in the parent.
+  // Memoize the V2 shopping parse so it only re-runs when note.text or the
+  // selected catalog language changes, not on every render triggered by
+  // unrelated state updates in the parent.
   const shoppingModelV2 = useMemo(
-    () => parseShoppingListV2(note.text),
-    [note.text],
+    () => parseShoppingListV2(note.text, shoppingLanguage),
+    [note.text, shoppingLanguage],
   );
 
   // Priority 1: Medication notes
