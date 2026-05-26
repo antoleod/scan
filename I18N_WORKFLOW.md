@@ -4,7 +4,7 @@ Internationalization of MyKit's UI into **EN / ES / FR / NL**. Built on
 `i18next` + `react-i18next` + `expo-localization`. This document is the live
 tracker — update the checkboxes and the "Last updated" line as phases land.
 
-**Last updated:** 2026-05-26 — Phase 0 + Phase 1 + Phase 2 (Auth) + Phase 3 (Settings) done; register language selector + first-run guest language prompt added.
+**Last updated:** 2026-05-26 — Phases 0-3 done; Phase 4 in progress (ScanTab, HistoryTab, ManualCaptureBar, BarcodeModal, OfficeScanModal migrated).
 
 ---
 
@@ -69,15 +69,21 @@ Namespace `auth.*` (+ `language.*` for the picker). All visible copy, placeholde
 - [x] [SettingsTab.tsx](src/components/mainApp/tabs/SettingsTab.tsx) — all section titles/subtitles, toggles, buttons, labels, placeholders, destructive Alert confirmations, header/toolbar. ~70 new `settings.*` keys. `ThemeCard` got its own `useTranslation` for the "ACTIVE" badge.
 - [ ] Left in English on purpose (technical/branding): PI prefix placeholders (`02PI20`, `MUSTBRUN`), custom accent hex placeholder, laser-speed (`slow/normal/fast`) and scan-profile (`Auto/PI Full/PI Short`) chip labels, internal `runDataSyncAction` log labels.
 
-### ⬜ Phase 4 — Main app surfaces
-- [ ] [ComposerSection.tsx](src/components/ComposerSection.tsx) (~21) — note: its `navigator.language` is for **speech recognition**, not UI copy; leave that, migrate visible labels.
-- [ ] [ScanTab.tsx](src/components/mainApp/tabs/ScanTab.tsx) (~13)
-- [ ] [HistoryTab.tsx](src/components/mainApp/tabs/HistoryTab.tsx) (~10) + [HistoryItemModal.tsx](src/components/mainApp/HistoryItemModal.tsx) (~11)
-- [ ] [ClipboardScreen.tsx](src/screens/ClipboardScreen.tsx) (~17) + [ManualCaptureBar.tsx](src/clipboard/ManualCaptureBar.tsx) (~7)
+### 🟡 Phase 4 — Main app surfaces (in progress)
+Namespaces added: `scan.*`, `history.*`, `capture.*`.
+- [x] [ScanTab.tsx](src/components/mainApp/tabs/ScanTab.tsx) — permission, modes (Barcode/Image/NFC/Batch), photo toast, clear image
+- [x] [HistoryTab.tsx](src/components/mainApp/tabs/HistoryTab.tsx) + `HistoryItemCard` (own useTranslation) — swipe DELETE, Copy/Edit/Use/Delete, Used/Ready/Copied, search, more-filters, delete modal
+- [x] [ManualCaptureBar.tsx](src/clipboard/ManualCaptureBar.tsx) — capture/paste/import + hints
+- [x] [BarcodeModal.tsx](src/components/mainApp/BarcodeModal.tsx) — title, format metas, no-value
+- [x] [OfficeScanModal.tsx](src/components/mainApp/OfficeScanModal.tsx) — full
+- [x] Toast.tsx — no literals (text comes via prop)
+- [ ] [ComposerSection.tsx](src/components/ComposerSection.tsx) (~21) — `navigator.language` is for **speech recognition**, not UI copy; migrate visible labels only
+- [ ] [HistoryItemModal.tsx](src/components/mainApp/HistoryItemModal.tsx) (~11)
+- [ ] [ClipboardScreen.tsx](src/screens/ClipboardScreen.tsx) (~17)
 - [ ] [MedicationCard.tsx](src/components/MedicationCard.tsx) (~13) + [MedicationWorkflowModal.tsx](src/components/MedicationWorkflowModal.tsx)
 - [ ] [ShoppingListBlockV2.tsx](src/components/ShoppingListBlockV2.tsx) (~11) + [ShoppingListBlock.tsx](src/components/ShoppingListBlock.tsx) + [ShoppingWorkflowModal.tsx](src/components/ShoppingWorkflowModal.tsx)
 - [ ] [QuickTemplatesModal.tsx](src/components/QuickTemplatesModal.tsx) — `navigator.language` here picks catalog names; migrate visible labels only
-- [ ] Misc modals: NoteOcrModal, BackupImportModal, CommandPalette, OfficeScanModal, BarcodeModal, ScanViewfinder, Toast
+- [ ] Misc modals: NoteOcrModal, BackupImportModal, CommandPalette, ScanViewfinder
 
 ### ⬜ Phase 5 — AirDrop feature (~22 strings)
 - [ ] [ReceiveScreen.tsx](src/features/airdrop/screens/ReceiveScreen.tsx), [SendScreen.tsx](src/features/airdrop/screens/SendScreen.tsx), [AirDropScreen.tsx](src/features/airdrop/screens/AirDropScreen.tsx), [MyDevicesSection.tsx](src/features/airdrop/components/MyDevicesSection.tsx)

@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import Svg, { Rect } from 'react-native-svg';
 import QRCode from 'react-native-qrcode-svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTranslation } from 'react-i18next';
 
 import {
   buildCodePreviewPlan,
@@ -156,6 +157,7 @@ export function BarcodeModal({
   codeType?: CodeType;
   onClose: () => void;
 }) {
+  const { t } = useTranslation();
   const { height: windowHeight } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const plan = useMemo(() => buildCodePreviewPlan(data, { preferredFormat, codeType }), [data, preferredFormat, codeType]);
@@ -189,16 +191,16 @@ export function BarcodeModal({
 
           <View style={mainAppStyles.barcodeSheetHeader}>
             <View style={mainAppStyles.barcodeSheetHeaderText}>
-              <Text style={[mainAppStyles.barcodeSheetTitle, { color: palette.fg }]}>Barcode</Text>
+              <Text style={[mainAppStyles.barcodeSheetTitle, { color: palette.fg }]}>{t('scan.barcode')}</Text>
               <Text style={[mainAppStyles.barcodeSheetMeta, { color: palette.muted }]}>
-                {isOffice ? 'Office code: Code128 + QR' : `Using: ${getBarcodeFormatLabel(plan.variants[0]?.barcodeFormat || 'CODE128')}`}
+                {isOffice ? t('scan.barcodeOfficeMeta') : t('scan.barcodeUsing', { format: getBarcodeFormatLabel(plan.variants[0]?.barcodeFormat || 'CODE128') })}
               </Text>
               <Text style={[mainAppStyles.barcodeSheetMeta, { color: palette.muted }]}>
                 {isOffice
-                  ? 'Both encodings carry the exact same value.'
+                  ? t('scan.barcodeOfficeHint')
                   : plan.codeType === 'pi'
-                    ? 'PI values are rendered as Code128.'
-                    : 'Ready to display or reuse.'}
+                    ? t('scan.barcodePiHint')
+                    : t('scan.barcodeReadyHint')}
               </Text>
             </View>
 
@@ -210,7 +212,7 @@ export function BarcodeModal({
           <View style={mainAppStyles.barcodeSheetBody}>
             {!hasValue ? (
               <View style={[mainAppStyles.barcodePreviewFallback, { minHeight: 120 }]}>
-                <Text style={{ color: palette.muted, textAlign: 'center', fontWeight: '600' }}>No value to generate.</Text>
+                <Text style={{ color: palette.muted, textAlign: 'center', fontWeight: '600' }}>{t('scan.noValueToGenerate')}</Text>
               </View>
             ) : (
               plan.variants.map((variant) => (

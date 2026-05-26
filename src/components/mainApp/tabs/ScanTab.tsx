@@ -4,6 +4,7 @@ import { CameraView } from 'expo-camera';
 import type { BarcodeType } from 'expo-camera';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import { useTranslation } from 'react-i18next';
 
 import { ScanState } from '../../../types';
 import type { VoiceState } from '../../../hooks/useVoiceCommands';
@@ -104,6 +105,7 @@ export function ScanTab({
   voiceSupported: boolean;
   onToggleVoice: () => void;
 }) {
+  const { t } = useTranslation();
   const { width } = useWindowDimensions();
   const isDesktop = width >= 1024;
   const [toastVisible, setToastVisible] = React.useState(false);
@@ -144,15 +146,15 @@ export function ScanTab({
         {!cameraPermissionGranted ? (
           <View style={styles.permissionBox}>
             <Ionicons name="camera-outline" size={48} color={C.muted} style={{ marginBottom: 8 }} />
-            <Text style={styles.permissionText}>Camera permission required</Text>
+            <Text style={styles.permissionText}>{t('scan.cameraPermissionRequired')}</Text>
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="Allow camera access"
+              accessibilityLabel={t('scan.allowCameraAccess')}
               style={styles.allowBtn}
               onPress={requestCameraPermission}
             >
               <Ionicons name="camera-outline" size={16} color="#fff" />
-              <Text style={styles.allowBtnText}>Allow camera</Text>
+              <Text style={styles.allowBtnText}>{t('scan.allowCamera')}</Text>
             </Pressable>
           </View>
         ) : (
@@ -196,17 +198,17 @@ export function ScanTab({
               pointerEvents={toastVisible ? 'auto' : 'none'}
               accessibilityLiveRegion={toastVisible ? 'polite' : 'none'}
             >
-              <Text style={styles.toastTitle}>Scanning is taking longer than expected</Text>
-              <Text style={styles.toastSubtitle}>Capture a photo to extract the code quickly.</Text>
+              <Text style={styles.toastTitle}>{t('scan.scanningTakingLonger')}</Text>
+              <Text style={styles.toastSubtitle}>{t('scan.capturePhotoHint')}</Text>
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel="Take a photo to scan the code"
+                accessibilityLabel={t('scan.takePhotoA11y')}
                 accessibilityState={{ disabled: manualCaptureBusy, busy: manualCaptureBusy }}
                 style={styles.toastBtn}
                 onPress={onTakePicture}
                 disabled={manualCaptureBusy}
               >
-                {manualCaptureBusy ? <ActivityIndicator size="small" color={C.accent} /> : <Text style={styles.toastBtnText}>Take photo</Text>}
+                {manualCaptureBusy ? <ActivityIndicator size="small" color={C.accent} /> : <Text style={styles.toastBtnText}>{t('scan.takePhoto')}</Text>}
               </Pressable>
             </Animated.View>
           </>
@@ -244,44 +246,44 @@ export function ScanTab({
         <View style={styles.modeRow}>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Barcode scan mode"
+            accessibilityLabel={t('scan.barcodeModeA11y')}
             accessibilityState={{ selected: true }}
             style={[styles.modeBtn, styles.modeBtnActive]}
           >
             <Ionicons name="barcode-outline" size={14} color="#fff" />
-            <Text style={[styles.modeText, styles.modeTextActive]}>Barcode</Text>
+            <Text style={[styles.modeText, styles.modeTextActive]}>{t('scan.barcode')}</Text>
           </Pressable>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Scan from an image"
+            accessibilityLabel={t('scan.imageScanA11y')}
             style={styles.modeBtn}
             onPress={onScanFromImage}
           >
             <Ionicons name="image-outline" size={14} color={C.muted} />
-            <Text style={styles.modeText}>Image Scan</Text>
+            <Text style={styles.modeText}>{t('scan.imageScan')}</Text>
           </Pressable>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={nfcBusy ? 'Reading NFC tag' : nfcReady ? 'Scan an NFC tag' : 'NFC unavailable on this device'}
+            accessibilityLabel={nfcBusy ? t('scan.nfcReading') : nfcReady ? t('scan.nfcScanTag') : t('scan.nfcUnavailable')}
             accessibilityState={{ disabled: nfcBusy || !nfcReady, busy: nfcBusy }}
             style={[styles.modeBtn, !nfcReady && { opacity: 0.45 }]}
             onPress={onScanFromNfc}
             disabled={nfcBusy || !nfcReady}
           >
             <MaterialCommunityIcons name="nfc-variant" size={14} color={C.tertiary} />
-            <Text style={[styles.modeText, styles.modeTextTertiary]}>{nfcBusy ? 'Reading...' : 'NFC'}</Text>
+            <Text style={[styles.modeText, styles.modeTextTertiary]}>{nfcBusy ? t('scan.nfcReadingShort') : t('scan.nfc')}</Text>
           </Pressable>
 
           {/* Batch toggle */}
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Batch scan mode"
+            accessibilityLabel={t('scan.batchModeA11y')}
             accessibilityState={{ selected: batchMode }}
             style={[styles.modeBtn, batchMode && styles.modeBtnBatch]}
             onPress={onToggleBatchMode}
           >
             <Ionicons name="layers-outline" size={14} color={batchMode ? C.accent : C.muted} />
-            <Text style={[styles.modeText, batchMode && styles.modeTextBatch]}>Batch</Text>
+            <Text style={[styles.modeText, batchMode && styles.modeTextBatch]}>{t('scan.batch')}</Text>
           </Pressable>
 
           {/* Voice mic — only on web where Speech API is available */}
@@ -327,7 +329,7 @@ export function ScanTab({
             </View>
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="Clear the selected image"
+              accessibilityLabel={t('scan.clearSelectedImage')}
               style={styles.previewClearBtn}
               onPress={onClearImagePreview}
             >
