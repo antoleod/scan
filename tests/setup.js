@@ -6,6 +6,7 @@ const path = require("path");
 
 const SHIMS = {
   "react-native": path.resolve(__dirname, "shims/react-native.js"),
+  "@react-native-async-storage/async-storage": path.resolve(__dirname, "shims/async-storage.js"),
 };
 
 const _resolveFilename = Module._resolveFilename.bind(Module);
