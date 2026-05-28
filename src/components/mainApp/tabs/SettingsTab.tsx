@@ -783,6 +783,7 @@ export function SettingsTab({
           <View style={styles.toolbarRight}>
             <Pressable
               onPress={() => setAllSectionsLogged(true)}
+              accessibilityRole="button"
               style={({ pressed }) => [styles.toolbarBtn, { borderColor: palette.border, opacity: pressed ? 0.75 : 1 }]}
               accessibilityLabel={t('settings.expand')}
             >
@@ -791,6 +792,7 @@ export function SettingsTab({
             </Pressable>
             <Pressable
               onPress={() => setAllSectionsLogged(false)}
+              accessibilityRole="button"
               style={({ pressed }) => [styles.toolbarBtn, { borderColor: palette.border, opacity: pressed ? 0.75 : 1 }]}
               accessibilityLabel={t('settings.collapse')}
             >
@@ -889,12 +891,14 @@ export function SettingsTab({
               />
             </View>
           ) : null}
-          <Pressable onPress={generatePassword} style={[styles.bulkButton, { backgroundColor: activeAccent }]}><Text style={[styles.bulkButtonText, { color: '#111' }]}>{t('settings.generate')}</Text></Pressable>
+          <Pressable accessibilityRole="button" accessibilityLabel={t('settings.generate')} onPress={generatePassword} style={[styles.bulkButton, { backgroundColor: activeAccent }]}><Text style={[styles.bulkButtonText, { color: '#111' }]}>{t('settings.generate')}</Text></Pressable>
           {passPhrase ? (
             <View style={[styles.passwordResult, { borderColor: palette.border, backgroundColor: palette.card }]}>
               <Text style={[styles.passwordResultText, { color: palette.fg }]} selectable>{passPhrase}</Text>
               <View style={styles.passwordActionsRow}>
                 <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={t('settings.copy')}
                   onPress={copyPassword}
                   style={({ pressed }) => [styles.passwordActionBtn, { backgroundColor: activeAccent, opacity: pressed ? 0.8 : 1 }]}
                 >
@@ -902,6 +906,8 @@ export function SettingsTab({
                   <Text style={[styles.passwordActionText, { color: '#111' }]}>{t('settings.copy')}</Text>
                 </Pressable>
                 <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={t('settings.saveAsPrivateNote')}
                   onPress={savePasswordAsPrivateNote}
                   style={({ pressed }) => [styles.passwordActionBtn, { backgroundColor: 'transparent', borderWidth: 1, borderColor: activeAccent, opacity: pressed ? 0.8 : 1 }]}
                 >
@@ -1288,6 +1294,8 @@ export function SettingsTab({
           <View style={[styles.bulkGrid, isDesktop ? styles.bulkGridDesktop : null]}>
             {!pinExists ? (
               <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={t('settings.setPin')}
                 onPress={startSetPin}
                 style={({ pressed }) => [styles.bulkButton, styles.bulkGridItem, isDesktop ? styles.bulkGridItemDesktop : styles.bulkGridItemMobile, { backgroundColor: activeAccent, opacity: pressed ? 0.85 : 1 }]}
               >
@@ -1296,12 +1304,16 @@ export function SettingsTab({
             ) : (
               <>
                 <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={t('settings.changePin')}
                   onPress={startChangePin}
                   style={({ pressed }) => [styles.bulkButton, styles.bulkGridItem, isDesktop ? styles.bulkGridItemDesktop : styles.bulkGridItemMobile, { backgroundColor: activeAccent, opacity: pressed ? 0.85 : 1 }]}
                 >
                   <Text style={[styles.bulkButtonText, { color: '#111' }]}>{t('settings.changePin')}</Text>
                 </Pressable>
                 <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={t('settings.removePin')}
                   onPress={startRemovePin}
                   style={({ pressed }) => [styles.bulkButton, styles.bulkGridItem, isDesktop ? styles.bulkGridItemDesktop : styles.bulkGridItemMobile, { backgroundColor: '#b91c1c', opacity: pressed ? 0.85 : 1 }]}
                 >
@@ -1374,6 +1386,8 @@ export function SettingsTab({
               onChangeText={setGroupNameDraft}
             />
             <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t('settings.create')}
               style={[styles.bulkButton, { backgroundColor: activeAccent, minWidth: 100 }]}
               onPress={() => createSharedNoteGroup(groupNameDraft).then((g) => { setGroups((current) => [g, ...current]); setGroupNameDraft(''); }).catch(() => undefined)}
             >
@@ -1390,6 +1404,8 @@ export function SettingsTab({
               autoCapitalize="characters"
             />
             <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t('settings.join')}
               style={[styles.bulkButton, { borderWidth: 1, borderColor: palette.border, minWidth: 100 }]}
               onPress={() => joinSharedNoteGroup(inviteCodeDraft).then((g) => { if (!g) return; setGroups((current) => current.some((x) => x.id === g.id) ? current : [g, ...current]); setInviteCodeDraft(''); }).catch(() => undefined)}
             >
@@ -1770,17 +1786,17 @@ export function SettingsTab({
           cardBackground={palette.card}
           cardBorder={palette.border}
         >
-          <View style={[styles.bulkGrid, isDesktop ? styles.bulkGridDesktop : null]}> 
-            <Pressable onPress={() => runDataSyncAction('Export CSV', onExportCsv)} style={({ pressed }) => [styles.bulkButton, styles.bulkGridItem, isDesktop ? styles.bulkGridItemDesktop : styles.bulkGridItemMobile, { backgroundColor: activeAccent, opacity: pressed ? 0.8 : 1 }]}><Text style={[styles.bulkButtonText, { color: '#111' }]}>{t('settings.exportCsv')}</Text></Pressable>
-            <Pressable onPress={() => runDataSyncAction('Export backup', onExportBackup)} style={({ pressed }) => [styles.bulkButton, styles.bulkGridItem, isDesktop ? styles.bulkGridItemDesktop : styles.bulkGridItemMobile, { backgroundColor: activeAccent, opacity: pressed ? 0.8 : 1 }]}><Text style={[styles.bulkButtonText, { color: '#111' }]}>{t('settings.exportBackup')}</Text></Pressable>
-            <Pressable onPress={() => runDataSyncAction('Import', onOpenBackupImport)} style={({ pressed }) => [styles.bulkButton, styles.bulkGridItem, isDesktop ? styles.bulkGridItemDesktop : styles.bulkGridItemMobile, { backgroundColor: activeAccent, opacity: pressed ? 0.8 : 1 }]}><Text style={[styles.bulkButtonText, { color: '#111' }]}>{t('settings.import')}</Text></Pressable>
-            <Pressable onPress={() => runDataSyncAction('Recheck Firebase', onRecheckFirebase)} style={({ pressed }) => [styles.bulkButton, styles.bulkGridItem, isDesktop ? styles.bulkGridItemDesktop : styles.bulkGridItemMobile, { backgroundColor: activeAccent, opacity: pressed ? 0.8 : 1 }]}><Text style={[styles.bulkButtonText, { color: '#111' }]}>{t('settings.recheckFirebase')}</Text></Pressable>
-            <Pressable disabled={syncBusy} onPress={() => runDataSyncAction('Sync now', onSyncNow)} style={({ pressed }) => [styles.bulkButton, styles.bulkGridItem, isDesktop ? styles.bulkGridItemDesktop : styles.bulkGridItemMobile, { backgroundColor: activeAccent, opacity: syncBusy ? 0.6 : pressed ? 0.8 : 1 }]}><Text style={[styles.bulkButtonText, { color: '#111' }]}>{syncBusy ? 'Syncing' : 'Sync now'}</Text></Pressable>
-            <Pressable onPress={() => confirmDataSyncAction(t('settings.clearHistory'), 'Are you sure you want to clear all history?', onClearHistory)} style={({ pressed }) => [styles.bulkButton, styles.bulkGridItem, isDesktop ? styles.bulkGridItemDesktop : styles.bulkGridItemMobile, { backgroundColor: '#ef4444', opacity: pressed ? 0.8 : 1 }]}><Text style={[styles.bulkButtonText, { color: '#fff' }]}>{t('settings.clearHistory')}</Text></Pressable>
-            <Pressable onPress={() => confirmDataSyncAction('Hard delete history', 'Delete all history locally, cache and cloud?', onHardDeleteHistory)} style={({ pressed }) => [styles.bulkButton, styles.bulkGridItem, isDesktop ? styles.bulkGridItemDesktop : styles.bulkGridItemMobile, { backgroundColor: '#991b1b', opacity: pressed ? 0.8 : 1 }]}><Text style={[styles.bulkButtonText, { color: '#fff' }]}>{t('settings.hardDeleteHistory')}</Text></Pressable>
-            <Pressable onPress={() => confirmDataSyncAction('Hard delete notes', 'Delete all notes locally and in cloud?', onHardDeleteNotes)} style={({ pressed }) => [styles.bulkButton, styles.bulkGridItem, isDesktop ? styles.bulkGridItemDesktop : styles.bulkGridItemMobile, { backgroundColor: '#b91c1c', opacity: pressed ? 0.8 : 1 }]}><Text style={[styles.bulkButtonText, { color: '#fff' }]}>{t('settings.hardDeleteNotes')}</Text></Pressable>
-            <Pressable onPress={() => confirmDataSyncAction('Hard delete clipboard', 'Delete all clipboard memory locally?', onHardDeleteClipboard)} style={({ pressed }) => [styles.bulkButton, styles.bulkGridItem, isDesktop ? styles.bulkGridItemDesktop : styles.bulkGridItemMobile, { backgroundColor: '#b91c1c', opacity: pressed ? 0.8 : 1 }]}><Text style={[styles.bulkButtonText, { color: '#fff' }]}>{t('settings.hardDeleteClipboard')}</Text></Pressable>
-            <Pressable onPress={() => confirmDataSyncAction('Hard delete templates', 'Delete all templates locally and in cloud?', onHardDeleteTemplates)} style={({ pressed }) => [styles.bulkButton, styles.bulkGridItem, isDesktop ? styles.bulkGridItemDesktop : styles.bulkGridItemMobile, { backgroundColor: '#b91c1c', opacity: pressed ? 0.8 : 1 }]}><Text style={[styles.bulkButtonText, { color: '#fff' }]}>{t('settings.hardDeleteTemplates')}</Text></Pressable>
+          <View style={[styles.bulkGrid, isDesktop ? styles.bulkGridDesktop : null]}>
+            <Pressable accessibilityRole="button" accessibilityLabel={t('settings.exportCsv')} onPress={() => runDataSyncAction('Export CSV', onExportCsv)} style={({ pressed }) => [styles.bulkButton, styles.bulkGridItem, isDesktop ? styles.bulkGridItemDesktop : styles.bulkGridItemMobile, { backgroundColor: activeAccent, opacity: pressed ? 0.8 : 1 }]}><Text style={[styles.bulkButtonText, { color: '#111' }]}>{t('settings.exportCsv')}</Text></Pressable>
+            <Pressable accessibilityRole="button" accessibilityLabel={t('settings.exportBackup')} onPress={() => runDataSyncAction('Export backup', onExportBackup)} style={({ pressed }) => [styles.bulkButton, styles.bulkGridItem, isDesktop ? styles.bulkGridItemDesktop : styles.bulkGridItemMobile, { backgroundColor: activeAccent, opacity: pressed ? 0.8 : 1 }]}><Text style={[styles.bulkButtonText, { color: '#111' }]}>{t('settings.exportBackup')}</Text></Pressable>
+            <Pressable accessibilityRole="button" accessibilityLabel={t('settings.import')} onPress={() => runDataSyncAction('Import', onOpenBackupImport)} style={({ pressed }) => [styles.bulkButton, styles.bulkGridItem, isDesktop ? styles.bulkGridItemDesktop : styles.bulkGridItemMobile, { backgroundColor: activeAccent, opacity: pressed ? 0.8 : 1 }]}><Text style={[styles.bulkButtonText, { color: '#111' }]}>{t('settings.import')}</Text></Pressable>
+            <Pressable accessibilityRole="button" accessibilityLabel={t('settings.recheckFirebase')} onPress={() => runDataSyncAction('Recheck Firebase', onRecheckFirebase)} style={({ pressed }) => [styles.bulkButton, styles.bulkGridItem, isDesktop ? styles.bulkGridItemDesktop : styles.bulkGridItemMobile, { backgroundColor: activeAccent, opacity: pressed ? 0.8 : 1 }]}><Text style={[styles.bulkButtonText, { color: '#111' }]}>{t('settings.recheckFirebase')}</Text></Pressable>
+            <Pressable accessibilityRole="button" accessibilityLabel={t('settings.logOff')} disabled={syncBusy} onPress={() => runDataSyncAction('Sync now', onSyncNow)} style={({ pressed }) => [styles.bulkButton, styles.bulkGridItem, isDesktop ? styles.bulkGridItemDesktop : styles.bulkGridItemMobile, { backgroundColor: activeAccent, opacity: syncBusy ? 0.6 : pressed ? 0.8 : 1 }]}><Text style={[styles.bulkButtonText, { color: '#111' }]}>{syncBusy ? 'Syncing' : 'Sync now'}</Text></Pressable>
+            <Pressable accessibilityRole="button" accessibilityLabel={t('settings.clearHistory')} onPress={() => confirmDataSyncAction(t('settings.clearHistory'), 'Are you sure you want to clear all history?', onClearHistory)} style={({ pressed }) => [styles.bulkButton, styles.bulkGridItem, isDesktop ? styles.bulkGridItemDesktop : styles.bulkGridItemMobile, { backgroundColor: '#ef4444', opacity: pressed ? 0.8 : 1 }]}><Text style={[styles.bulkButtonText, { color: '#fff' }]}>{t('settings.clearHistory')}</Text></Pressable>
+            <Pressable accessibilityRole="button" accessibilityLabel={t('settings.hardDeleteHistory')} onPress={() => confirmDataSyncAction('Hard delete history', 'Delete all history locally, cache and cloud?', onHardDeleteHistory)} style={({ pressed }) => [styles.bulkButton, styles.bulkGridItem, isDesktop ? styles.bulkGridItemDesktop : styles.bulkGridItemMobile, { backgroundColor: '#991b1b', opacity: pressed ? 0.8 : 1 }]}><Text style={[styles.bulkButtonText, { color: '#fff' }]}>{t('settings.hardDeleteHistory')}</Text></Pressable>
+            <Pressable accessibilityRole="button" accessibilityLabel={t('settings.hardDeleteNotes')} onPress={() => confirmDataSyncAction('Hard delete notes', 'Delete all notes locally and in cloud?', onHardDeleteNotes)} style={({ pressed }) => [styles.bulkButton, styles.bulkGridItem, isDesktop ? styles.bulkGridItemDesktop : styles.bulkGridItemMobile, { backgroundColor: '#b91c1c', opacity: pressed ? 0.8 : 1 }]}><Text style={[styles.bulkButtonText, { color: '#fff' }]}>{t('settings.hardDeleteNotes')}</Text></Pressable>
+            <Pressable accessibilityRole="button" accessibilityLabel={t('settings.hardDeleteClipboard')} onPress={() => confirmDataSyncAction('Hard delete clipboard', 'Delete all clipboard memory locally?', onHardDeleteClipboard)} style={({ pressed }) => [styles.bulkButton, styles.bulkGridItem, isDesktop ? styles.bulkGridItemDesktop : styles.bulkGridItemMobile, { backgroundColor: '#b91c1c', opacity: pressed ? 0.8 : 1 }]}><Text style={[styles.bulkButtonText, { color: '#fff' }]}>{t('settings.hardDeleteClipboard')}</Text></Pressable>
+            <Pressable accessibilityRole="button" accessibilityLabel={t('settings.hardDeleteTemplates')} onPress={() => confirmDataSyncAction('Hard delete templates', 'Delete all templates locally and in cloud?', onHardDeleteTemplates)} style={({ pressed }) => [styles.bulkButton, styles.bulkGridItem, isDesktop ? styles.bulkGridItemDesktop : styles.bulkGridItemMobile, { backgroundColor: '#b91c1c', opacity: pressed ? 0.8 : 1 }]}><Text style={[styles.bulkButtonText, { color: '#fff' }]}>{t('settings.hardDeleteTemplates')}</Text></Pressable>
           </View>
           <Text style={{ color: palette.muted, marginTop: 6 }}>Mode: {isGuest ? 'Guest' : 'Authenticated'} | Persistence: {persistenceMode === 'firebase' ? 'Firebase' : 'Local'}</Text>
           {userEmail ? <Text style={{ color: palette.fg, marginTop: 2 }}>{userEmail}</Text> : null}

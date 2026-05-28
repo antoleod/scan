@@ -1536,7 +1536,12 @@ export function NotesTab({
 
       {vaultMode ? (
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: uiPalette.chipBorder, backgroundColor: uiPalette.surface }}>
-          <Pressable onPress={() => { setVaultMode(false); setPinUnlocked(false); }} hitSlop={8}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={tr('common.close')}
+            onPress={() => { setVaultMode(false); setPinUnlocked(false); }}
+            hitSlop={8}
+          >
             <Ionicons name="chevron-back" size={22} color={uiPalette.textBody} />
           </Pressable>
           <Ionicons name="lock-closed" size={16} color="#F59E0B" />
@@ -1573,6 +1578,8 @@ export function NotesTab({
                 return (
                   <View key={note.id} style={{ flex: 1, minWidth: 0 }}>
                     <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={tr('notes.unlockSecretNote')}
                       onPress={() => setPinModalMode('unlock')}
                       onLongPress={() => {
                         Alert.alert('Secret note', 'Unlock secret notes to view, edit or remove this entry.', [
@@ -1951,6 +1958,8 @@ export function NotesTab({
                       </Text>
                       <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
                         <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel={tr('notes.reminderFeelingBetter')}
                           onPress={() =>
                             dismissReminder(reminder.noteId, reminder.medIndex)
                               .then(() => checkDueReminders())
@@ -1965,10 +1974,12 @@ export function NotesTab({
                           })}
                         >
                           <Text style={{ color: '#fff', fontSize: 12, fontWeight: '600' }}>
-                            Feeling better
+                            {tr('notes.reminderFeelingBetter')}
                           </Text>
                         </Pressable>
                         <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel={tr('notes.reminderStillUnwell')}
                           onPress={() =>
                             dismissReminder(reminder.noteId, reminder.medIndex)
                               .then(() => checkDueReminders())
@@ -1983,10 +1994,12 @@ export function NotesTab({
                           })}
                         >
                           <Text style={{ color: '#fff', fontSize: 12, fontWeight: '600' }}>
-                            Still unwell
+                            {tr('notes.reminderStillUnwell')}
                           </Text>
                         </Pressable>
                         <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel={tr('notes.reminderSnooze1h')}
                           onPress={() =>
                             snoozeReminder(reminder.noteId, reminder.medIndex, 3_600_000)
                               .then(() => checkDueReminders())
@@ -2003,7 +2016,7 @@ export function NotesTab({
                           })}
                         >
                           <Text style={{ color: palette.muted, fontSize: 12, fontWeight: '600' }}>
-                            Snooze 1h
+                            {tr('notes.reminderSnooze1h')}
                           </Text>
                         </Pressable>
                       </View>
@@ -2053,6 +2066,9 @@ export function NotesTab({
                   return (
                     <Pressable
                       key={chip.key}
+                      accessibilityRole="button"
+                      accessibilityLabel={chip.label}
+                      accessibilityState={{ selected: filter === chip.key }}
                       onPress={() => setFilter(chip.key)}
                       style={({ pressed }) => ({
                         paddingHorizontal: 12,
@@ -2077,6 +2093,8 @@ export function NotesTab({
                   <Text style={{ color: palette.fg, fontSize: 15, fontWeight: '800', textAlign: 'center' }}>{notesEmptyTitle}</Text>
                   <Text style={{ color: palette.muted, fontSize: 12, lineHeight: 18, textAlign: 'center' }}>{notesEmptyText}</Text>
                   <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={notes.length === 0 ? tr('notes.newNote') : tr('notes.clearFilters')}
                     style={({ pressed }) => [
                       mainAppStyles.btn,
                       { backgroundColor: palette.accent, borderColor: palette.accent, opacity: pressed ? 0.85 : 1, alignSelf: 'stretch' },
@@ -2091,7 +2109,7 @@ export function NotesTab({
                       setOfficeEntityFilter(null);
                     }}
                   >
-                    <Text style={[mainAppStyles.btnText, { textAlign: 'center', color: '#000' }]}>{notes.length === 0 ? 'New note' : 'Clear filters'}</Text>
+                    <Text style={[mainAppStyles.btnText, { textAlign: 'center', color: '#000' }]}>{notes.length === 0 ? tr('notes.newNote') : tr('notes.clearFilters')}</Text>
                   </Pressable>
                 </View>
               ) : null}

@@ -196,10 +196,13 @@ function HistoryItemCard({
               {isExpanded ? <Text style={{ color: palette.fg, fontSize: 12, lineHeight: 17 }}>{notesValue}</Text> : null}
               <Pressable
                 onPress={onToggleExpand}
+                accessibilityRole="button"
+                accessibilityLabel={isExpanded ? t('history.showLess') : t('history.showMore')}
+                accessibilityState={{ expanded: isExpanded }}
                 style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-start', opacity: pressed ? 0.7 : 1 })}
               >
                 <Ionicons name={isExpanded ? 'chevron-up-outline' : 'chevron-down-outline'} size={12} color={palette.accent} />
-                <Text style={{ color: palette.accent, fontSize: 11, fontWeight: '700' }}>{isExpanded ? 'Less' : 'More'}</Text>
+                <Text style={{ color: palette.accent, fontSize: 11, fontWeight: '700' }}>{isExpanded ? t('history.showLess') : t('history.showMore')}</Text>
               </Pressable>
             </View>
 
@@ -216,19 +219,19 @@ function HistoryItemCard({
           </Pressable>
 
           <View style={[mainAppStyles.itemActions, { alignItems: 'center' }]}>
-            <Pressable style={({ pressed }) => [mainAppStyles.tinyBtn, { borderColor: palette.border, flexDirection: 'row', alignItems: 'center', gap: 6, opacity: pressed ? 0.75 : 1 }]} onPress={onCopy}>
+            <Pressable accessibilityRole="button" accessibilityLabel={t('history.copy')} style={({ pressed }) => [mainAppStyles.tinyBtn, { borderColor: palette.border, flexDirection: 'row', alignItems: 'center', gap: 6, opacity: pressed ? 0.75 : 1 }]} onPress={onCopy}>
               <Ionicons name="copy-outline" size={14} color={palette.fg} />
               {showActionLabels ? <Text style={{ color: palette.fg, fontSize: 11, fontWeight: '700' }}>{t('history.copy')}</Text> : null}
             </Pressable>
-            <Pressable style={({ pressed }) => [mainAppStyles.tinyBtn, { borderColor: palette.border, flexDirection: 'row', alignItems: 'center', gap: 6, opacity: pressed ? 0.75 : 1 }]} onPress={onEdit}>
+            <Pressable accessibilityRole="button" accessibilityLabel={t('history.edit')} style={({ pressed }) => [mainAppStyles.tinyBtn, { borderColor: palette.border, flexDirection: 'row', alignItems: 'center', gap: 6, opacity: pressed ? 0.75 : 1 }]} onPress={onEdit}>
               <Ionicons name="create-outline" size={14} color={palette.fg} />
               {showActionLabels ? <Text style={{ color: palette.fg, fontSize: 11, fontWeight: '700' }}>{t('history.edit')}</Text> : null}
             </Pressable>
-            <Pressable style={({ pressed }) => [mainAppStyles.tinyBtn, { borderColor: palette.border, flexDirection: 'row', alignItems: 'center', gap: 6, opacity: pressed ? 0.75 : 1 }]} onPress={onToggleUsed}>
+            <Pressable accessibilityRole="button" accessibilityLabel={used ? t('history.unuse') : t('history.use')} style={({ pressed }) => [mainAppStyles.tinyBtn, { borderColor: palette.border, flexDirection: 'row', alignItems: 'center', gap: 6, opacity: pressed ? 0.75 : 1 }]} onPress={onToggleUsed}>
               <Ionicons name={used ? 'checkmark-circle-outline' : 'ellipse-outline'} size={14} color={palette.fg} />
               {showActionLabels ? <Text style={{ color: palette.fg, fontSize: 11, fontWeight: '700' }}>{used ? t('history.unuse') : t('history.use')}</Text> : null}
             </Pressable>
-            <Pressable style={({ pressed }) => [mainAppStyles.tinyBtn, { borderColor: palette.border, flexDirection: 'row', alignItems: 'center', gap: 6, opacity: pressed ? 0.75 : 1 }]} onPress={onDelete}>
+            <Pressable accessibilityRole="button" accessibilityLabel={t('history.delete')} style={({ pressed }) => [mainAppStyles.tinyBtn, { borderColor: palette.border, flexDirection: 'row', alignItems: 'center', gap: 6, opacity: pressed ? 0.75 : 1 }]} onPress={onDelete}>
               <Ionicons name="trash-outline" size={14} color="#ef4444" />
               {showActionLabels ? <Text style={{ color: '#ef4444', fontSize: 11, fontWeight: '700' }}>{t('history.delete')}</Text> : null}
             </Pressable>
@@ -353,10 +356,10 @@ export function HistoryTab({
   }, [filteredHistory, visibleScanType]);
 
   const hiddenFilters = useMemo(() => allFilterTypes.filter((type) => !PRIMARY_FILTERS.includes(type) && type !== 'ALL'), [allFilterTypes]);
-  const emptyStateTitle = historyCount === 0 ? 'Scan a code to get started' : 'No results';
+  const emptyStateTitle = historyCount === 0 ? t('history.emptyFirstTitle') : t('history.emptyNoResultsTitle');
   const emptyStateText = historyCount === 0
-    ? 'Your history appears here after you scan or paste a code.'
-    : 'Clear filters or adjust your search to see results.';
+    ? t('history.emptyFirstText')
+    : t('history.emptyNoResultsText');
 
   async function copyValue(item: ScanRecord) {
     const value = item.codeValue || item.codeNormalized;
@@ -418,6 +421,9 @@ export function HistoryTab({
                   <Pressable
                     key={type}
                     onPress={() => onFilterTypeChange(type)}
+                    accessibilityRole="button"
+                    accessibilityLabel={t('history.filterTypeA11y', { type })}
+                    accessibilityState={{ selected: filterType === type }}
                     style={[mainAppStyles.filterChipCompact, filterType === type ? { backgroundColor: palette.accent } : { borderColor: palette.border, borderWidth: 1 }]}
                   >
                     <Text style={{ color: filterType === type ? '#fff' : palette.fg, fontSize: 12, fontWeight: '700' }}>{type}</Text>
@@ -448,6 +454,9 @@ export function HistoryTab({
               <Pressable
                 style={[mainAppStyles.filterChipCompact, (selectedDateLabel || calendarDate) ? { backgroundColor: palette.accent } : { borderColor: palette.border, borderWidth: 1 }]}
                 onPress={() => setCalendarOpen(true)}
+                accessibilityRole="button"
+                accessibilityLabel={t('history.filterByDateA11y')}
+                accessibilityState={{ selected: Boolean(selectedDateLabel || calendarDate) }}
               >
                 <View style={mainAppStyles.compactAction}>
                   <Ionicons name="calendar-outline" size={14} color={(selectedDateLabel || calendarDate) ? '#fff' : palette.fg} />
@@ -462,6 +471,8 @@ export function HistoryTab({
                 <Pressable
                   onPress={() => setCalendarDate(null)}
                   style={[mainAppStyles.filterChipCompact, { borderColor: palette.border, borderWidth: 1 }]}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('history.clearDateFilter')}
                 >
                   <Ionicons name="close" size={12} color={palette.fg} />
                 </Pressable>
@@ -495,7 +506,7 @@ export function HistoryTab({
                 { backgroundColor: palette.accent, borderColor: palette.accent, opacity: pressed ? 0.85 : 1, alignSelf: 'stretch' },
               ]}
             >
-              <Text style={[mainAppStyles.btnText, { textAlign: 'center' }]}>{historyCount === 0 ? 'Open Scanner' : 'Clear filters'}</Text>
+              <Text style={[mainAppStyles.btnText, { textAlign: 'center' }]}>{historyCount === 0 ? t('history.emptyOpenScanner') : t('history.emptyClearFilters')}</Text>
             </Pressable>
           </View>
         )}
@@ -544,7 +555,7 @@ export function HistoryTab({
             <View style={mainAppStyles.modalHandle} />
             <View style={mainAppStyles.moreSheetHeader}>
               <Text style={[mainAppStyles.sectionTitle, { color: palette.fg }]}>{t('history.moreFilters')}</Text>
-              <Pressable style={[mainAppStyles.modalCloseBtn, { borderColor: palette.border }]} onPress={() => setMoreVisible(false)}>
+              <Pressable accessibilityRole="button" accessibilityLabel={t('common.close')} style={[mainAppStyles.modalCloseBtn, { borderColor: palette.border }]} onPress={() => setMoreVisible(false)}>
                 <Ionicons name="close" size={18} color={palette.fg} />
               </Pressable>
             </View>
@@ -583,7 +594,7 @@ export function HistoryTab({
             <View style={mainAppStyles.modalHandle} />
             <View style={mainAppStyles.modalHeader}>
               <Text style={[mainAppStyles.sectionTitle, { color: palette.fg }]}>{t('history.deleteItem')}</Text>
-              <Pressable style={[mainAppStyles.modalCloseBtn, { borderColor: palette.border }]} onPress={() => setDeleteTarget(null)}>
+              <Pressable accessibilityRole="button" accessibilityLabel={t('common.close')} style={[mainAppStyles.modalCloseBtn, { borderColor: palette.border }]} onPress={() => setDeleteTarget(null)}>
                 <Ionicons name="close" size={18} color={palette.fg} />
               </Pressable>
             </View>
@@ -595,13 +606,17 @@ export function HistoryTab({
             </Text>
             <View style={{ flexDirection: 'row', gap: 10, marginTop: 14 }}>
               <Pressable
-                style={({ pressed }) => [{ flex: 1, borderWidth: 1, borderColor: palette.border, borderRadius: 10, minHeight: 40, alignItems: 'center', justifyContent: 'center', opacity: pressed ? 0.8 : 1 }]}
+                accessibilityRole="button"
+                accessibilityLabel={t('history.cancel')}
+                style={({ pressed }) => [{ flex: 1, borderWidth: 1, borderColor: palette.border, borderRadius: 10, minHeight: 44, alignItems: 'center', justifyContent: 'center', opacity: pressed ? 0.8 : 1 }]}
                 onPress={() => setDeleteTarget(null)}
               >
                 <Text style={{ color: palette.fg, fontSize: 12, fontWeight: '700' }}>{t('history.cancel')}</Text>
               </Pressable>
               <Pressable
-                style={({ pressed }) => [{ flex: 1, borderRadius: 10, minHeight: 40, alignItems: 'center', justifyContent: 'center', backgroundColor: '#b91c1c', opacity: pressed ? 0.82 : 1 }]}
+                accessibilityRole="button"
+                accessibilityLabel={t('history.delete')}
+                style={({ pressed }) => [{ flex: 1, borderRadius: 10, minHeight: 44, alignItems: 'center', justifyContent: 'center', backgroundColor: '#b91c1c', opacity: pressed ? 0.82 : 1 }]}
                 onPress={() => {
                   if (!deleteTarget) return;
                   const target = deleteTarget;

@@ -61,6 +61,8 @@ function ActionPill({
     <Pressable
       onPress={onPress}
       hitSlop={4}
+      accessibilityRole="button"
+      accessibilityLabel={label}
       style={({ pressed }) => ({
         flexDirection: 'row',
         alignItems: 'center',
@@ -97,6 +99,8 @@ function SwipeAction({
   return (
     <Pressable
       onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={label}
       style={({ pressed }) => ({
         width: 60,
         alignItems: 'center',
@@ -740,6 +744,9 @@ function NoteCardBase({
                     <Pressable
                       onPress={() => setMoreMenuOpen(!moreMenuOpen)}
                       hitSlop={8}
+                      accessibilityRole="button"
+                      accessibilityLabel="More options"
+                      accessibilityState={{ expanded: moreMenuOpen }}
                       style={({ pressed }) => ({
                         height: 28,
                         paddingHorizontal: 10,
@@ -821,12 +828,16 @@ function NoteCardBase({
             </Text>
             <View style={{ flexDirection: 'row', gap: 10 }}>
               <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Cancel"
                 onPress={() => setConfirmDelete(false)}
                 style={{ flex: 1, minHeight: 44, borderRadius: 12, borderWidth: 1, borderColor: palette.border, alignItems: 'center', justifyContent: 'center' }}
               >
                 <Text style={{ color: palette.textBody, fontSize: 13, fontWeight: '600' }}>Cancel</Text>
               </Pressable>
               <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Delete note"
                 onPress={() => { setConfirmDelete(false); onDelete(); }}
                 style={{ flex: 1, minHeight: 44, borderRadius: 12, backgroundColor: '#dc2626', alignItems: 'center', justifyContent: 'center' }}
               >

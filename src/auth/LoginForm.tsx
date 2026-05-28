@@ -1164,7 +1164,7 @@ const styles = StyleSheet.create({
   input: { height: 48, borderRadius: 10, borderWidth: 1, paddingHorizontal: 14, fontSize: 15, ...Platform.select({ web: {} as object, default: { shadowOffset: { width: 0, height: 0 }, shadowRadius: 8 } }) },
   passwordWrapper: { position: 'relative', justifyContent: 'center' },
   passwordInput: { paddingRight: 44 },
-  eyeIcon: { position: 'absolute', right: 12, width: 32, height: 32, alignItems: 'center', justifyContent: 'center' },
+  eyeIcon: { position: 'absolute', right: 8, width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   error: { fontSize: 11, fontWeight: '600' },
   helperRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   helper: { fontSize: 10 },

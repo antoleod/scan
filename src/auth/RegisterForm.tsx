@@ -539,7 +539,7 @@ const styles = StyleSheet.create({
   generateText: { fontSize: 10, fontWeight: '800', textTransform: 'uppercase' },
   passwordWrapper: { position: 'relative', justifyContent: 'center' },
   passwordInput: { paddingRight: 40 },
-  eyeIcon: { position: 'absolute', right: 12, width: 32, height: 32, alignItems: 'center', justifyContent: 'center' },
+  eyeIcon: { position: 'absolute', right: 8, width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   tooltip: { position: 'absolute', top: -30, right: 0, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6, zIndex: 50 },
   tooltipText: { fontSize: 10, fontWeight: '900' },
   label: {

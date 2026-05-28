@@ -269,9 +269,11 @@ export const ComposerSection = forwardRef<TextInput, {
         >
           <Pressable
             onPress={() => setPickerVisible(true)}
+            accessibilityRole="button"
+            accessibilityLabel={t('composer.groupPickerA11y', { group: activeGroupLabel })}
             hitSlop={8}
               style={({ pressed }) => ({
-                height: 40,
+                height: 44,
                 paddingHorizontal: 12,
                 borderRadius: 10,
               borderWidth: 1,
@@ -284,7 +286,7 @@ export const ComposerSection = forwardRef<TextInput, {
           >
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
               <Text style={{ color: palette.textBody, fontSize: 13, fontWeight: '600' }} numberOfLines={1}>
-                Group: {activeGroupLabel}
+                {t('composer.personal') === activeGroupLabel ? t('composer.personal') : activeGroupLabel}
               </Text>
               <Ionicons name="chevron-down" size={13} color={palette.textMuted} />
             </View>
@@ -292,17 +294,20 @@ export const ComposerSection = forwardRef<TextInput, {
 
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, minWidth: 0 }}>
             {([
-              { key: 'general', label: 'General' },
-              { key: 'work', label: 'Work' },
-            ] as const).map((item, index) => {
+              { key: 'general' as const, label: t('composer.categoryGeneral') },
+              { key: 'work' as const, label: t('composer.categoryWork') },
+            ]).map((item, index) => {
               const active = activeCategory === item.key;
               return (
                 <Pressable
                   key={item.key}
                   onPress={() => onSetCategory(item.key)}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('composer.categoryA11y', { category: item.label })}
+                  accessibilityState={{ selected: active }}
                   hitSlop={6}
                   style={({ pressed }) => ({
-                    height: 40,
+                    height: 44,
                     minWidth: isCompact ? 72 : 84,
                     paddingHorizontal: isCompact ? 12 : 14,
                     justifyContent: 'center',
@@ -382,12 +387,12 @@ export const ComposerSection = forwardRef<TextInput, {
               <View style={{ alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
                 {hoveredAction === 'secret' && (
                   <View pointerEvents="none" style={{ position: 'absolute', top: -30, left: '50%', transform: [{ translateX: -34 }], minWidth: 68, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, backgroundColor: '#111111', borderWidth: 1, borderColor: palette.chipBorder, zIndex: 20 }}>
-                    <Text style={{ color: palette.textBody, fontSize: 11, fontWeight: '600', textAlign: 'center' }}>{isSecret ? 'Secret' : 'Lock'}</Text>
+                    <Text style={{ color: palette.textBody, fontSize: 11, fontWeight: '600', textAlign: 'center' }}>{isSecret ? t('composer.secretUnlock') : t('composer.secretLock')}</Text>
                   </View>
                 )}
                 <ThemedActionIconButton
                   icon={isSecret ? 'lock' : 'lock-open-outline'}
-                  label={isSecret ? 'Secret' : 'Lock'}
+                  label={isSecret ? t('composer.secretUnlock') : t('composer.secretLock')}
                   accentColor="#F59E0B"
                   active={!!isSecret}
                   onPress={onToggleSecret}

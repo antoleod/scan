@@ -204,7 +204,12 @@ export function BarcodeModal({
               </Text>
             </View>
 
-            <Pressable style={[mainAppStyles.barcodeSheetCloseBtn, { borderColor: palette.border }]} onPress={onClose}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t('scan.barcodeCloseA11y')}
+              style={[mainAppStyles.barcodeSheetCloseBtn, { borderColor: palette.border }]}
+              onPress={onClose}
+            >
               <Ionicons name="close" size={16} color={palette.fg} />
             </Pressable>
           </View>
@@ -237,7 +242,7 @@ export function BarcodeModal({
             </Text>
 
             <Text style={[mainAppStyles.barcodeSheetNote, { color: palette.muted }]}>
-              Saved in history. This value can be copied or regenerated later.
+              {t('scan.barcodeSavedNote')}
             </Text>
           </View>
         </Pressable>

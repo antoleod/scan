@@ -82,7 +82,7 @@ export function HistoryItemModal({
                   {isAdd ? t('history.addItemSubtitle') : t('history.editItemSubtitle')}
                 </Text>
               </View>
-              <Pressable style={[mainAppStyles.modalCloseBtn, { borderColor: palette.border }]} onPress={onClose}>
+              <Pressable accessibilityRole="button" accessibilityLabel={t('common.close')} style={[mainAppStyles.modalCloseBtn, { borderColor: palette.border }]} onPress={onClose}>
                 <Ionicons name="close" size={18} color={palette.fg} />
               </Pressable>
             </View>
@@ -151,7 +151,7 @@ export function HistoryItemModal({
                 <View style={mainAppStyles.modalHeader}>
                   <Text style={[mainAppStyles.formLabel, { color: palette.fg, marginBottom: 0 }]}>{t('history.office')}</Text>
                   {onScanOffice ? (
-                    <Pressable onPress={onScanOffice} hitSlop={8}>
+                    <Pressable accessibilityRole="button" accessibilityLabel={t('history.scanOffice')} onPress={onScanOffice} hitSlop={8}>
                       <Text style={{ color: palette.accent, fontSize: 12, fontWeight: '700' }}>{t('history.scanOffice')}</Text>
                     </Pressable>
                   ) : null}
@@ -200,6 +200,9 @@ export function HistoryItemModal({
                 {isAdd ? t('history.addFooterHint') : t('history.editFooterHint')}
               </Text>
               <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={t('history.save')}
+                accessibilityState={{ disabled: Boolean(busy), busy: Boolean(busy) }}
                 style={[
                   mainAppStyles.smallBtn,
                   mainAppStyles.actionBtn,
