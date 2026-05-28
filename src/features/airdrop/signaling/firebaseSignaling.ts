@@ -61,12 +61,19 @@ export function createFirebaseSignalingChannel(): SignalingChannel {
     subscribe(sessionId, onMessage): () => void {
       let detach: (() => void) | null = null;
       let cancelled = false;
+      // Resolved once the onChildAdded listener is wired. Callers that need to
+      // publish only after they can receive the response (e.g. guest publishing
+      // its presence) should await this before calling publish().
+      let readyResolve: (() => void) | undefined;
+      const ready = new Promise<void>((res) => { readyResolve = res; });
 
       void (async () => {
         const db = await getDb();
-        if (!db || cancelled) return;
+        if (!db || cancelled) {
+          readyResolve?.();
+          return;
+        }
         const signalsRef: DatabaseReference = ref(db, RTDB_PATHS.sessionSignals(sessionId));
-        void diag.info('airdrop.signaling.subscribed', { sessionId });
         // onChildAdded replays existing children once, then streams new ones —
         // ideal for an append-only signaling log.
         const off = onChildAdded(signalsRef, (snap) => {
@@ -79,12 +86,18 @@ export function createFirebaseSignalingChannel(): SignalingChannel {
           void diag.warn('airdrop.signaling.subscribe_error', { sessionId, error: String(err) });
         });
         detach = off;
+        // Signal that the listener is active — safe to publish now.
+        readyResolve?.();
+        void diag.info('airdrop.signaling.subscribed', { sessionId });
       })();
 
-      return () => {
+      const unsub = () => {
         cancelled = true;
         detach?.();
       };
+      // Attach ready promise so callers can await subscription before publishing.
+      (unsub as unknown as { ready: Promise<void> }).ready = ready;
+      return unsub;
     },
 
     async publish(msg: SignalMessage): Promise<void> {

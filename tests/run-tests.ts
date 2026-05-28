@@ -36,7 +36,10 @@ import { getAuthRedirectPath, LOGIN_ROUTE, MAIN_APP_ROUTE } from "../src/core/ro
 import { encodeQrPayload, decodeQrPayload, isAirdropQr } from "../src/features/airdrop/utils/qr";
 import { filterIncomingShares, isValidShare } from "../src/features/airdrop/presence/shareFilter";
 import { generateSessionId, generateToken, isPresenceAuthorized } from "../src/features/airdrop/utils/ids";
-import type { UserShare } from "../src/features/airdrop/types";
+import type { UserShare, SignalingChannel, SignalMessage } from "../src/features/airdrop/types";
+import { setSignalingChannel } from "../src/features/airdrop/signaling";
+import { createSession, joinSession, cancelSession } from "../src/features/airdrop/sessions/sessionService";
+import { resetAirdropStore, airdropStore } from "../src/features/airdrop/store/airdropStore";
 
 let passed = 0;
 let failed = 0;
@@ -1162,6 +1165,215 @@ run("computeChecksum ignores content/title changes (tracks only id/updatedAt/del
   const a = { id: "n1", updatedAt: 1000, deletedAt: undefined, text: "hello", title: "A" };
   const b = { id: "n1", updatedAt: 1000, deletedAt: undefined, text: "WORLD", title: "Z" };
   assert.equal(computeNotesChecksum([a] as unknown as NoteItem[]), computeNotesChecksum([b] as unknown as NoteItem[]));
+});
+
+// ── AirDrop live session flow (in-memory signaling, no Firebase) ──────────────
+//
+// These tests exercise the full createSession → joinSession handshake using an
+// in-memory SignalingChannel. On Node.js, createPeerConnection returns the
+// UnsupportedPeerConnection, so we test everything up to the WebRTC offer/answer
+// exchange but not the actual data channel (that requires a browser).
+
+function makeInMemoryChannel(): SignalingChannel & { _drain(): void; _log: SignalMessage[] } {
+  // Maps sessionId → list of listeners
+  const listeners = new Map<string, Array<(msg: SignalMessage) => void>>();
+  const log: SignalMessage[] = [];
+  // Messages queued before any listener is attached (simulates RTDB replay).
+  const pending = new Map<string, SignalMessage[]>();
+
+  return {
+    _log: log,
+    _drain() {
+      // Flush any pending messages to newly-attached listeners.
+      for (const [sid, msgs] of pending.entries()) {
+        const cbs = listeners.get(sid) ?? [];
+        for (const msg of msgs) for (const cb of cbs) cb(msg);
+      }
+      pending.clear();
+    },
+    isAvailable: () => true,
+    subscribe(sessionId, onMessage) {
+      const list = listeners.get(sessionId) ?? [];
+      list.push(onMessage);
+      listeners.set(sessionId, list);
+      // Replay any messages that arrived before this subscribe (RTDB semantics).
+      const queued = pending.get(sessionId) ?? [];
+      for (const msg of queued) onMessage(msg);
+      pending.delete(sessionId);
+      const unsub = () => {
+        const l = listeners.get(sessionId);
+        if (l) {
+          const idx = l.indexOf(onMessage);
+          if (idx !== -1) l.splice(idx, 1);
+        }
+      };
+      // Mark the listener as immediately ready (sync subscribe).
+      (unsub as unknown as { ready: Promise<void> }).ready = Promise.resolve();
+      return unsub;
+    },
+    async publish(msg) {
+      log.push(msg);
+      const cbs = listeners.get(msg.sessionId) ?? [];
+      if (cbs.length === 0) {
+        // No listener yet — queue for replay (mirrors RTDB onChildAdded replay).
+        const q = pending.get(msg.sessionId) ?? [];
+        q.push(msg);
+        pending.set(msg.sessionId, q);
+      } else {
+        for (const cb of [...cbs]) cb(msg);
+      }
+    },
+    async clear(sessionId) {
+      listeners.delete(sessionId);
+      pending.delete(sessionId);
+    },
+  };
+}
+
+// Helper: wait up to `ms` for a predicate to become true (async polling).
+function waitUntil(pred: () => boolean, ms = 500): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const deadline = Date.now() + ms;
+    const tick = () => {
+      if (pred()) return resolve();
+      if (Date.now() >= deadline) return reject(new Error(`waitUntil timeout after ${ms}ms`));
+      setTimeout(tick, 10);
+    };
+    tick();
+  });
+}
+
+run("airdrop: createSession transitions from creating → waiting", async () => {
+  resetAirdropStore();
+  const ch = makeInMemoryChannel();
+  setSignalingChannel(ch);
+
+  const session = await createSession({ ttl: "5m" });
+  assert.equal(session.role, "host");
+
+  // Give the async status update a tick to settle.
+  await new Promise((r) => setTimeout(r, 0));
+  const stored = airdropStore.getState().sessions[session.id];
+  assert.equal(stored?.status, "waiting");
+
+  await cancelSession(session.id);
+  resetAirdropStore();
+});
+
+run("airdrop: joinSession publishes a presence frame after subscribe is ready", async () => {
+  resetAirdropStore();
+  const ch = makeInMemoryChannel();
+  setSignalingChannel(ch);
+
+  const token = generateToken(10);
+  const sessionId = generateSessionId();
+
+  // Pre-populate a host session in the store so the host signal handler can
+  // look it up; mimic what createSession writes.
+  const { putSession } = await import("../src/features/airdrop/store/airdropStore");
+  putSession({
+    id: sessionId,
+    token,
+    role: "host",
+    status: "waiting",
+    payload: null,
+    ttl: "5m",
+    createdAt: Date.now(),
+    expiresAt: Date.now() + 5 * 60_000,
+    peer: null,
+  });
+
+  const guestSession = await joinSession(sessionId, token);
+  assert.equal(guestSession.role, "guest");
+
+  // The presence frame must have been published by the time joinSession resolves.
+  const presence = ch._log.find((m) => m.type === "presence" && m.sessionId === sessionId);
+  assert.ok(presence, "presence frame was not published");
+  assert.equal(presence!.token, token);
+
+  await cancelSession(sessionId);
+  resetAirdropStore();
+});
+
+run("airdrop: full host↔guest handshake — host moves to 'pairing' on guest presence", async () => {
+  resetAirdropStore();
+  const ch = makeInMemoryChannel();
+  setSignalingChannel(ch);
+
+  // Host creates a session and starts listening.
+  const host = await createSession({ ttl: "5m" });
+  await new Promise((r) => setTimeout(r, 0)); // let status settle to 'waiting'
+
+  // Guest joins with the correct token — triggers presence publish.
+  const guest = await joinSession(host.id, host.token);
+  assert.equal(guest.role, "guest");
+
+  // Host should have seen the presence frame and moved to 'pairing'.
+  // On native (Node.js) createOffer() throws (UnsupportedPeerConnection) so the
+  // host catches and logs it — but the status should still reach 'pairing' first.
+  await waitUntil(() => {
+    const s = airdropStore.getState().sessions[host.id];
+    return s?.status === "pairing" || s?.status === "error";
+  }, 500);
+
+  const hostState = airdropStore.getState().sessions[host.id];
+  assert.ok(
+    hostState?.status === "pairing" || hostState?.status === "error",
+    `expected pairing|error, got ${hostState?.status}`,
+  );
+  // The host must have recorded the guest peer.
+  assert.ok(hostState?.peer !== null || hostState?.status === "error", "host should have the guest peer");
+
+  await cancelSession(host.id).catch(() => undefined);
+  await cancelSession(guest.id).catch(() => undefined);
+  resetAirdropStore();
+});
+
+run("airdrop: token mismatch — host ignores presence with wrong token", async () => {
+  resetAirdropStore();
+  const ch = makeInMemoryChannel();
+  setSignalingChannel(ch);
+
+  const host = await createSession({ ttl: "5m" });
+  await new Promise((r) => setTimeout(r, 0));
+
+  // Guest uses a WRONG token.
+  await joinSession(host.id, "WRONGTOKEN00");
+
+  // Give the host's signal handler time to run.
+  await new Promise((r) => setTimeout(r, 50));
+
+  const hostState = airdropStore.getState().sessions[host.id];
+  // Host must NOT move to pairing — it should still be waiting.
+  assert.equal(hostState?.status, "waiting", `host should stay 'waiting', got ${hostState?.status}`);
+  assert.equal(hostState?.peer, null, "host must not record an unauthorized peer");
+
+  await cancelSession(host.id).catch(() => undefined);
+  resetAirdropStore();
+});
+
+run("airdrop: bye frame cancels the remote session without a double-bye loop", async () => {
+  resetAirdropStore();
+  const ch = makeInMemoryChannel();
+  setSignalingChannel(ch);
+
+  const host = await createSession({ ttl: "5m" });
+  await new Promise((r) => setTimeout(r, 0));
+  const guest = await joinSession(host.id, host.token);
+  await new Promise((r) => setTimeout(r, 50));
+
+  // Guest cancels — sends a bye. Host receives it and moves to 'cancelled'.
+  await cancelSession(guest.id);
+  await new Promise((r) => setTimeout(r, 50));
+
+  const hostState = airdropStore.getState().sessions[host.id];
+  assert.equal(hostState?.status, "cancelled", `host should be cancelled, got ${hostState?.status}`);
+
+  // Count bye frames — must be exactly 1 (guest's), not 2 (no echo loop).
+  const byeCount = ch._log.filter((m) => m.type === "bye" && m.sessionId === host.id).length;
+  assert.equal(byeCount, 1, `expected 1 bye frame, got ${byeCount}`);
+
+  resetAirdropStore();
 });
 
 console.log("\n-------------------");

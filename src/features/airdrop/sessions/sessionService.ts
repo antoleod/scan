@@ -234,11 +234,17 @@ export async function joinSession(
     rt.disposeTransfer = attachReceiver(sessionId, rt.pc, receiverHandlers);
   }
 
-  rt.unsubscribe = channel.subscribe(sessionId, (msg) => {
+  const unsub = channel.subscribe(sessionId, (msg) => {
     void handleGuestSignal(sessionId, self.id, msg).catch((e) =>
       diag.warn('airdrop.session.guest_signal_error', { sessionId, error: String(e) }),
     );
   });
+  rt.unsubscribe = unsub;
+
+  // Wait until the signaling listener is active before announcing presence.
+  // Without this, the host may reply with an SDP offer before our onChildAdded
+  // listener is wired — that offer would be missed and the session would hang.
+  if (unsub.ready) await unsub.ready;
 
   // Announce presence so the host knows to send an offer. The token proves we
   // were given the session out-of-band (QR / same-account share); the host
