@@ -406,7 +406,7 @@ function MedRow({
       {confirmDismiss && canAct ? (
         <View style={{ gap: 6 }}>
           <Text style={{ color: palette.textBody, fontSize: 12 }}>
-            Dismiss reminder for <Text style={{ fontWeight: '700' }}>{med.name}</Text>? The note stays saved.
+            {t('medication.confirmDismissText', { name: med.name })}
           </Text>
           <View style={{ flexDirection: 'row', gap: 6 }}>
             <Pressable

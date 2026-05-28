@@ -3,6 +3,7 @@ import { Animated, Pressable, ScrollView, Text, TextInput, View } from 'react-na
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
+import { useTranslation } from 'react-i18next';
 
 import type { Palette } from '../../../theme/theme';
 import { AirdropCard } from '../components/AirdropCard';
@@ -32,6 +33,7 @@ export function ReceiveScreen({
   /** If set (deep-link open), auto-pair this QR string on mount. */
   autoJoinCode?: string | null;
 }) {
+  const { t } = useTranslation();
   const [permission, requestPermission] = useCameraPermissions();
   const [joinedId, setJoinedId] = useState<string | null>(null);
   const [manualCode, setManualCode] = useState('');
@@ -58,7 +60,11 @@ export function ReceiveScreen({
 
   const handleScanned = async (raw: string) => {
     if (lockedRef.current) return;
-    if (!isAirdropQr(raw)) return;
+    if (!isAirdropQr(raw)) {
+      setError(t('airdrop.wrongQr'));
+      setTimeout(() => setError(null), 2500);
+      return;
+    }
     lockedRef.current = true;
     setBusy(true);
     setError(null);
@@ -290,8 +296,8 @@ function CameraViewfinder({
   useEffect(() => {
     Animated.loop(
       Animated.sequence([
-        Animated.timing(pulse, { toValue: 0.6, duration: 900, useNativeDriver: false }),
-        Animated.timing(pulse, { toValue: 1, duration: 900, useNativeDriver: false }),
+        Animated.timing(pulse, { toValue: 0.6, duration: 900, useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 1, duration: 900, useNativeDriver: true }),
       ]),
     ).start();
   }, [pulse]);

@@ -222,24 +222,26 @@ export function ScanTab({
         {batchMode ? (
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={`Review batch, ${batchCount} ${batchCount === 1 ? 'item' : 'items'} so far`}
+            accessibilityLabel={batchCount === 1 ? t('scan.batchItem', { count: 1 }) : t('scan.batchItems', { count: batchCount })}
             style={styles.batchBar}
             onPress={onReviewBatch}
           >
             <View style={styles.batchBarLeft}>
               <Ionicons name="layers" size={14} color={C.accent} />
               <Text style={styles.batchBarLabel}>
-                Batch{batchCount > 0 ? `: ${batchCount} item${batchCount === 1 ? '' : 's'}` : ' — scanning…'}
+                {batchCount > 0
+                  ? (batchCount === 1 ? t('scan.batchItem', { count: 1 }) : t('scan.batchItems', { count: batchCount }))
+                  : t('scan.batchScanning')}
               </Text>
             </View>
-            <Text style={styles.batchBarReview}>Review →</Text>
+            <Text style={styles.batchBarReview}>{t('scan.batchReview')}</Text>
           </Pressable>
         ) : null}
 
         <View style={styles.scanStatusRow} accessibilityLiveRegion="polite">
           <View style={[styles.scanDot, { backgroundColor: cameraActive ? '#22c55e' : C.muted }]} />
           <Text style={styles.scanStatusText}>
-            {cameraActive ? (scanState === 'scanning' || scanState === 'detecting' ? 'Scanning active' : 'Scanner ready') : 'Scanner paused'}
+            {cameraActive ? (scanState === 'scanning' || scanState === 'detecting' ? t('scan.statusActive') : t('scan.statusReady')) : t('scan.statusPaused')}
           </Text>
         </View>
 
@@ -290,7 +292,7 @@ export function ScanTab({
           {voiceSupported ? (
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel={voiceState === 'listening' ? 'Stop voice commands' : 'Start voice commands'}
+              accessibilityLabel={voiceState === 'listening' ? t('scan.voiceStop') : t('scan.voiceStart')}
               accessibilityState={{ selected: voiceState === 'listening', busy: voiceState === 'processing' }}
               style={[
                 styles.modeBtn,
@@ -312,7 +314,7 @@ export function ScanTab({
                 styles.modeText,
                 voiceState === 'listening' && styles.modeTextListening,
               ]}>
-                {voiceState === 'listening' ? 'Listening' : voiceState === 'processing' ? 'Processing' : 'Voice'}
+                {voiceState === 'listening' ? t('scan.voiceListening') : voiceState === 'processing' ? t('scan.voiceProcessing') : t('scan.voiceIdle')}
               </Text>
             </Pressable>
           ) : null}
@@ -322,9 +324,9 @@ export function ScanTab({
           <View style={styles.previewCard}>
             <Image source={{ uri: imageScanPreviewUri }} style={styles.previewImage} resizeMode="cover" />
             <View style={{ flex: 1, gap: 4 }}>
-              <Text style={styles.previewTitle}>{imageScanBusy ? 'Reading selected photo...' : 'Selected photo loaded'}</Text>
+              <Text style={styles.previewTitle}>{imageScanBusy ? t('scan.imageScanBusyTitle') : t('scan.imageScanReadyTitle')}</Text>
               <Text style={styles.previewSubtitle}>
-                {imageScanBusy ? 'Searching barcode/QR in image.' : 'You can select another image or clear this preview.'}
+                {imageScanBusy ? t('scan.imageScanBusySubtitle') : t('scan.imageScanReadySubtitle')}
               </Text>
             </View>
             <Pressable

@@ -371,12 +371,9 @@ export function SettingsTab({
     'advanced',
   ], []);
   const DEFAULT_OPEN = useMemo<Record<string, boolean>>(() => ({
-    password: true,
+    scan: true,
     theme: true,
-    'notes-features': true,
-    security: true,
     pwa: Platform.OS === 'web',
-    'smart-notes': true,
   }), []);
   const { state: sectionOpen, toggle: toggleSection, setAll: setAllSections, openCount, total: totalSections } = useSectionState(SECTION_IDS, DEFAULT_OPEN);
   const normalizedSettingsSearch = settingsSearch.trim().toLowerCase();

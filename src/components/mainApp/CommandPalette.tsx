@@ -1,6 +1,7 @@
 import React, { useMemo, useRef, useEffect } from 'react';
 import { Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 
 type Palette = {
   bg: string;
@@ -35,6 +36,7 @@ export function CommandPalette({
   onQueryChange: (value: string) => void;
   onClose: () => void;
 }) {
+  const { t } = useTranslation();
   const inputRef = useRef<TextInput>(null);
   const normalized = query.trim().toLowerCase();
   const filteredItems = useMemo(() => {
@@ -63,7 +65,7 @@ export function CommandPalette({
               ref={inputRef}
               value={query}
               onChangeText={onQueryChange}
-              placeholder="Search app or run command..."
+              placeholder={t('commandPalette.searchPlaceholder')}
               placeholderTextColor={palette.muted}
               autoCapitalize="none"
               autoCorrect={false}
@@ -104,14 +106,14 @@ export function CommandPalette({
             )) : (
               <View style={styles.emptyState}>
                 <Ionicons name="search-outline" size={24} color={palette.muted} />
-                <Text style={{ color: palette.fg, fontSize: 13, fontWeight: '800' }}>No results</Text>
-                <Text style={{ color: palette.muted, fontSize: 11, textAlign: 'center' }}>Try notes, OCR, backup, logs, scan, settings or history.</Text>
+                <Text style={{ color: palette.fg, fontSize: 13, fontWeight: '800' }}>{t('commandPalette.noResults')}</Text>
+                <Text style={{ color: palette.muted, fontSize: 11, textAlign: 'center' }}>{t('commandPalette.emptyHint')}</Text>
               </View>
             )}
           </ScrollView>
 
           {Platform.OS === 'web' ? (
-            <Text style={[styles.footer, { color: palette.muted }]}>Ctrl/Command + K</Text>
+            <Text style={[styles.footer, { color: palette.muted }]}>{t('commandPalette.shortcut')}</Text>
           ) : null}
         </Pressable>
       </Pressable>

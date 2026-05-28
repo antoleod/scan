@@ -16,6 +16,7 @@
  *   - Progress bar + bought counter
  */
 import React, { useCallback, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Alert,
   Animated,
@@ -134,10 +135,10 @@ function ItemRow({
 
         {/* Reorder arrows (stay within the checked / unchecked group) */}
         <View style={{ gap: 0, width: 12, alignItems: 'center' }}>
-          <Pressable onPress={() => onMoveUp(item.id)} hitSlop={6} style={{ opacity: canMoveUp ? 0.58 : 0.18 }} disabled={!canMoveUp}>
+          <Pressable onPress={() => onMoveUp(item.id)} hitSlop={{ top: 16, bottom: 8, left: 10, right: 10 }} style={{ opacity: canMoveUp ? 0.58 : 0.18 }} disabled={!canMoveUp}>
             <Ionicons name="chevron-up" size={10} color={palette.textDim} />
           </Pressable>
-          <Pressable onPress={() => onMoveDown(item.id)} hitSlop={6} style={{ opacity: canMoveDown ? 0.58 : 0.18 }} disabled={!canMoveDown}>
+          <Pressable onPress={() => onMoveDown(item.id)} hitSlop={{ top: 8, bottom: 16, left: 10, right: 10 }} style={{ opacity: canMoveDown ? 0.58 : 0.18 }} disabled={!canMoveDown}>
             <Ionicons name="chevron-down" size={10} color={palette.textDim} />
           </Pressable>
         </View>
@@ -145,7 +146,10 @@ function ItemRow({
         {/* Checkbox */}
         <Pressable
           onPress={handleCheck}
-          hitSlop={10}
+          hitSlop={13}
+          accessibilityRole="checkbox"
+          accessibilityState={{ checked: done }}
+          accessibilityLabel={item.label}
           style={{
             width: 18, height: 18, borderRadius: 5,
             borderWidth: 1.5,
@@ -226,17 +230,17 @@ function ItemRow({
 function Header({
   done, total, subtotal, showPrice, palette,
 }: { done: number; total: number; subtotal: number | null; showPrice: boolean; palette: Palette }) {
+  const { t } = useTranslation();
   const pct = total === 0 ? 0 : Math.round((done / total) * 100);
   const remaining = total - done;
   const allDone = total > 0 && remaining === 0;
-  // Shopper-friendly status: count what's *left* to buy, not what's done.
-  const statusText = total === 0 ? '' : allDone ? 'All done' : `${remaining} left`;
+  const statusText = total === 0 ? '' : allDone ? t('shopping.allDone') : t('shopping.itemsLeft', { count: remaining });
   return (
     <View style={{ gap: 4 }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 4 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
           <Ionicons name={allDone ? 'checkmark-circle' : 'cart-outline'} size={13} color={CART} />
-          <Text style={{ color: CART, fontSize: 10, fontWeight: '800' }}>Shopping</Text>
+          <Text style={{ color: CART, fontSize: 10, fontWeight: '800' }}>{t('shopping.title')}</Text>
         </View>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
           {showPrice && subtotal !== null && subtotal > 0 ? (
@@ -271,8 +275,8 @@ function Pill({
       accessibilityLabel={label}
       style={({ pressed }) => ({
         flexDirection: 'row', alignItems: 'center', gap: 4,
-        minWidth: compact ? 28 : undefined,
-        minHeight: compact ? 28 : undefined,
+        minWidth: compact ? 44 : undefined,
+        minHeight: compact ? 44 : undefined,
         paddingHorizontal: compact ? 6 : 9,
         paddingVertical: 5,
         borderRadius: 999, borderWidth: 1,

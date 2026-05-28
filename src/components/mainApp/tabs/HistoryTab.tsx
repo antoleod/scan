@@ -403,7 +403,7 @@ export function HistoryTab({
                 style={[mainAppStyles.input, { flex: 1, color: palette.fg, borderColor: palette.border, backgroundColor: palette.bg, marginTop: 0 }]}
               />
               <View style={[mainAppStyles.filterChipCompact, { borderColor: palette.border, borderWidth: 1 }]}>
-                <Text style={{ color: palette.muted, fontSize: 11, fontWeight: '700' }}>{filteredHistory.length} results</Text>
+                <Text style={{ color: palette.muted, fontSize: 11, fontWeight: '700' }}>{t('history.results', { count: filteredHistory.length })}</Text>
               </View>
             </View>
 
@@ -423,18 +423,25 @@ export function HistoryTab({
                     <Text style={{ color: filterType === type ? '#fff' : palette.fg, fontSize: 12, fontWeight: '700' }}>{type}</Text>
                   </Pressable>
                 ))}
-                <Pressable onPress={() => setMoreVisible(true)} style={[mainAppStyles.filterChipCompact, { borderColor: palette.border, borderWidth: 1 }]}>
-                  <Text style={{ color: palette.fg, fontSize: 12, fontWeight: '700' }}>...</Text>
+                <Pressable
+                  onPress={() => setMoreVisible(true)}
+                  accessibilityLabel={t('history.moreFilters')}
+                  accessibilityRole="button"
+                  style={[mainAppStyles.filterChipCompact, { borderColor: palette.border, borderWidth: 1 }]}
+                >
+                  <Text style={{ color: palette.fg, fontSize: 12, fontWeight: '700' }}>{t('history.moreFiltersBtn')}</Text>
                 </Pressable>
               </ScrollView>
 
               <Pressable
                 style={[mainAppStyles.filterChipCompact, { borderColor: palette.border, borderWidth: 1 }]}
                 onPress={() => onSortByChange(sortBy === 'recent' ? 'most_used' : sortBy === 'most_used' ? 'not_used' : 'recent')}
+                accessibilityRole="button"
+                accessibilityLabel={t('history.sortByA11y', { label: sortBy === 'recent' ? t('history.sortRecent') : sortBy === 'most_used' ? t('history.sortUsed') : t('history.sortUnused') })}
               >
                 <View style={mainAppStyles.compactAction}>
                   <Ionicons name="swap-vertical-outline" size={14} color={palette.fg} />
-                  <Text style={{ color: palette.fg, fontSize: 11, fontWeight: '700' }}>{sortBy === 'recent' ? 'Recent' : sortBy === 'most_used' ? 'Used' : 'Unused'}</Text>
+                  <Text style={{ color: palette.fg, fontSize: 11, fontWeight: '700' }}>{sortBy === 'recent' ? t('history.sortRecent') : sortBy === 'most_used' ? t('history.sortUsed') : t('history.sortUnused')}</Text>
                 </View>
               </Pressable>
 
@@ -581,7 +588,7 @@ export function HistoryTab({
               </Pressable>
             </View>
             <Text style={{ color: palette.muted, fontSize: 13, lineHeight: 20 }}>
-              This action will remove the item from history.
+              {t('history.deleteItemDescription')}
             </Text>
             <Text style={{ color: palette.fg, fontSize: 12, marginTop: 8 }} numberOfLines={2}>
               {deleteTarget?.codeValue || deleteTarget?.codeNormalized || '-'}

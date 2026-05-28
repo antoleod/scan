@@ -2029,8 +2029,9 @@ export function NotesTab({
                 <TextInput
                   value={searchText}
                   onChangeText={setSearchText}
-                  placeholder="Search"
+                  placeholder={tr('notes.searchPlaceholder')}
                   placeholderTextColor={uiPalette.textDim}
+                  accessibilityLabel={tr('notes.searchPlaceholder')}
                   style={{ flex: 1, color: uiPalette.textBody, fontSize: 14, paddingVertical: 4, marginTop: 0 }}
                 />
                 {searchText.length > 0 ? (
@@ -2654,28 +2655,30 @@ export function NotesTab({
         }}>
           <Pressable
             onPress={() => setSelectedNoteIds(new Set())}
-            style={{ width: 36, height: 36, borderRadius: 18, borderWidth: 1, borderColor: palette.border, alignItems: 'center', justifyContent: 'center' }}
+            accessibilityRole="button"
+            accessibilityLabel={tr('common.cancel')}
+            style={{ width: 44, height: 44, borderRadius: 22, borderWidth: 1, borderColor: palette.border, alignItems: 'center', justifyContent: 'center' }}
           >
             <Ionicons name="close" size={18} color={palette.muted} />
           </Pressable>
           <Text style={{ flex: 1, color: palette.fg, fontWeight: '600', fontSize: 14 }}>
-            {selectedNoteIds.size} selected
+            {tr('notes.selectedCount', { count: selectedNoteIds.size })}
           </Text>
           <Pressable
             onPress={() => {
               const all = new Set(filteredNotes.map((n) => n.id));
               setSelectedNoteIds(all);
             }}
-            style={{ paddingHorizontal: 12, height: 36, borderRadius: 10, borderWidth: 1, borderColor: palette.border, alignItems: 'center', justifyContent: 'center' }}
+            style={{ paddingHorizontal: 12, minHeight: 44, borderRadius: 10, borderWidth: 1, borderColor: palette.border, alignItems: 'center', justifyContent: 'center' }}
           >
-            <Text style={{ color: palette.fg, fontSize: 13, fontWeight: '600' }}>All</Text>
+            <Text style={{ color: palette.fg, fontSize: 13, fontWeight: '600' }}>{tr('notes.selectAll')}</Text>
           </Pressable>
           <Pressable
             onPress={() => deleteSelectedNotes().catch(() => undefined)}
-            style={{ paddingHorizontal: 16, height: 36, borderRadius: 10, backgroundColor: '#C0392B', flexDirection: 'row', alignItems: 'center', gap: 6 }}
+            style={{ paddingHorizontal: 16, minHeight: 44, borderRadius: 10, backgroundColor: '#C0392B', flexDirection: 'row', alignItems: 'center', gap: 6 }}
           >
             <Ionicons name="trash-outline" size={16} color="#fff" />
-            <Text style={{ color: '#fff', fontSize: 13, fontWeight: '700' }}>Delete</Text>
+            <Text style={{ color: '#fff', fontSize: 13, fontWeight: '700' }}>{tr('notes.deleteSelected')}</Text>
           </Pressable>
         </View>
       ) : null}
@@ -2695,7 +2698,7 @@ export function NotesTab({
             })}
           >
             <Ionicons name="checkmark" size={16} color="#000" />
-            <Text style={{ color: '#000', fontSize: 14, fontWeight: '800' }}>Save note</Text>
+            <Text style={{ color: '#000', fontSize: 14, fontWeight: '800' }}>{tr('notes.saveNote')}</Text>
           </Pressable>
         </View>
       ) : null}

@@ -268,10 +268,10 @@ function PrimaryButton({
       <Pressable
         onPress={disabled ? undefined : onPress}
         onPressIn={() =>
-          !disabled && Animated.spring(scale, { toValue: 0.97, useNativeDriver: false, friction: 5 }).start()
+          !disabled && Animated.spring(scale, { toValue: 0.97, useNativeDriver: true, friction: 5 }).start()
         }
         onPressOut={() =>
-          Animated.spring(scale, { toValue: 1, useNativeDriver: false, friction: 4 }).start()
+          Animated.spring(scale, { toValue: 1, useNativeDriver: true, friction: 4 }).start()
         }
         accessibilityRole="button"
         accessibilityState={{ disabled: Boolean(disabled) }}
@@ -312,10 +312,10 @@ function SecondaryButton({
       <Pressable
         onPress={onPress}
         onPressIn={() =>
-          Animated.spring(scale, { toValue: 0.95, useNativeDriver: false, friction: 5 }).start()
+          Animated.spring(scale, { toValue: 0.95, useNativeDriver: true, friction: 5 }).start()
         }
         onPressOut={() =>
-          Animated.spring(scale, { toValue: 1, useNativeDriver: false, friction: 4 }).start()
+          Animated.spring(scale, { toValue: 1, useNativeDriver: true, friction: 4 }).start()
         }
         accessibilityRole="button"
         accessibilityLabel={label}
