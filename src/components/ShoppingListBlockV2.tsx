@@ -1067,6 +1067,7 @@ export function ShoppingListBlockV2({
   const [qtyEditorItem, setQtyEditorItem] = useState<ShoppingItemV2 | null>(null);
   const [qtyEditorVisible, setQtyEditorVisible] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [searchVisible, setSearchVisible] = useState(false);
   const [addInputVisible, setAddInputVisible] = useState(false);
   const [addInputText, setAddInputText] = useState('');
   const [addSuggestions, setAddSuggestions] = useState<any[]>([]);
@@ -1455,7 +1456,7 @@ export function ShoppingListBlockV2({
   const pct = total === 0 ? 0 : Math.round((done / total) * 100);
   const hasChecked = done > 0;
   const compactMode = items.length > 6;
-  const listMaxHeight = compactMode ? 280 : undefined;
+  const listMaxHeight = compactMode ? 400 : undefined;
 
   return (
     <View style={{ gap: 8 }}>
@@ -1501,7 +1502,7 @@ export function ShoppingListBlockV2({
         </View>
       )}
 
-      {/* Header with progress */}
+      {/* Header with progress + inline action icons */}
       <View style={{ gap: 6 }}>
         <View
           style={{
@@ -1511,6 +1512,7 @@ export function ShoppingListBlockV2({
             paddingHorizontal: 2,
           }}
         >
+          {/* Left: cart icon + title */}
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
             <Ionicons name="cart-outline" size={13} color={CART} />
             <Text
@@ -1524,9 +1526,66 @@ export function ShoppingListBlockV2({
               SHOPPING LIST
             </Text>
           </View>
-          <Text style={{ fontSize: 10, fontWeight: '600', color: palette.textDim }}>
-            {done}/{total}
-          </Text>
+
+          {/* Right: inline action icons + count */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            {/* Add */}
+            <Pressable
+              onPress={() => setAddInputVisible(!addInputVisible)}
+              hitSlop={8}
+              style={{ opacity: addInputVisible ? 1 : 0.75 }}
+            >
+              <Ionicons
+                name="add-circle-outline"
+                size={15}
+                color={addInputVisible ? CART : palette.textDim}
+              />
+            </Pressable>
+
+            {/* Arrange / reorder */}
+            <Pressable
+              onPress={() => setEditMode(!editMode)}
+              hitSlop={8}
+              style={{ opacity: editMode ? 1 : 0.75 }}
+            >
+              <Ionicons
+                name={editMode ? 'checkmark-done' : 'swap-vertical-outline'}
+                size={15}
+                color={editMode ? CART : palette.textDim}
+              />
+            </Pressable>
+
+            {/* Search toggle */}
+            <Pressable
+              onPress={() => {
+                setSearchVisible(v => !v);
+                if (searchVisible) setSearchQuery('');
+              }}
+              hitSlop={8}
+              style={{ opacity: searchVisible ? 1 : 0.75 }}
+            >
+              <Ionicons
+                name="search-outline"
+                size={14}
+                color={searchVisible ? CART : palette.textDim}
+              />
+            </Pressable>
+
+            {/* Menu */}
+            <MenuButton
+              palette={palette}
+              onShare={handleShare}
+              onEditRaw={handleOpenRawEditor}
+              onReset={handleResetAll}
+              onClearDone={handleClearDone}
+              onLoadTemplate={() => setTemplateModalVisible(true)}
+              hasChecked={hasChecked}
+            />
+
+            <Text style={{ fontSize: 10, fontWeight: '600', color: palette.textDim }}>
+              {done}/{total}
+            </Text>
+          </View>
         </View>
 
         <View
@@ -1548,107 +1607,44 @@ export function ShoppingListBlockV2({
         </View>
       </View>
 
-      {/* Toolbar */}
-      <View
-        style={{
-          flexDirection: 'row',
-          alignItems: 'center',
-          gap: 6,
-          paddingHorizontal: 2,
-          flexWrap: 'wrap',
-        }}
-      >
-        <Pressable
-          onPress={() => setAddInputVisible(!addInputVisible)}
-          style={({ pressed }) => ({
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: 4,
-            paddingHorizontal: 8,
-            paddingVertical: 4,
-            borderRadius: 7,
-            borderWidth: 1,
-            borderColor: `${CART}44`,
-            backgroundColor: pressed ? `${CART}22` : `${CART}0e`,
-          })}
-        >
-          <Ionicons name="add-circle-outline" size={11} color={CART} />
-          <Text style={{ color: CART, fontSize: 10, fontWeight: '700' }}>Add</Text>
-        </Pressable>
-
-        <Pressable
-          onPress={() => setEditMode(!editMode)}
-          style={({ pressed }) => ({
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: 4,
-            paddingHorizontal: 8,
-            paddingVertical: 4,
-            borderRadius: 7,
-            borderWidth: 1,
-            borderColor: editMode ? CART : `#0EA5E944`,
-            backgroundColor: editMode ? `${CART}22` : pressed ? `#0EA5E922` : `#0EA5E90e`,
-          })}
-        >
-          <Ionicons
-            name={editMode ? 'checkmark-done' : 'swap-vertical-outline'}
-            size={11}
-            color={editMode ? CART : '#0EA5E9'}
-          />
-          <Text style={{ color: editMode ? CART : '#0EA5E9', fontSize: 10, fontWeight: '700' }}>
-            {editMode ? 'Done' : 'Arrange'}
-          </Text>
-        </Pressable>
-
-        <MenuButton
-          palette={palette}
-          onShare={handleShare}
-          onEditRaw={handleOpenRawEditor}
-          onReset={handleResetAll}
-          onClearDone={handleClearDone}
-          onLoadTemplate={() => setTemplateModalVisible(true)}
-          hasChecked={hasChecked}
-        />
-      </View>
-
-      {/* Search bar */}
-      <View style={{ paddingHorizontal: 2 }}>
-        <View
-          style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: 6,
-            paddingHorizontal: 8,
-            paddingVertical: 5,
-            borderRadius: 8,
-            borderWidth: 1,
-            borderColor: palette.border,
-            backgroundColor: palette.surfaceAlt,
-          }}
-        >
-          <Ionicons name="search-outline" size={12} color={palette.textDim} />
-          <TextInput
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            placeholder="Search items, tags, category..."
-            placeholderTextColor={palette.textMuted}
+      {/* Search bar — only visible when toggled */}
+      {searchVisible && (
+        <View style={{ paddingHorizontal: 2 }}>
+          <View
             style={{
-              flex: 1,
-              fontSize: 12,
-              color: palette.textBody,
-              padding: 0,
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 6,
+              paddingHorizontal: 8,
+              paddingVertical: 5,
+              borderRadius: 8,
+              borderWidth: 1,
+              borderColor: palette.border,
+              backgroundColor: palette.surfaceAlt,
             }}
-          />
-          {searchQuery.length > 0 && (
-            <Pressable
-              onPress={() => setSearchQuery('')}
-              hitSlop={6}
-            >
-              <Ionicons name="close-circle" size={12} color={palette.textDim} />
-            </Pressable>
-          )}
+          >
+            <Ionicons name="search-outline" size={12} color={palette.textDim} />
+            <TextInput
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              placeholder="Search items, tags, category..."
+              placeholderTextColor={palette.textMuted}
+              autoFocus
+              style={{
+                flex: 1,
+                fontSize: 12,
+                color: palette.textBody,
+                padding: 0,
+              }}
+            />
+            {searchQuery.length > 0 && (
+              <Pressable onPress={() => setSearchQuery('')} hitSlop={6}>
+                <Ionicons name="close-circle" size={12} color={palette.textDim} />
+              </Pressable>
+            )}
+          </View>
         </View>
-      </View>
+      )}
 
       {/* Add Item Input + Suggestions */}
       {addInputVisible && (

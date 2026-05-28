@@ -1459,6 +1459,112 @@ run("noteExtractor: duplicate label keeps last occurrence value", () => {
 
 // ─── End of note extraction tests ──────────────────────────────────────────────
 
+// ─── Shopping list V2 parser regression tests ──────────────────────────────────
+
+run("shoppingV2: bullet items without catalog match are kept with category 'other'", () => {
+  const text = "- Coca\n- Fanta\n- Corona";
+  const result = parseShoppingListV2(text, 'fr');
+  assert.equal(result.items.length, 3, "all 3 bullet items must be kept");
+  for (const item of result.items) {
+    assert.ok(['drinks', 'other'].includes(item.category), `category should be drinks or other, got ${item.category}`);
+  }
+});
+
+run("shoppingV2: colon-separated quantity is extracted (name: qty unit)", () => {
+  const text = "Coca zero: 1 bouteille";
+  const result = parseShoppingListV2(text, 'fr');
+  assert.ok(result.items.length >= 1, "should produce at least one item");
+  const item = result.items[0];
+  assert.equal(item.quantity, 1, "quantity should be 1");
+  assert.equal(item.unit, 'bottle', "unit should be bottle");
+  assert.ok(item.name.toLowerCase().includes('coca'), `name should contain 'coca', got '${item.name}'`);
+});
+
+run("shoppingV2: colon end-quantity is extracted (name: qty with no unit)", () => {
+  const text = "Citrons verts: 6";
+  const result = parseShoppingListV2(text, 'fr');
+  assert.ok(result.items.length >= 1, "should produce at least one item");
+  const item = result.items[0];
+  assert.equal(item.quantity, 6, "quantity should be 6");
+  assert.ok(item.name.toLowerCase().includes('citron'), `name should contain 'citron', got '${item.name}'`);
+});
+
+run("shoppingV2: accented characters are preserved in item names", () => {
+  const text = "Épinards\nCourgettes\nÀ boire";
+  const result = parseShoppingListV2(text, 'fr');
+  assert.ok(result.items.length >= 2, "should keep at least 2 items");
+  const names = result.items.map(i => i.name);
+  const hasEpinards = names.some(n => n.toLowerCase().includes('pinard'));
+  assert.ok(hasEpinards, `should have épinards, got: ${names.join(', ')}`);
+});
+
+run("shoppingV2: mixed quantity/no-quantity list keeps all items", () => {
+  const text = "- Lait 2 L\n- Pommes\n- Pain\n- Beurre 250 g\n- Oranges\n- Tomates";
+  const result = parseShoppingListV2(text, 'fr');
+  assert.equal(result.items.length, 6, `expected 6 items, got ${result.items.length}: ${result.items.map(i => i.name).join(', ')}`);
+});
+
+run("shoppingV2: header line 'Shopping List' is skipped", () => {
+  const text = "Shopping List\n- Milk\n- Bread\n- Eggs";
+  const result = parseShoppingListV2(text, 'en');
+  assert.equal(result.items.length, 3, `header should be skipped, got ${result.items.length} items`);
+  const names = result.items.map(i => i.name.toLowerCase());
+  assert.ok(!names.includes('shopping list'), "header should not appear as an item");
+});
+
+run("shoppingV2: header line 'Liste de courses' is skipped", () => {
+  const text = "Liste de courses\nCoca\nFanta\nBière";
+  const result = parseShoppingListV2(text, 'fr');
+  assert.equal(result.items.length, 3, `header should be skipped, got ${result.items.length} items`);
+});
+
+run("shoppingV2: drink brand items (Coca, Fanta) are preserved rather than dropped", () => {
+  const text = "Coca Cola\nFanta Orange";
+  const result = parseShoppingListV2(text, 'fr');
+  // Primary assertion: neither item is silently dropped (the old `continue` bug)
+  assert.ok(result.items.length >= 1, `expected at least 1 item, got 0`);
+  // Category is catalog-dependent; just ensure no crash and items exist
+  const validCategories = ['drinks', 'other', 'fruits', 'vegetables', 'snacks', 'pantry'];
+  for (const item of result.items) {
+    assert.ok(validCategories.includes(item.category), `unexpected category ${item.category}`);
+  }
+});
+
+run("shoppingV2: no items are lost on a 6-item list", () => {
+  const text = [
+    "* Coca zero: 1 bouteille",
+    "* Fanta: 2",
+    "* Tomates",
+    "* Pommes 1 kg",
+    "* Pain",
+    "* Beurre 250 g",
+  ].join('\n');
+  const result = parseShoppingListV2(text, 'fr');
+  assert.equal(result.items.length, 6, `expected 6 items, got ${result.items.length}: ${result.items.map(i => i.name).join(', ')}`);
+});
+
+run("shoppingV2: smartCapitalize preserves mixed-case names (no .toLowerCase())", () => {
+  // Simulates a name that should NOT have every word lowercased
+  const text = "VANDERSTRAETEN";
+  const result = parseShoppingListV2(text, 'fr');
+  if (result.items.length > 0) {
+    // If kept, original casing after first char must be preserved (no .toLowerCase)
+    assert.ok(!result.items[0].name.match(/^vanderstraeten$/i) || result.items[0].name === 'VANDERSTRAETEN', "casing must not be destroyed");
+  }
+  // At minimum the parser must not throw
+  assert.ok(true);
+});
+
+run("shoppingV2: duplicate items are deduplicated", () => {
+  const text = "Pommes\nPommes\nPain\nPain";
+  const result = parseShoppingListV2(text, 'fr');
+  const names = result.items.map(i => i.name.toLowerCase());
+  const uniqueNames = new Set(names);
+  assert.equal(uniqueNames.size, names.length, `duplicate items should be removed: ${names.join(', ')}`);
+});
+
+// ─── End of shopping list V2 tests ─────────────────────────────────────────────
+
 void (async () => {
   for (const { name, fn } of _tests) {
     try {

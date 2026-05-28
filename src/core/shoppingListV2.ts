@@ -199,12 +199,29 @@ function capitalizeWords(text: string): string {
     .join(' ');
 }
 
+// Capitalize only the first character of the string; preserve existing casing
+// for the rest (e.g. "VANDERSTRAETEN" → "VANDERSTRAETEN", "coca zero" → "Coca zero").
+function smartCapitalize(text: string): string {
+  if (!text) return text;
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
 function extractQuantityAndUnit(text: string): { quantity?: number; unit?: string; remaining: string } {
   const text2 = removeArticles(text);
 
   // Skip quantity extraction if text contains time patterns (HH:MM or YYYY-MM-DD HH:MM)
   if (TIME_PATTERN.test(text2)) {
     return { remaining: text2 };
+  }
+
+  // Pattern: "Name: quantity [unit]" — e.g. "Coca zero: 1 bouteille", "Citrons verts: 6"
+  const colonMatch = text2.match(/^(.+?):\s*(\d+(?:[.,]\d+)?)\s*([\w]*)$/i);
+  if (colonMatch) {
+    const qty = parseFloat(colonMatch[2].replace(',', '.'));
+    const unitRaw = colonMatch[3]?.toLowerCase();
+    const unit = unitRaw ? (UNIT_MAP[unitRaw] || unitRaw) : undefined;
+    const remaining = colonMatch[1].trim();
+    return { quantity: qty, unit: unit || undefined, remaining };
   }
 
   // Pattern: "3 kg pommes"
@@ -274,6 +291,12 @@ export function isShoppingListV2(text: string, language: AppLanguage = 'en'): bo
   return matches.length >= Math.ceil(lines.length * 0.4);
 }
 
+// Lines that are list title/header lines, not items.
+const HEADER_LINE_RE = /^(?:shopping\s*list|liste\s*de\s*courses?|lista\s*de\s*compras?|boodschappenlijst|grocery\s*list|courses?|compras?)$/i;
+
+// Bullet markers to strip from the start of a line.
+const BULLET_RE = /^[\*\-•·◦▸→⁃]\s*/;
+
 export function parseShoppingListV2(
   text: string,
   language: AppLanguage = 'en'
@@ -281,11 +304,11 @@ export function parseShoppingListV2(
   const rawText = text;
   const items: ShoppingItemV2[] = [];
 
-  // Split by common delimiters
+  // Split by common delimiters; strip bullet markers; drop empty/header lines
   const lines = text
     .split(/[\n,;]+/)
-    .map(l => l.trim())
-    .filter(Boolean);
+    .map(l => l.trim().replace(BULLET_RE, '').trim())
+    .filter(l => l.length > 0 && !HEADER_LINE_RE.test(l));
 
   const seen = new Set<string>();
 
@@ -300,7 +323,7 @@ export function parseShoppingListV2(
     }
 
     // Apply typo corrections early
-    let corrected = applyTypoCorrections(workingLine);
+    const corrected = applyTypoCorrections(workingLine);
 
     // Extract tags
     const tags = extractTags(corrected);
@@ -309,30 +332,30 @@ export function parseShoppingListV2(
     // Extract quantity/unit
     const { quantity, unit, remaining } = extractQuantityAndUnit(cleanedOfTags);
 
-    // Find catalog match
+    // Find catalog match — may be null for unknown items
     const catalogMatch = findCatalogMatch(remaining, language);
 
-    if (!catalogMatch) continue;
+    // Dedup key: catalog id when known, else normalized text
+    const dedupKey = catalogMatch
+      ? `${catalogMatch.catalogId}:${JSON.stringify(tags)}`
+      : `other:${remaining.toLowerCase().replace(/\s+/g, ' ')}:${JSON.stringify(tags)}`;
+    if (seen.has(dedupKey)) continue;
+    seen.add(dedupKey);
 
-    const key = `${catalogMatch.catalogId}:${JSON.stringify(tags)}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-
-    // Preserve the word the user actually typed (capitalized) as the display
-    // name. The catalog match is used only for category / quantity / dedup —
-    // never to rewrite "pommes" into the canonical "apples". Falls back to the
-    // catalog display name when the user text is empty after stripping qty/tags.
-    const userName = capitalizeWords(removeArticles(remaining).trim());
+    // Preserve the word the user actually typed as the display name.
+    // smartCapitalize only uppercases the first char to avoid destroying names
+    // like "VANDERSTRAETEN". Falls back to catalog name when text is blank.
+    const userName = smartCapitalize(removeArticles(remaining).trim());
     items.push({
       id: nextId(),
-      name: userName || catalogMatch.displayName,
+      name: userName || (catalogMatch?.displayName ?? remaining),
       quantity,
       unit,
-      category: catalogMatch.category,
+      category: catalogMatch?.category ?? 'other',
       tags,
-      confidence: catalogMatch.confidence,
+      confidence: catalogMatch?.confidence ?? 0.5,
       originalText: line,
-      catalogId: catalogMatch.catalogId,
+      catalogId: catalogMatch?.catalogId,
       note,
     });
   }
