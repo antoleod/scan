@@ -533,7 +533,7 @@ function NoteCardBase({
 
             {/* ── Optional title ── */}
             {note.title ? (
-              <Text style={{ color: palette.textBody, fontSize: 14, fontWeight: '700', lineHeight: 20 }} numberOfLines={1}>
+              <Text style={{ color: palette.textBody, fontSize: 14, fontWeight: '700', lineHeight: 20, flexShrink: 1 }} numberOfLines={1} ellipsizeMode="tail">
                 {note.title}
               </Text>
             ) : null}
@@ -948,11 +948,15 @@ function SnFieldRow({
       borderBottomColor: palette.border,
       gap: 10,
       minHeight: 34,
+      minWidth: 0,
     }}>
-      {/* Label */}
+      {/* Label — fixed-width column; minWidth/maxWidth keeps it readable on
+          narrow screens while preventing a single long label from squeezing the
+          value. flexShrink: 0 ensures it never collapses below minWidth. */}
       <Text
         style={{
-          width: 128,
+          minWidth: 120,
+          maxWidth: 160,
           flexShrink: 0,
           color: palette.textMuted,
           fontSize: 11,
@@ -962,12 +966,14 @@ function SnFieldRow({
           paddingTop: 2,
         }}
         numberOfLines={2}
+        ellipsizeMode="tail"
       >
         {field.rawLabel}
       </Text>
 
-      {/* Value with entity highlights */}
-      <View style={{ flex: 1, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 2 }}>
+      {/* Value with entity highlights — flex:1 so it takes the remaining row
+          width; flexWrap on the inner View lets multi-word values wrap cleanly. */}
+      <View style={{ flex: 1, minWidth: 0, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 2 }}>
         {isTicket && ticketUrl ? (
           // Ticket number — styled as a clickable chip
           <View style={{
@@ -988,7 +994,7 @@ function SnFieldRow({
             </Text>
           </View>
         ) : (
-          <Text style={{ fontSize: 13, lineHeight: 20, flex: 1 }}>
+          <Text style={{ fontSize: 13, lineHeight: 20, flex: 1, color: palette.textBody, fontWeight: '500' }}>
             {segments.map((seg, i) => {
               if (seg.kind === 'plain') {
                 return <Text key={i} style={{ color: palette.textBody, fontWeight: '500' }}>{seg.text}</Text>;
@@ -1124,6 +1130,10 @@ function ServiceNowBlock({
   const displayFields = expanded ? visibleFields : visibleFields.slice(0, 6);
   const moreCount = visibleFields.length - displayFields.length;
 
+  // Surface the short_description value as a prominent subtitle (if present)
+  const shortDescField = sfModel.fields.find((f) => f.key === 'short_description');
+  const shortDescValue = shortDescField ? String(shortDescField.value || '').trim() : '';
+
   // Segment footer text for entity highlighting
   const footerSegments = useMemo(
     () => sfModel.footer ? segmentNoteText(sfModel.footer, smart) : [],
@@ -1156,6 +1166,19 @@ function ServiceNowBlock({
         )}
       </View>
 
+      {/* Short description — surfaced prominently above the field table when
+          present, so collapsed card view shows the human-readable ticket title
+          rather than just the type badge + raw field rows. */}
+      {shortDescValue ? (
+        <Text
+          style={{ color: palette.textBody, fontSize: 13, fontWeight: '500', lineHeight: 19, flexShrink: 1 }}
+          numberOfLines={expanded ? 0 : 2}
+          ellipsizeMode="tail"
+        >
+          {shortDescValue}
+        </Text>
+      ) : null}
+
       {/* Field rows */}
       <View style={{
         borderRadius: 10,
@@ -1164,6 +1187,7 @@ function ServiceNowBlock({
         backgroundColor: `${typeMeta.color}06`,
         paddingHorizontal: 10,
         paddingVertical: 4,
+        minWidth: 0,
       }}>
         {displayFields.map((field, i) => (
           <SnFieldRow
@@ -1185,9 +1209,14 @@ function ServiceNowBlock({
         )}
       </View>
 
-      {/* Free text (non-field lines) */}
+      {/* Free text (non-field lines) — clamp to 3 lines when collapsed so a long
+          free-text block does not dominate the card in list view. */}
       {sfModel.freeText ? (
-        <Text style={{ color: palette.textBody, fontSize: 12, lineHeight: 18, opacity: 0.75 }}>
+        <Text
+          style={{ color: palette.textBody, fontSize: 12, lineHeight: 18, opacity: 0.75, flexShrink: 1 }}
+          numberOfLines={expanded ? 0 : 3}
+          ellipsizeMode="tail"
+        >
           {sfModel.freeText}
         </Text>
       ) : null}
@@ -1198,11 +1227,11 @@ function ServiceNowBlock({
           borderTopWidth: 0.5,
           borderTopColor: palette.border,
           paddingTop: 6,
-          flexDirection: 'row',
-          flexWrap: 'wrap',
-          gap: 2,
         }}>
-          <Text style={{ fontSize: 12, lineHeight: 20 }}>
+          <Text style={{ fontSize: 12, lineHeight: 20, flex: 1, flexShrink: 1, color: palette.textBody }}
+            numberOfLines={expanded ? 0 : 2}
+            ellipsizeMode="tail"
+          >
             {footerSegments.map((seg, i) => {
               if (seg.kind === 'plain') {
                 return <Text key={i} style={{ color: palette.textBody }}>{seg.text}</Text>;
@@ -1308,8 +1337,9 @@ function SmartEntityBlock({
         borderColor: `${typeMeta.color}28`,
         backgroundColor: `${typeMeta.color}0a`,
         padding: 10,
+        minWidth: 0,
       }}>
-        <Text style={{ fontSize: 13, lineHeight: 22 }} numberOfLines={expanded ? 0 : 6}>
+        <Text style={{ fontSize: 13, lineHeight: 22, flexShrink: 1 }} numberOfLines={expanded ? 0 : 6} ellipsizeMode="tail">
           {segments.map((seg, i) => {
             if (seg.kind === 'plain') {
               return (

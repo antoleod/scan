@@ -114,8 +114,9 @@ export function NoteContentRenderer({
   // Priority 4: Default plain text
   return (
     <Text
-      style={{ color: palette.textBody, fontSize: 14, lineHeight: 21 }}
+      style={{ color: palette.textBody, fontSize: 14, lineHeight: 21, flexShrink: 1 }}
       numberOfLines={expanded ? 0 : 3}
+      ellipsizeMode="tail"
     >
       {preview}
     </Text>

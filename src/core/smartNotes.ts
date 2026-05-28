@@ -161,7 +161,42 @@ const LABEL_CLEAN_RE = /\s*[\(®€©\)!]\s*|\s*\(\?\)\s*|\s*\(\d+\)\s*/g;
 
 // Trailing OCR noise patterns in values: "QQ HI O", " v", "oO |& ©", " O)"
 // Strips short uppercase artifacts and symbol clusters at the end of a value.
-const VALUE_TRAIL_RE = /(\s+(?:[A-Z]{1,2}\)?|QQ|xo?|oO?|HI\s*[A-Z]?|[€©&|]+\)?))+\s*$/g;
+// Requires at least 2 uppercase chars (or explicit noise tokens) so that
+// single-word values like "Exchange" are never truncated.
+const VALUE_TRAIL_RE = /(\s+(?:[A-Z]{2}\)?|QQ|xo?|oO?|HI\s*[A-Z]?|[€©&|]{2,}\)?))+\s*$/g;
+
+// A "label-like" line contains at least one alphabetic word before a ` | ` separator.
+// Used to decide whether a bare line is a value continuation or a new label row.
+const LABEL_PATTERN_RE = /^[^|]{2,}\s\|\s/;
+
+/** Returns true when a trimmed line looks like a new `Label | Value` pair. */
+function looksLikeLabelLine(line: string): boolean {
+  const stripped = line.replace(PREFIX_NOISE_RE, '');
+  return LABEL_PATTERN_RE.test(stripped) && /[a-zA-Z]/.test(stripped.slice(0, stripped.indexOf(' | ')));
+}
+
+/**
+ * Returns true when `line` looks like a value continuation fragment produced
+ * by OCR line-wrapping (e.g. "365" after "Outlook Office").
+ *
+ * A continuation fragment:
+ * - Is short: ≤ 40 characters (a full prose sentence is usually longer)
+ * - Contains no ` | ` separator (it's not a new label row)
+ * - Does not look like a standalone sentence:
+ *     - Does not end with `.` or `?` or `!`
+ *     - Does not contain more than 4 space-separated words
+ *       (prose starts with 5+ words, OCR fragments are typically 1-3)
+ * - Is not a separator line (---, ===)
+ */
+function looksLikeValueContinuation(line: string): boolean {
+  if (line.length > 40) return false;
+  if (looksLikeLabelLine(line)) return false;
+  if (/^[-=]{3,}$/.test(line)) return false;
+  if (/[.?!]$/.test(line)) return false;
+  const wordCount = line.trim().split(/\s+/).length;
+  if (wordCount > 4) return false;
+  return true;
+}
 
 function labelToKey(label: string): string {
   return label
@@ -185,20 +220,69 @@ function parsePipeLine(raw: string): { label: string; value: string } | null {
   const rawValue = line.slice(pipeIdx + 3).split(' | ')[0];
   const cleanValue = rawValue.replace(VALUE_TRAIL_RE, '').replace(/\)\s*$/, '').trim();
 
+  // Skip fields where the value is entirely empty after cleaning
+  if (!cleanValue) return null;
+
   return { label: cleanLabel, value: cleanValue };
 }
 
+/** OCR noise lines: box-drawing chars, single stray characters, pure symbol runs. */
+function isOcrNoiseLine(line: string): boolean {
+  // Single printable character (not alphanumeric context)
+  if (line.length === 1) return true;
+  // Box-drawing or block-element Unicode characters
+  if (/^[─-╿▀-▟■-◿]+$/.test(line)) return true;
+  // Pure symbol run (no letters or digits at all)
+  if (!/[a-zA-Z0-9À-ɏ]/.test(line)) return true;
+  return false;
+}
+
 export function parseServiceNowFields(text: string): ServiceNowModel {
-  const lines = String(text || '').split('\n');
+  const rawLines = String(text || '').split('\n');
+
+  // ── Phase 1: Merge OCR-wrapped continuation lines ─────────────────────────
+  // When OCR breaks a value across lines (e.g. "Outlook Office\n365"), the
+  // second line is a bare token with no `Label | ` prefix. We join it to the
+  // previous line before parsing so the full value is captured.
+  const lines: string[] = [];
+  for (const raw of rawLines) {
+    const trimmed = raw.trim();
+    if (!trimmed) {
+      lines.push('');
+      continue;
+    }
+    // If the last accepted line looked like a label-value row and this line is
+    // a short value-fragment continuation (not a new label, not a separator,
+    // not a full prose sentence) → append it to close the OCR line-wrap.
+    const prev = lines[lines.length - 1] ?? '';
+    const prevTrimmed = prev.trim();
+    if (
+      prevTrimmed &&
+      looksLikeLabelLine(prevTrimmed) &&
+      looksLikeValueContinuation(trimmed) &&
+      !isOcrNoiseLine(trimmed)
+    ) {
+      // Append the continuation token to the previous line
+      lines[lines.length - 1] = `${prev} ${trimmed}`;
+    } else {
+      lines.push(trimmed);
+    }
+  }
+
+  // ── Phase 2: Parse merged lines ───────────────────────────────────────────
   const fields: ServiceNowField[] = [];
   const freeLines: string[] = [];
   const footerLines: string[] = [];
   let separatorSeen = false;
-  const seenKeys = new Set<string>();
+  // Map key → index in `fields` for last-occurrence-wins deduplication
+  const keyIndex = new Map<string, number>();
 
   for (const line of lines) {
     const trimmed = line.trim();
     if (!trimmed) continue;
+
+    // OCR noise lines (single chars, box-drawing) are silently dropped
+    if (isOcrNoiseLine(trimmed)) continue;
 
     // Section separator (--- or ===)
     if (/^[-=]{3,}$/.test(trimmed)) { separatorSeen = true; continue; }
@@ -208,8 +292,14 @@ export function parseServiceNowFields(text: string): ServiceNowModel {
     const parsed = parsePipeLine(trimmed);
     if (parsed) {
       const key = labelToKey(parsed.label);
-      if (key && !seenKeys.has(key)) {
-        seenKeys.add(key);
+      if (!key) continue;
+
+      if (keyIndex.has(key)) {
+        // Last-occurrence-wins: update the existing entry in-place
+        const idx = keyIndex.get(key)!;
+        fields[idx] = { key, rawLabel: parsed.label, value: parsed.value };
+      } else {
+        keyIndex.set(key, fields.length);
         fields.push({ key, rawLabel: parsed.label, value: parsed.value });
       }
     } else {

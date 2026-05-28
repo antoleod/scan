@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import { classify } from "../src/core/classify";
 import { applyImportedBackup, buildBackupBundle, parseBackupBundle } from "../src/core/backup";
 import { generateBarcode } from "../src/core/barcode";
-import { extractFields } from "../src/core/extract";
+import { extractFields, extractCleanNoteData } from "../src/core/extract";
+import { parseServiceNowFields } from "../src/core/smartNotes";
 import { historyKey } from "../src/core/history";
 import { defaultSettings, piLogic } from "../src/core/settings";
 import { detectGroceryItem, formatShoppingList, isLikelyShoppingList, searchGroceryCatalog } from "../src/utils/groceryDetection";
@@ -1370,6 +1371,93 @@ run("airdrop: bye frame cancels the remote session without a double-bye loop", a
 
   resetAirdropStore();
 });
+
+// ─── Note extraction: parseServiceNowFields + extractCleanNoteData ─────────────
+
+run("noteExtractor: simple label-value pair is extracted correctly", () => {
+  const result = parseServiceNowFields("Business Application | Exchange");
+  const field = result.fields.find((f) => f.key === "business_application");
+  assert.ok(field, "field 'business_application' not found");
+  assert.equal(field!.rawLabel, "Business Application");
+  assert.equal(field!.value, "Exchange");
+});
+
+run("noteExtractor: multiline OCR value continuation is joined", () => {
+  // OCR wraps "Outlook Office 365" across two lines
+  const text = "Application Software | Outlook Office\n365";
+  const result = parseServiceNowFields(text);
+  const field = result.fields.find((f) => f.key === "application_software");
+  assert.ok(field, `field not found; got: ${JSON.stringify(result.fields)}`);
+  assert.equal(field!.value, "Outlook Office 365");
+});
+
+run("noteExtractor: alphanumeric code is preserved verbatim", () => {
+  const result = parseServiceNowFields("Configuration Item | MUSTBRUN233453");
+  const field = result.fields.find((f) => f.key === "configuration_item");
+  assert.ok(field);
+  assert.equal(field!.value, "MUSTBRUN233453");
+});
+
+run("noteExtractor: time format HH:MM:SS is not mangled", () => {
+  const result = parseServiceNowFields("Time Worked | 00:03:57");
+  const field = result.fields.find((f) => f.key === "time_worked");
+  assert.ok(field);
+  assert.equal(field!.value, "00:03:57");
+});
+
+run("noteExtractor: mixed-case location value is preserved exactly", () => {
+  const result = parseServiceNowFields("Location | Spaak55A028");
+  const field = result.fields.find((f) => f.key === "location");
+  assert.ok(field);
+  assert.equal(field!.value, "Spaak55A028");
+});
+
+run("noteExtractor: empty value field is omitted", () => {
+  // "Some Label | " has a whitespace-only value — should produce no field
+  const result = parseServiceNowFields("Some Label |  ");
+  const field = result.fields.find((f) => f.key === "some_label");
+  assert.equal(field, undefined, `expected field to be omitted, got ${JSON.stringify(field)}`);
+});
+
+run("noteExtractor: OCR noise line (single char) is dropped", () => {
+  const text = "Business Application | Exchange\n!\nAnother Field | Some Value";
+  const result = parseServiceNowFields(text);
+  // The noise '!' should not appear in fields or free text
+  assert.equal(result.freeText.includes("!"), false, "noise char leaked into freeText");
+  assert.equal(result.fields.length, 2);
+});
+
+run("noteExtractor: multiline description (3+ free lines) is collected", () => {
+  const text = [
+    "Caller | John Smith",
+    "Opened | 2024-01-15",
+    "This is a free text paragraph.",
+    "It spans multiple lines.",
+    "And has a third line here.",
+  ].join("\n");
+  const data = extractCleanNoteData(text);
+  assert.ok(data.description, "description should be present for 3+ free lines");
+  assert.ok(data.description!.includes("multiple lines"), "description should contain free-text content");
+  assert.equal(data.fields.length, 2, "structured fields should still be extracted");
+});
+
+run("noteExtractor: accented characters in values are preserved", () => {
+  const result = parseServiceNowFields("Responsable | José García");
+  const field = result.fields.find((f) => f.key === "responsable");
+  assert.ok(field);
+  assert.equal(field!.value, "José García");
+});
+
+run("noteExtractor: duplicate label keeps last occurrence value", () => {
+  // OCR may repeat a header with a better read lower in the document
+  const text = "Status | Initialvalue\nStatus | FinalValue";
+  const result = parseServiceNowFields(text);
+  const statusFields = result.fields.filter((f) => f.key === "status");
+  assert.equal(statusFields.length, 1, "duplicate label should produce only one field");
+  assert.equal(statusFields[0].value, "FinalValue", "last occurrence should win");
+});
+
+// ─── End of note extraction tests ──────────────────────────────────────────────
 
 void (async () => {
   for (const { name, fn } of _tests) {
