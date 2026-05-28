@@ -42,16 +42,19 @@ export function ReceiveScreen({
   const session = useSession(joinedId);
   const transfer = useTransfer(joinedId);
 
-  // Handlers the transfer engine calls when the sender offers / completes.
-  const receiverHandlers: ReceiverHandlers = {
+  // Stable refs so attachReceiver's closure always calls the current setter,
+  // even if the component re-renders between join and the offer arriving.
+  const setOfferRef = useRef(setOffer);
+  setOfferRef.current = setOffer;
+  const receiverHandlers: ReceiverHandlers = useRef<ReceiverHandlers>({
     onOffer: (meta) => {
-      setOffer(meta);
+      setOfferRef.current(meta);
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
     },
     onComplete: () => {
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
     },
-  };
+  }).current;
 
   const handleScanned = async (raw: string) => {
     if (lockedRef.current) return;

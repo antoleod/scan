@@ -12,7 +12,7 @@ import {
 
 const CLIPBOARD_KEY = '@MyKit_clipboard_v2';
 const LEGACY_CLIPBOARD_KEY = '@MyKit_clipboard_v1';
-const POLL_BASE = 1200;
+const POLL_BASE = 2500;
 const POLL_SLOW = 3500;
 const POLL_BACKGROUND = 5000; // Slower polling when in background
 const MAX_ENTRIES = 3000;

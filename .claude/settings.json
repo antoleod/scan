@@ -5,7 +5,10 @@
       "Bash(python3 -c ':*)",
       "Bash(python -c ':*)",
       "Bash(identify c:/Users/X1/Downloads/scan/scan/dist/favicon.png)",
-      "Bash(ls c:/Users/X1/Downloads/scan/scan/*.json)"
+      "Bash(ls c:/Users/X1/Downloads/scan/scan/*.json)",
+      "Bash(grep -nE '>[A-Z][a-zA-Z ]{4,}<|placeholder=\"[A-Z][a-zA-Z ]{4,}\"|accessibilityLabel=\"[A-Z][a-zA-Z ]{4,}\"' src/components/mainApp/tabs/SettingsTab.tsx)",
+      "Bash(grep -nE \"forwardRef|ComposerSection =|export const ComposerSection|export function ComposerSection|=> \\\\{$\" src/components/ComposerSection.tsx)",
+      "Bash(grep -nE \"'[A-Z][a-zA-Z][^']*'|\\\\`[^\\\\`]*\\\\`\" src/components/MedicationCard.tsx)"
     ]
   }
 }

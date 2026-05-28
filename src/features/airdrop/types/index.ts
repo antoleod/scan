@@ -204,8 +204,13 @@ export interface RTCIceCandidateInitLike {
 
 /** Abstraction over the transport used to relay {@link SignalMessage}s. */
 export interface SignalingChannel {
-  /** Begin listening for messages in a session room. Returns an unsubscribe fn. */
-  subscribe(sessionId: string, onMessage: (msg: SignalMessage) => void): () => void;
+  /**
+   * Begin listening for messages in a session room. Returns an unsubscribe fn.
+   * The returned fn MAY carry a `.ready` Promise that resolves once the
+   * underlying listener is active — callers that need to publish only after
+   * they can receive replies should await it before calling publish().
+   */
+  subscribe(sessionId: string, onMessage: (msg: SignalMessage) => void): (() => void) & { ready?: Promise<void> };
   /** Publish a signaling message to a session room. */
   publish(msg: SignalMessage): Promise<void>;
   /** Remove all signaling state for a session (called on expire/cancel). */

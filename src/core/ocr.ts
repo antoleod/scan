@@ -34,9 +34,34 @@ const OCR_CDNS: OcrCdnConfig[] = [
   },
 ];
 
+// Maps Tesseract status strings to a [basePercent, maxPercent] window so all
+// lifecycle stages are reflected in progress, not just 'recognizing text'.
+const STAGE_RANGES: Record<string, [number, number]> = {
+  'loading ocr engine':  [0,  15],
+  'initializing api':    [15, 30],
+  'building languages':  [30, 60],
+  'loading language traineddata': [30, 60],
+  'initialized api':     [60, 62],
+  'recognizing text':    [62, 100],
+};
+
+// Per-call progress sink — redirected before each recognize() call, cleared after.
+// Single-threaded by design (one Tesseract worker processes one image at a time).
+let _currentProgressFn: ((pct: number) => void) | null = null;
+
+function sharedLogger(m: { status: string; progress: number }) {
+  const range = STAGE_RANGES[m.status];
+  if (!range) return;
+  const pct = Math.round(range[0] + m.progress * (range[1] - range[0]));
+  _currentProgressFn?.(pct);
+}
+
+// Singleton worker — created once, reused across all OCR calls. Avoids the
+// 1–3 s init overhead and traineddata re-download on every invocation.
+let _workerPromise: Promise<any> | null = null;
+
 async function createOcrWorker(
   createWorker: (langs: string, oem: number, options: Record<string, unknown>) => Promise<any>,
-  logger: (m: { status: string; progress: number }) => void,
 ): Promise<any> {
   let lastError: unknown;
   for (const cdn of OCR_CDNS) {
@@ -45,7 +70,7 @@ async function createOcrWorker(
         workerPath: cdn.workerPath,
         corePath: cdn.corePath,
         langPath: cdn.langPath,
-        logger,
+        logger: sharedLogger,
       });
     } catch (error) {
       lastError = error;
@@ -55,6 +80,32 @@ async function createOcrWorker(
   throw lastError instanceof Error
     ? new Error(`OCR engine could not load (network). ${lastError.message}`)
     : new Error('OCR engine could not load. Check your connection and retry.');
+}
+
+function getOcrWorker(): Promise<any> {
+  if (!_workerPromise) {
+    // Metro can lose dynamic import chunks during OCR/HMR; a literal require is
+    // statically registered and avoids "Requiring unknown module <id>" at runtime.
+    const Tesseract = require('tesseract.js');
+    const createWorker = Tesseract.createWorker ?? Tesseract.default?.createWorker;
+    if (!createWorker) {
+      return Promise.reject(new Error('Tesseract not available'));
+    }
+    _workerPromise = createOcrWorker(createWorker).catch((e) => {
+      _workerPromise = null; // Allow retry on next call
+      throw e;
+    });
+  }
+  return _workerPromise;
+}
+
+/** Call on app exit or when OCR is no longer needed to free the WASM memory. */
+export function releaseOcrWorker(): void {
+  _workerPromise
+    ?.then((w) => w.terminate().catch(() => undefined))
+    .catch(() => undefined);
+  _workerPromise = null;
+  _currentProgressFn = null;
 }
 
 export interface OcrResult {
@@ -155,27 +206,34 @@ export async function extractTextFromImage(
   }
 
   try {
-    // Metro can lose dynamic import chunks during OCR/HMR; a literal require is
-    // statically registered and avoids "Requiring unknown module <id>" at runtime.
-    const Tesseract = require('tesseract.js');
-    const createWorker = Tesseract.createWorker ?? Tesseract.default?.createWorker;
-    if (!createWorker) {
-      throw new Error('Tesseract not available');
-    }
+    const worker = await getOcrWorker();
 
-    const worker = await createOcrWorker(createWorker, (m) => {
-      if (options?.signal?.aborted) {
-        throw new Error('OCR cancelled');
-      }
-      if (m.status === 'recognizing text') {
-        options?.onProgress?.(Math.round(m.progress * 100));
-      }
-    });
+    const preparedImageUri = await preprocessImageForOcr(imageUri, options?.cropMode ?? 'full');
+
+    if (options?.signal?.aborted) throw new Error('OCR cancelled');
+
+    // Wire up per-call progress handler before recognition starts.
+    _currentProgressFn = options?.onProgress ?? null;
 
     try {
-      const preparedImageUri = await preprocessImageForOcr(imageUri, options?.cropMode ?? 'full');
-      const { data } = await worker.recognize(preparedImageUri, {
+      const recognizePromise = worker.recognize(preparedImageUri, {
         preserve_interword_spaces: '1',
+      });
+
+      // Race recognition against the caller's abort signal so closing the modal
+      // cancels the in-flight call without waiting for Tesseract to finish.
+      let abortListener: (() => void) | undefined;
+      const { data } = await (options?.signal
+        ? Promise.race([
+            recognizePromise,
+            new Promise<never>((_, reject) => {
+              abortListener = () => reject(new Error('OCR cancelled'));
+              options.signal!.addEventListener('abort', abortListener, { once: true });
+            }),
+          ])
+        : recognizePromise
+      ).finally(() => {
+        if (abortListener) options?.signal?.removeEventListener('abort', abortListener);
       });
 
       const extractedText = String(data.text ?? '').trim();
@@ -185,7 +243,8 @@ export async function extractTextFromImage(
         source: 'image',
       };
     } finally {
-      await worker.terminate().catch(() => undefined);
+      _currentProgressFn = null;
+      // Worker is a singleton — do NOT terminate here.
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : 'OCR failed';

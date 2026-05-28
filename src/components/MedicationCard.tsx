@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Text, View, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import type { WorkflowMetadata, WorkflowStatus, MedicationCycleEntry } from '../core/notes';
 import type { NotePalette as Palette } from '../theme/theme';
 
@@ -175,17 +177,17 @@ function resolveMedications(
   };
 }
 
-function describeCountdown(targetMs: number, snoozed: boolean): { text: string; tone: CountdownTone } {
+function describeCountdown(targetMs: number, snoozed: boolean, t: TFunction): { text: string; tone: CountdownTone } {
   const diff = targetMs - Date.now();
   if (snoozed) {
-    if (Math.abs(diff) < 60_000) return { text: 'Snoozed · due now', tone: 'snoozed' };
-    if (diff < 0) return { text: `Snoozed · overdue ${fmtDuration(-diff)}`, tone: 'danger' };
-    return { text: `Snoozed · in ${fmtDuration(diff)}`, tone: 'snoozed' };
+    if (Math.abs(diff) < 60_000) return { text: t('medication.snoozedDueNow'), tone: 'snoozed' };
+    if (diff < 0) return { text: t('medication.snoozedOverdue', { duration: fmtDuration(-diff) }), tone: 'danger' };
+    return { text: t('medication.snoozedIn', { duration: fmtDuration(diff) }), tone: 'snoozed' };
   }
-  if (diff <= -60_000) return { text: `Overdue ${fmtDuration(-diff)}`, tone: 'danger' };
-  if (Math.abs(diff) < 60_000) return { text: 'Due now', tone: 'due' };
+  if (diff <= -60_000) return { text: t('medication.overdue', { duration: fmtDuration(-diff) }), tone: 'danger' };
+  if (Math.abs(diff) < 60_000) return { text: t('medication.dueNow'), tone: 'due' };
   const tone: CountdownTone = diff <= 30 * 60_000 ? 'warn' : 'safe';
-  return { text: `in ${fmtDuration(diff)}`, tone };
+  return { text: t('medication.inTime', { duration: fmtDuration(diff) }), tone };
 }
 
 const SNOOZE_OPTIONS: { label: string; ms: number }[] = [
@@ -235,6 +237,7 @@ function MedRow({
   onDismissCycle,
   onReactivate,
 }: MedRowProps) {
+  const { t } = useTranslation();
   const [snoozeOpen, setSnoozeOpen] = useState(false);
   const [confirmDismiss, setConfirmDismiss] = useState(false);
   const [confirmTooSoon, setConfirmTooSoon] = useState(false);
@@ -244,7 +247,7 @@ function MedRow({
   const isDismissed = status === 'dismissed';
   const followPrescription = !med.nextSuggestedAt || med.followPrescription;
   const countdown = (typeof med.nextSuggestedAt === 'number' && !isDismissed)
-    ? describeCountdown(med.nextSuggestedAt, isSnoozed)
+    ? describeCountdown(med.nextSuggestedAt, isSnoozed, t)
     : null;
   const countdownColor = countdown ? TONE_COLORS[countdown.tone] : palette.textDim;
   const nextTime = followPrescription ? '' : timeLabel(med.nextSuggestedAt);
@@ -293,12 +296,12 @@ function MedRow({
         {isDismissed ? (
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginLeft: 'auto' }}>
             <Ionicons name="close-circle-outline" size={12} color={palette.textMuted} />
-            <Text style={{ color: palette.textMuted, fontSize: 10, fontWeight: '700' }}>CANCELLED</Text>
+            <Text style={{ color: palette.textMuted, fontSize: 10, fontWeight: '700' }}>{t('medication.cancelled')}</Text>
           </View>
         ) : isSnoozed ? (
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginLeft: 'auto' }}>
             <Ionicons name="moon-outline" size={12} color={TONE_COLORS.snoozed} />
-            <Text style={{ color: TONE_COLORS.snoozed, fontSize: 10, fontWeight: '700' }}>SNOOZED</Text>
+            <Text style={{ color: TONE_COLORS.snoozed, fontSize: 10, fontWeight: '700' }}>{t('medication.snoozed')}</Text>
           </View>
         ) : null}
       </View>
@@ -310,12 +313,12 @@ function MedRow({
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
               <Ionicons name="time-outline" size={11} color={palette.textDim} />
               <Text style={{ color: palette.textDim, fontSize: 12 }}>
-                Next suggested · {nextTime}
+                {t('medication.nextSuggested', { time: nextTime })}
               </Text>
             </View>
           ) : (
             <Text style={{ color: palette.textMuted, fontSize: 12, fontStyle: 'italic' }}>
-              Follow prescription schedule
+              {t('medication.followPrescriptionSchedule')}
             </Text>
           )}
           {countdown ? (
@@ -336,7 +339,7 @@ function MedRow({
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
               <Ionicons name="checkmark-done-outline" size={10} color={palette.textMuted} />
               <Text style={{ color: palette.textMuted, fontSize: 11 }} numberOfLines={1}>
-                Taken {takenTime}{med.dose ? ` · dose ${med.dose}` : ''}
+                {med.dose ? t('medication.takenAtDose', { time: takenTime, dose: med.dose }) : t('medication.takenAt', { time: takenTime })}
               </Text>
             </View>
           ) : null}
@@ -345,7 +348,7 @@ function MedRow({
               style={{ color: palette.textMuted, fontSize: 11, fontStyle: 'italic' }}
               numberOfLines={2}
             >
-              Reason: {reason}
+              {t('medication.reasonLabel', { reason })}
             </Text>
           ) : null}
           {med.safetyNote && expanded ? (
@@ -409,7 +412,7 @@ function MedRow({
             <Pressable
               onPress={() => { setConfirmDismiss(false); onDismissCycle?.(index); }}
               accessibilityRole="button"
-              accessibilityLabel={`Confirm dismiss ${med.name}`}
+              accessibilityLabel={t('medication.confirmDismissA11y', { name: med.name })}
               style={({ pressed }) => ({
                 flex: 1,
                 minHeight: 36,
@@ -419,12 +422,12 @@ function MedRow({
                 justifyContent: 'center',
               })}
             >
-              <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>Dismiss</Text>
+              <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>{t('medication.dismiss')}</Text>
             </Pressable>
             <Pressable
               onPress={() => setConfirmDismiss(false)}
               accessibilityRole="button"
-              accessibilityLabel="Cancel"
+              accessibilityLabel={t('medication.cancel')}
               style={({ pressed }) => ({
                 flex: 1,
                 minHeight: 36,
@@ -436,7 +439,7 @@ function MedRow({
                 justifyContent: 'center',
               })}
             >
-              <Text style={{ color: palette.textDim, fontSize: 12, fontWeight: '700' }}>Cancel</Text>
+              <Text style={{ color: palette.textDim, fontSize: 12, fontWeight: '700' }}>{t('medication.cancel')}</Text>
             </Pressable>
           </View>
         </View>
@@ -448,13 +451,13 @@ function MedRow({
         return (
           <View style={{ gap: 6 }}>
             <Text style={{ color: palette.textBody, fontSize: 12 }}>
-              <Text style={{ fontWeight: '700' }}>{med.name}</Text> was taken {check.minutesUntilSafe} minutes ago. Take again?
+              <Text style={{ fontWeight: '700' }}>{med.name}</Text> {t('medication.takenAgoConfirm', { minutes: check.minutesUntilSafe })}
             </Text>
             <View style={{ flexDirection: 'row', gap: 6 }}>
               <Pressable
                 onPress={() => { setConfirmTooSoon(false); onTaken?.(index); }}
                 accessibilityRole="button"
-                accessibilityLabel={`Confirm take ${med.name} now`}
+                accessibilityLabel={t('medication.confirmTakeA11y', { name: med.name })}
                 style={({ pressed }) => ({
                   flex: 1,
                   minHeight: 36,
@@ -464,12 +467,12 @@ function MedRow({
                   justifyContent: 'center',
                 })}
               >
-                <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>Take Now</Text>
+                <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>{t('medication.takeNow')}</Text>
               </Pressable>
               <Pressable
                 onPress={() => setConfirmTooSoon(false)}
                 accessibilityRole="button"
-                accessibilityLabel="Cancel"
+                accessibilityLabel={t('medication.cancel')}
                 style={({ pressed }) => ({
                   flex: 1,
                   minHeight: 36,
@@ -481,7 +484,7 @@ function MedRow({
                   justifyContent: 'center',
                 })}
               >
-                <Text style={{ color: palette.textDim, fontSize: 12, fontWeight: '700' }}>Cancel</Text>
+                <Text style={{ color: palette.textDim, fontSize: 12, fontWeight: '700' }}>{t('medication.cancel')}</Text>
               </Pressable>
             </View>
           </View>
@@ -501,7 +504,7 @@ function MedRow({
               }
             }}
             accessibilityRole="button"
-            accessibilityLabel={`Mark ${med.name} taken now`}
+            accessibilityLabel={t('medication.markTakenA11y', { name: med.name })}
             style={({ pressed }) => ({
               flex: 1.4,
               minHeight: 38,
@@ -513,13 +516,13 @@ function MedRow({
           >
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
               <Ionicons name="checkmark" size={13} color="#fff" />
-              <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>Taken</Text>
+              <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>{t('medication.taken')}</Text>
             </View>
           </Pressable>
           <Pressable
             onPress={() => { setConfirmDismiss(false); setSnoozeOpen(true); }}
             accessibilityRole="button"
-            accessibilityLabel={`Snooze ${med.name} reminder`}
+            accessibilityLabel={t('medication.snoozeReminderA11y', { name: med.name })}
             style={({ pressed }) => ({
               flex: 1,
               minHeight: 38,
@@ -533,13 +536,13 @@ function MedRow({
           >
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
               <Ionicons name="moon-outline" size={12} color={TONE_COLORS.snoozed} />
-              <Text style={{ color: TONE_COLORS.snoozed, fontSize: 12, fontWeight: '700' }}>Snooze</Text>
+              <Text style={{ color: TONE_COLORS.snoozed, fontSize: 12, fontWeight: '700' }}>{t('medication.snooze')}</Text>
             </View>
           </Pressable>
           <Pressable
             onPress={() => { setSnoozeOpen(false); setConfirmDismiss(true); }}
             accessibilityRole="button"
-            accessibilityLabel={`Dismiss ${med.name} reminder`}
+            accessibilityLabel={t('medication.dismissReminderA11y', { name: med.name })}
             style={({ pressed }) => ({
               flex: 1,
               minHeight: 38,
@@ -553,7 +556,7 @@ function MedRow({
           >
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
               <Ionicons name="close" size={13} color={palette.textDim} />
-              <Text style={{ color: palette.textDim, fontSize: 12, fontWeight: '700' }}>Dismiss</Text>
+              <Text style={{ color: palette.textDim, fontSize: 12, fontWeight: '700' }}>{t('medication.dismiss')}</Text>
             </View>
           </Pressable>
         </View>
@@ -564,7 +567,7 @@ function MedRow({
         <Pressable
           onPress={() => onReactivate?.(index)}
           accessibilityRole="button"
-          accessibilityLabel={`Reactivate ${med.name}`}
+          accessibilityLabel={t('medication.reactivateA11y', { name: med.name })}
           style={({ pressed }) => ({
             minHeight: 38,
             borderRadius: 8,
@@ -575,7 +578,7 @@ function MedRow({
         >
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
             <Ionicons name="refresh" size={13} color="#fff" />
-            <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>Reactivate</Text>
+            <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>{t('medication.reactivate')}</Text>
           </View>
         </Pressable>
       ) : null}

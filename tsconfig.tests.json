@@ -11,10 +11,14 @@
     "resolveJsonModule": true,
     "skipLibCheck": true,
     "declaration": false,
-    "sourceMap": false
+    "sourceMap": false,
+    "paths": {
+      "react-native": ["./tests/shims/react-native"]
+    }
   },
   "include": [
     "tests/run-tests.ts",
+    "tests/shims/react-native.d.ts",
     "src/declarations.d.ts",
     "src/core/barcode.ts",
     "src/core/classify.ts",
@@ -24,10 +28,22 @@
     "src/core/shoppingList.ts",
     "src/core/settings.ts",
     "src/types.ts",
+    "src/core/diagnostics.ts",
     "src/features/airdrop/utils/qr.ts",
     "src/features/airdrop/utils/ids.ts",
+    "src/features/airdrop/utils/format.ts",
     "src/features/airdrop/constants/index.ts",
     "src/features/airdrop/types/index.ts",
-    "src/features/airdrop/presence/shareFilter.ts"
+    "src/features/airdrop/presence/shareFilter.ts",
+    "src/features/airdrop/presence/userPresence.ts",
+    "src/features/airdrop/signaling/index.ts",
+    "src/features/airdrop/signaling/firebaseSignaling.ts",
+    "src/features/airdrop/store/createStore.ts",
+    "src/features/airdrop/store/airdropStore.ts",
+    "src/features/airdrop/webrtc/unsupportedPeerConnection.ts",
+    "src/features/airdrop/webrtc/index.ts",
+    "src/features/airdrop/transfer/transferService.ts",
+    "src/features/airdrop/transfer/fileDelivery.ts",
+    "src/features/airdrop/sessions/sessionService.ts"
   ]
 }
