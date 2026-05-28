@@ -2,6 +2,7 @@ import React, { useRef, useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system/legacy';
+import { useTranslation } from 'react-i18next';
 
 type Props = {
   permState: 'granted' | 'denied' | 'prompt' | 'unsupported';
@@ -20,7 +21,8 @@ async function fileToDataUrl(file: File): Promise<string> {
 }
 
 export function ManualCaptureBar({ permState, onCaptureNow, onPasteText, onImportScreenshot }: Props) {
-  const [pasteHint, setPasteHint] = useState('Paste clipboard text here');
+  const { t } = useTranslation();
+  const [pasteHint, setPasteHint] = useState(t('capture.pasteHint'));
   const [pasteValue, setPasteValue] = useState('');
   const hiddenInputRef = useRef<TextInput | null>(null);
 
@@ -66,25 +68,25 @@ export function ManualCaptureBar({ permState, onCaptureNow, onPasteText, onImpor
   return (
     <View style={styles.shell}>
       <View style={styles.row}>
-        <Pressable accessibilityRole="button" accessibilityLabel="Capture clipboard now" style={styles.button} onPress={() => void onCaptureNow()}>
-          <Text style={styles.buttonText}>Capture clipboard now</Text>
+        <Pressable accessibilityRole="button" accessibilityLabel={t('capture.captureNow')} style={styles.button} onPress={() => void onCaptureNow()}>
+          <Text style={styles.buttonText}>{t('capture.captureNow')}</Text>
         </Pressable>
-        <Pressable accessibilityRole="button" accessibilityLabel="Import a screenshot" style={styles.buttonSecondary} onPress={() => void handleImportScreenshot()}>
-          <Text style={styles.buttonSecondaryText}>Import screenshot</Text>
+        <Pressable accessibilityRole="button" accessibilityLabel={t('capture.importScreenshotA11y')} style={styles.buttonSecondary} onPress={() => void handleImportScreenshot()}>
+          <Text style={styles.buttonSecondaryText}>{t('capture.importScreenshot')}</Text>
         </Pressable>
       </View>
       {permState !== 'granted' ? (
         <>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Paste to capture"
+            accessibilityLabel={t('capture.pasteToCapture')}
             accessibilityHint="Focuses a field — then paste with your keyboard"
             style={styles.buttonSecondary}
             onPress={() => hiddenInputRef.current?.focus()}
           >
-            <Text style={styles.buttonSecondaryText}>Paste to capture</Text>
+            <Text style={styles.buttonSecondaryText}>{t('capture.pasteToCapture')}</Text>
           </Pressable>
-          <Text style={styles.helper}>Firefox and Safari require a manual action to read the clipboard</Text>
+          <Text style={styles.helper}>{t('capture.manualActionHint')}</Text>
         </>
       ) : null}
       <TextInput
@@ -95,7 +97,7 @@ export function ManualCaptureBar({ permState, onCaptureNow, onPasteText, onImpor
           setPasteValue(text);
           if (!value) return;
           void onPasteText(value);
-          setPasteHint('Captured. Paste again if needed');
+          setPasteHint(t('capture.capturedPasteAgain'));
           setPasteValue('');
         }}
         placeholder={pasteHint}

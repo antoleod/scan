@@ -28,6 +28,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
+import { useTranslation } from 'react-i18next';
 import { useAppTheme } from '../constants/theme';
 import { normalizeIdentifier, resolveAuthEmailForLogin } from '../core/auth';
 import {
@@ -194,6 +195,7 @@ interface LoginFormProps {
 export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: LoginFormProps) {
   usePremiumCssEffects();
 
+  const { t } = useTranslation();
   const { login, loginWithGoogle, sendMagicLink, enterAsGuest, firebase, biometricStatus } = useAuth();
   const [username, setUsername] = useState('');
   const [pin, setPin] = useState('');
@@ -532,18 +534,18 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
     let valid = true;
 
     if (!isValidIdentifier(username)) {
-      newErrors.username = 'Enter a valid username or email';
+      newErrors.username = t('auth.invalidIdentifier');
       valid = false;
     }
 
     if (!pin) {
-      newErrors.pin = 'PIN is required';
+      newErrors.pin = t('auth.pinRequired');
       valid = false;
     } else if (!/^\d+$/.test(pin)) {
-      newErrors.pin = 'PIN must contain only numbers';
+      newErrors.pin = t('auth.pinOnlyNumbers');
       valid = false;
     } else if (pin.length < 6) {
-      newErrors.pin = 'PIN must be at least 6 digits';
+      newErrors.pin = t('auth.pinMinLength');
       valid = false;
     }
 
@@ -575,7 +577,7 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
       const prev = await loadSettings();
       await saveSettings({ ...prev, savePasswordEncrypted: rememberPassword });
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Sign-in isn't available right now.";
+      const message = error instanceof Error ? error.message : t('auth.signInUnavailable');
       setAuthError(message);
       triggerShake();
     } finally {
@@ -597,7 +599,7 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
     try {
       await loginWithGoogle();
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Google sign-in failed. Please try again.";
+      const message = error instanceof Error ? error.message : t('auth.googleSignInFailed');
       setAuthError(message);
       triggerShake();
     } finally {
@@ -611,7 +613,7 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
     try {
       const biometricEmail = await loadBiometricEmail();
       if (!biometricEmail) {
-        setAuthError('Biometric not configured. Please use password instead.');
+        setAuthError(t('auth.biometricNotConfigured'));
         setIsLoading(false);
         return;
       }
@@ -620,7 +622,7 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
       setUsername(biometricEmail.split('@')[0]);
       setIsLoading(false);
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Biometric login failed. Please try again.";
+      const message = error instanceof Error ? error.message : t('auth.biometricLoginFailed');
       setAuthError(message);
       triggerShake();
       setIsLoading(false);
@@ -796,7 +798,7 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
                 MyKit
               </Text>
               <Text style={[styles.logoSubtitle, { color: theme.textSecondary }]}>
-                SECURE ACCESS
+                {t('auth.secureAccess')}
               </Text>
             </View>
             {!isCompact && <View style={[styles.logoDivider, { backgroundColor: theme.secondary, opacity: 0.1 }]} />}
@@ -838,7 +840,7 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
                           {biometricStatus.label}
                         </Text>
                         <Text style={[styles.biometricButtonSubtitle, { color: theme.textSecondary }]}>
-                          Quick unlock
+                          {t('auth.quickUnlock')}
                         </Text>
                       </View>
                       <Ionicons name="chevron-forward" size={20} color={theme.secondary} />
@@ -850,9 +852,9 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
             )}
 
             <Animated.View entering={FadeInDown.delay(400).duration(500)} style={styles.field}>
-              <Text style={[styles.label, { color: theme.secondary }]}>USERNAME OR EMAIL</Text>
+              <Text style={[styles.label, { color: theme.secondary }]}>{t('auth.usernameOrEmail')}</Text>
               <TextInput
-                accessibilityLabel="Username or email"
+                accessibilityLabel={t('auth.usernameOrEmail')}
                 accessibilityHint={errors.username ? errors.username : undefined}
                 style={[
                   styles.input,
@@ -892,10 +894,10 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
               ) : null}
               {username ? (
                 <Animated.View entering={FadeIn.duration(200)} style={styles.helperRow}>
-                  <Text style={[styles.helper, { color: theme.textSecondary }]}>Login id: <Text style={styles.helperStrong}>{normalizedUsername}</Text></Text>
+                  <Text style={[styles.helper, { color: theme.textSecondary }]}>{t('auth.loginId')} <Text style={styles.helperStrong}>{normalizedUsername}</Text></Text>
                   <Pressable
                     accessibilityRole="button"
-                    accessibilityLabel="Copy login id"
+                    accessibilityLabel={t('auth.copyLoginId')}
                     onPress={handleCopyLoginId}
                     style={styles.miniCopyBtn}
                   >
@@ -906,11 +908,11 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
             </Animated.View>
 
             <Animated.View entering={FadeInDown.delay(500).duration(500)} style={styles.field}>
-              <Text style={[styles.label, { color: theme.secondary }]}>PASSWORD</Text>
+              <Text style={[styles.label, { color: theme.secondary }]}>{t('auth.password')}</Text>
               <View style={styles.passwordWrapper}>
                 <TextInput
                   ref={pinInputRef}
-                  accessibilityLabel="Password"
+                  accessibilityLabel={t('auth.password')}
                   accessibilityHint={errors.pin ? errors.pin : undefined}
                   style={[
                     styles.input,
@@ -946,7 +948,7 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
                 />
                 <Pressable
                   accessibilityRole="button"
-                  accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
+                  accessibilityLabel={showPassword ? t('auth.hidePassword') : t('auth.showPassword')}
                   accessibilityState={{ selected: showPassword }}
                   onPress={() => setShowPassword(!showPassword)}
                   style={styles.eyeIcon}
@@ -963,7 +965,7 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
                   <Text style={[styles.error, { color: theme.error }]}>{errors.pin}</Text>
                 </Animated.View>
               ) : null}
-              <Text style={[styles.note, { color: theme.textSecondary }]}>Use your workspace password.</Text>
+              <Text style={[styles.note, { color: theme.textSecondary }]}>{t('auth.useWorkspacePassword')}</Text>
             </Animated.View>
 
             <Animated.View entering={FadeInDown.delay(600).duration(500)} style={styles.rememberRow}>
@@ -975,7 +977,7 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
                   thumbColor={rememberPassword ? theme.secondary : '#f4f3f4'}
                   ios_backgroundColor={theme.border}
                 />
-                <Text style={[styles.rememberText, { color: theme.textSecondary }]}>Remember session</Text>
+                <Text style={[styles.rememberText, { color: theme.textSecondary }]}>{t('auth.rememberSession')}</Text>
               </Pressable>
             </Animated.View>
 
@@ -1007,7 +1009,7 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
             <Animated.View entering={FadeInDown.delay(800).duration(500)} style={styles.socialButtonRow}>
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel="Continue with Google"
+                accessibilityLabel={t('auth.continueWithGoogle')}
                 accessibilityState={{ disabled: isLoading || !firebase.enabled }}
                 style={[styles.googleButton, { borderColor: theme.secondary, backgroundColor: isWeb ? theme.surface : 'transparent' }]}
                 onPress={handleGoogleLogin}
@@ -1017,7 +1019,7 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
                   <View style={[styles.googleButtonInner, { opacity: pressed ? 0.7 : 1 }]}>
                     <Ionicons name="logo-google" size={isWeb ? 18 : 20} color={theme.secondary} />
                     {isWeb && (
-                      <Text style={[styles.googleButtonText, { color: theme.secondary }]}>Continue with Google</Text>
+                      <Text style={[styles.googleButtonText, { color: theme.secondary }]}>{t('auth.continueWithGoogle')}</Text>
                     )}
                   </View>
                 )}
@@ -1026,7 +1028,7 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
 
             {/* Tooltip Copied */}
             <Animated.View style={[styles.tooltip, { backgroundColor: theme.secondary }, tooltipStyle, { pointerEvents: 'none' }]}>
-              <Text style={[styles.tooltipText, { color: theme.primary }]}>COPIED!</Text>
+              <Text style={[styles.tooltipText, { color: theme.primary }]}>{t('auth.copied')}</Text>
             </Animated.View>
 
             {authError ? (
@@ -1049,29 +1051,29 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
               <Text style={[styles.statusText, { color: theme.textSecondary }]}>
                 {!firebase.enabled
                   ? (firebase.missingRequiredEnv.length
-                    ? `Firebase not configured in this deploy. Missing: ${firebase.missingRequiredEnv.join(', ')}`
-                    : 'Firebase not configured in this deploy.')
+                    ? t('auth.firebaseNotConfiguredMissing', { missing: firebase.missingRequiredEnv.join(', ') })
+                    : t('auth.firebaseNotConfigured'))
                   : connectionState === 'connected'
-                    ? 'Firebase ready'
-                    : 'Connectivity check limited (login may still work)'}
+                    ? t('auth.firebaseReady')
+                    : t('auth.connectivityLimited')}
               </Text>
             </View>
 
             <View style={styles.links}>
-              <Pressable accessibilityRole="button" accessibilityLabel="Create account" onPress={onSwitchToRegister} style={styles.linkAction}>
-                <Text style={[styles.link, { color: theme.secondary }]}>Create account</Text>
+              <Pressable accessibilityRole="button" accessibilityLabel={t('auth.createAccount')} onPress={onSwitchToRegister} style={styles.linkAction}>
+                <Text style={[styles.link, { color: theme.secondary }]}>{t('auth.createAccount')}</Text>
               </Pressable>
               <Text style={[styles.linkDivider, { color: theme.textSecondary }]}>|</Text>
-              <Pressable accessibilityRole="button" accessibilityLabel="Forgot password" onPress={onSwitchToForgot} style={styles.linkAction}>
-                <Text style={[styles.link, { color: theme.textSecondary }]}>Forgot password</Text>
+              <Pressable accessibilityRole="button" accessibilityLabel={t('auth.forgotPassword')} onPress={onSwitchToForgot} style={styles.linkAction}>
+                <Text style={[styles.link, { color: theme.textSecondary }]}>{t('auth.forgotPassword')}</Text>
               </Pressable>
               <Text style={[styles.linkDivider, { color: theme.textSecondary }]}>|</Text>
-              <Pressable accessibilityRole="button" accessibilityLabel="Passwordless login" onPress={() => setShowMagicLink(true)} style={styles.linkAction}>
-                <Text style={[styles.link, { color: theme.textSecondary }]}>Passwordless login</Text>
+              <Pressable accessibilityRole="button" accessibilityLabel={t('auth.passwordlessLogin')} onPress={() => setShowMagicLink(true)} style={styles.linkAction}>
+                <Text style={[styles.link, { color: theme.textSecondary }]}>{t('auth.passwordlessLogin')}</Text>
               </Pressable>
               <Text style={[styles.linkDivider, { color: theme.textSecondary }]}>|</Text>
-              <Pressable accessibilityRole="button" accessibilityLabel="Guest access" onPress={handleGuestAccess} style={styles.linkAction}>
-                <Text style={[styles.link, { color: theme.textSecondary }]}>Guest access</Text>
+              <Pressable accessibilityRole="button" accessibilityLabel={t('auth.guestAccess')} onPress={handleGuestAccess} style={styles.linkAction}>
+                <Text style={[styles.link, { color: theme.textSecondary }]}>{t('auth.guestAccess')}</Text>
               </Pressable>
             </View>
           </Animated.View>
@@ -1081,7 +1083,7 @@ export default function LoginForm({ onSwitchToRegister, onSwitchToForgot }: Logi
               <Animated.View style={[styles.footerLine, { backgroundColor: theme.border }, footerLinePulse]} />
               <Animated.View style={[styles.footerSignalDot, { backgroundColor: theme.secondary }, footerDotPulse]} />
             </View>
-            <Text style={[styles.version, { color: theme.textSecondary }]}>secure login channel</Text>
+            <Text style={[styles.version, { color: theme.textSecondary }]}>{t('auth.secureLoginChannel')}</Text>
           </Animated.View>
         </Animated.View>
       </ScrollView>

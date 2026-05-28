@@ -40,7 +40,12 @@
       "Bash(firebase database:get \"/.settings/rules\" --instance lectorqr-45291-default-rtdb --project lectorqr-45291)",
       "Bash(gcloud auth *)",
       "Bash(curl -s https://lectorqr-45291-default-rtdb.europe-west1.firebasedatabase.app/.settings/rules.json -H 'Authorization: Bearer __TRACKED_VAR__')",
-      "Bash(grep -iE \"\\\\.log$|debug|\\\\.tmp|\\\\.bak|Thumbs.db|\\\\.DS_Store|npm-debug|firebase-debug\")"
+      "Bash(grep -iE \"\\\\.log$|debug|\\\\.tmp|\\\\.bak|Thumbs.db|\\\\.DS_Store|npm-debug|firebase-debug\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" -L \"https://cdn.jsdelivr.net/npm/tesseract.js@7.0.0/dist/worker.min.js\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" -L \"https://cdn.jsdelivr.net/npm/tesseract.js-core@7.0.0/tesseract-core-simd.wasm.js\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" -L \"https://cdn.jsdelivr.net/npm/@tesseract.js-data/eng/4.0.0/eng.traineddata.gz\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" -L \"https://unpkg.com/tesseract.js@7.0.0/dist/worker.min.js\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" -L \"https://unpkg.com/tesseract.js-core@7.0.0/tesseract-core-simd.wasm.js\")"
     ],
     "additionalDirectories": [
       "c:\\Users\\X1\\Downloads\\scan\\scan\\.claude",

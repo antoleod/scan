@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Animated, Pressable, ScrollView, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
@@ -14,6 +14,7 @@ import { pickFile } from '../transfer/filePicker';
 import { isWebRtcSupported } from '../webrtc';
 import { TTL_PRESETS, TTL_PRESET_LABEL, DEFAULT_TTL } from '../constants';
 import { diag } from '../../../core/diagnostics';
+import { onFirebaseAuthState } from '../../../core/firebase';
 import type { SelectedFile, SessionTtlPreset } from '../types';
 
 /**
@@ -33,8 +34,24 @@ export function SendScreen({ palette }: { palette: Palette }) {
   const [picking, setPicking] = useState(false);
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [signedIn, setSignedIn] = useState(false);
   const session = useSession(sessionId);
   const transfer = useTransfer(sessionId);
+
+  useEffect(() => {
+    let mounted = true;
+    let unsubscribe: (() => void) | null = null;
+    void onFirebaseAuthState((user) => {
+      if (mounted) setSignedIn(Boolean(user));
+    }).then((off) => {
+      if (!mounted) off();
+      else unsubscribe = off;
+    });
+    return () => {
+      mounted = false;
+      unsubscribe?.();
+    };
+  }, []);
 
   const choose = async () => {
     setPicking(true);
@@ -131,6 +148,12 @@ export function SendScreen({ palette }: { palette: Palette }) {
               On the other device, open AirDrop → Receive and scan this code. The file is offered
               only after it connects.
             </Text>
+            {signedIn ? (
+              <Text style={{ color: palette.muted, fontSize: 12, textAlign: 'center', maxWidth: 320, lineHeight: 17 }}>
+                Devices signed into this account will also show this file in Your devices with a Download button.
+                Keep this screen open until the transfer finishes.
+              </Text>
+            ) : null}
           </View>
         ) : (
           <AirdropCard palette={palette}>

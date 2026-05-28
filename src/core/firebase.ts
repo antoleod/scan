@@ -46,6 +46,7 @@ import { loadSettings } from './settings';
 import { ScanRecord } from '../types';
 import type { NoteItem, NoteTemplate } from './notes';
 import { diag } from './diagnostics';
+import { stripUndefinedDeep } from './firestoreSanitize';
 import { loadDeletedNoteKeys, noteStorageKey } from './noteDeletions';
 import { loadDeletedHistoryKeys, markDeletedHistoryKey } from './historyDeletions';
 
@@ -405,9 +406,11 @@ export async function upsertUserPrivateProfile(
 ): Promise<void> {
   const rt = await initFirebaseRuntime();
   if (!rt.enabled || !rt.db) return;
+  // `profile` is a Partial<…>; any field may be undefined. Strip before writing
+  // so Firestore doesn't reject the document. serverTimestamp() added after.
   await setDoc(
     doc(rt.db, 'users', uid, 'private', 'profile'),
-    { ...profile, updatedAt: serverTimestamp() },
+    { ...stripUndefinedDeep(profile), updatedAt: serverTimestamp() },
     { merge: true },
   );
 }
@@ -547,7 +550,10 @@ export async function syncScansWithFirebase(local: ScanRecord[]) {
       continue;
     }
     const docId = `${scan.profileId}_${scan.codeNormalized}_${new Date(scan.date).getTime()}`.replace(/[^A-Za-z0-9_-]/g, '_');
-    await setDoc(doc(scansRef, docId), { ...scan, uid, updatedAt: serverTimestamp() }, { merge: true });
+    // ScanRecord has many optional fields (codeValue, label, ticketNumber, …);
+    // strip undefined so Firestore doesn't reject the write (same class of bug
+    // that broke note sync). serverTimestamp() is added after stripping.
+    await setDoc(doc(scansRef, docId), { ...stripUndefinedDeep(scan), uid, updatedAt: serverTimestamp() }, { merge: true });
     pushed += 1;
   }
 
@@ -757,7 +763,11 @@ function sanitizeNoteForFirestore(note: NoteItem): Record<string, unknown> {
   if (note.draft !== undefined) payload.draft = note.draft;
   // syncStatus is intentionally excluded — it is local UI state, not server data.
   // Writing it to Firestore would conflict with the server-side merge logic.
-  return payload;
+  //
+  // Final guard: recursively drop any remaining `undefined` (e.g. nested
+  // workflowMetadata.doseText / medications[]) so Firestore never rejects the
+  // write. Callers add serverTimestamp()/uid afterwards, so those are safe.
+  return stripUndefinedDeep(payload);
 }
 
 export async function upsertNoteInFirebase(note: NoteItem): Promise<void> {

@@ -593,6 +593,7 @@ function NoteCardBase({
                 shoppingModel={shoppingModel}
                 preview={preview}
                 palette={palette}
+                shoppingLanguage={settings.shoppingListLanguage}
                 onRawTextChange={onChangeEditingText}
                 onPressOffice={onPressOffice}
                 onCopyValue={onCopyValue}
@@ -634,6 +635,7 @@ function NoteCardBase({
                 shoppingModel={shoppingModel}
                 preview={preview}
                 palette={palette}
+                shoppingLanguage={settings.shoppingListLanguage}
                 onRawTextChange={onChangeEditingText}
                 onPressOffice={onPressOffice}
                 onCopyValue={onCopyValue}

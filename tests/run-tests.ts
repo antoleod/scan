@@ -8,6 +8,11 @@ import { historyKey } from "../src/core/history";
 import { defaultSettings, piLogic } from "../src/core/settings";
 import { detectGroceryItem, formatShoppingList, isLikelyShoppingList, searchGroceryCatalog } from "../src/utils/groceryDetection";
 import { analyzeShoppingListCandidate, isShoppingList, parseShoppingList } from "../src/core/shoppingList";
+import { parseShoppingListV2 } from "../src/core/shoppingListV2";
+import enLocale from "../src/i18n/locales/en";
+import esLocale from "../src/i18n/locales/es";
+import frLocale from "../src/i18n/locales/fr";
+import nlLocale from "../src/i18n/locales/nl";
 import { findProductAlias, getAllShoppingDictionaries, isConnector, isKnownUnit, isNarrativeBlocker } from "../src/core/shoppingDictionary";
 import { detectSmartTypeFromContent } from "../src/core/smartNoteWorkflows";
 import { detectSmartNoteLabel } from "../src/core/noteIntelligence";
@@ -15,6 +20,7 @@ import { createTrieFromWords } from "../src/utils/trie";
 import { AppError, AuthError, SyncError, ValidationError, toAppError, isRetryable } from "../src/core/errors";
 import { sanitizeScanInput, sanitizeNoteText, sanitizeTemplatePattern } from "../src/core/validation";
 import { computeNotesChecksum } from "../src/core/syncChecksum";
+import { stripUndefinedDeep } from "../src/core/firestoreSanitize";
 import {
   applyMarkTaken,
   applySnooze,
@@ -264,6 +270,41 @@ run("shopping formatter preserves accents and user quantities", () => {
 run("health keywords prevent shopping list misclassification", () => {
   const medicationNote = "Took ibuprofen 400mg for headache, doctor recommended rest";
   assert.equal(isShoppingList(medicationNote), false);
+});
+
+run("i18n locales all expose the same key set as the canonical English resource", () => {
+  const flatten = (obj: Record<string, unknown>, prefix = ""): string[] =>
+    Object.entries(obj).flatMap(([key, value]) => {
+      const path = prefix ? `${prefix}.${key}` : key;
+      return value && typeof value === "object"
+        ? flatten(value as Record<string, unknown>, path)
+        : [path];
+    });
+
+  const enKeys = flatten(enLocale as unknown as Record<string, unknown>).sort();
+  for (const [name, locale] of [["es", esLocale], ["fr", frLocale], ["nl", nlLocale]] as const) {
+    const keys = flatten(locale as unknown as Record<string, unknown>).sort();
+    const missing = enKeys.filter((k) => !keys.includes(k));
+    const extra = keys.filter((k) => !enKeys.includes(k));
+    assert.deepEqual(missing, [], `${name} is missing keys: ${missing.join(", ")}`);
+    assert.deepEqual(extra, [], `${name} has unexpected keys: ${extra.join(", ")}`);
+  }
+});
+
+run("parseShoppingListV2 keeps the user's words instead of translating to the catalog", () => {
+  const input = "pommes\nlait\npain";
+  // Even with the default English catalog, the typed French words must survive.
+  const en = parseShoppingListV2(input, "en");
+  const enNames = en.items.map((item) => item.name.toLowerCase());
+  assert.ok(enNames.includes("pommes"), `expected "pommes" preserved, got ${JSON.stringify(enNames)}`);
+  assert.ok(!enNames.includes("apples"), "must NOT rewrite pommes -> apples");
+
+  // With the French catalog the words are still preserved and categorized.
+  const fr = parseShoppingListV2(input, "fr");
+  const apple = fr.items.find((item) => item.catalogId === "apple");
+  assert.ok(apple, "apple should be matched in the catalog");
+  assert.equal(apple!.name.toLowerCase(), "pommes");
+  assert.equal(apple!.category, "fruits");
 });
 
 run("health keywords in Spanish prevent shopping list misclassification", () => {
@@ -762,6 +803,48 @@ run("Note payload should include required fields for Firebase", () => {
   assert.equal(typeof payload.workflowMetadata, "string");
   assert.equal(payload.isSecret, true);
   assert.equal(payload.draft, false);
+});
+
+run("stripUndefinedDeep removes nested undefined (workflowMetadata.doseText) — the Firestore sync bug", () => {
+  // Mirrors the production failure: a medication note whose workflowMetadata
+  // (and nested medications[]) carry undefined optional fields. Firestore
+  // rejected these with "Unsupported field value: undefined".
+  const payload = {
+    id: "note-1",
+    text: "took ibuprofen",
+    workflowMetadata: {
+      medicationName: "ibuprofen",
+      doseText: undefined,
+      followUpAt: undefined,
+      medications: [
+        { name: "ibuprofen", dose: "400mg", takenAt: 123, snoozedUntil: undefined },
+      ],
+    },
+    deletedAt: undefined,
+  };
+
+  const clean = stripUndefinedDeep(payload) as any;
+
+  // No undefined anywhere in the output (top-level or nested).
+  assert.ok(!("deletedAt" in clean), "top-level undefined should be dropped");
+  assert.ok(!("doseText" in clean.workflowMetadata), "nested undefined should be dropped");
+  assert.ok(!("followUpAt" in clean.workflowMetadata), "nested undefined should be dropped");
+  assert.ok(!("snoozedUntil" in clean.workflowMetadata.medications[0]), "undefined inside array element should be dropped");
+
+  // Real values (including falsy ones) survive.
+  assert.equal(clean.id, "note-1");
+  assert.equal(clean.workflowMetadata.medicationName, "ibuprofen");
+  assert.equal(clean.workflowMetadata.medications[0].dose, "400mg");
+  assert.equal(clean.workflowMetadata.medications[0].takenAt, 123);
+});
+
+run("stripUndefinedDeep preserves null and falsy values", () => {
+  const clean = stripUndefinedDeep({ a: null, b: 0, c: false, d: "", e: undefined }) as any;
+  assert.equal(clean.a, null);
+  assert.equal(clean.b, 0);
+  assert.equal(clean.c, false);
+  assert.equal(clean.d, "");
+  assert.ok(!("e" in clean));
 });
 
 run("airdrop QR encodes a deep-link URL that roundtrips", () => {

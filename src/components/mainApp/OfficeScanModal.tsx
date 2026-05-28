@@ -3,6 +3,7 @@ import { Modal, Pressable, Text, View } from 'react-native';
 import { CameraView } from 'expo-camera';
 import type { BarcodeType } from 'expo-camera';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 
 import { mainAppStyles } from './styles';
 
@@ -32,6 +33,7 @@ export function OfficeScanModal({
   onClose: () => void;
   onDetected: (value: string) => void;
 }) {
+  const { t } = useTranslation();
   const lockedRef = useRef(false);
 
   useEffect(() => {
@@ -46,9 +48,9 @@ export function OfficeScanModal({
         <Pressable style={[mainAppStyles.officeScanModal, { backgroundColor: palette.card, borderColor: palette.border }]} onPress={() => null}>
           <View style={mainAppStyles.modalHeader}>
             <View style={{ flex: 1 }}>
-              <Text style={[mainAppStyles.sectionTitle, { color: palette.fg }]}>Scan office</Text>
+              <Text style={[mainAppStyles.sectionTitle, { color: palette.fg }]}>{t('scan.scanOffice')}</Text>
               <Text style={{ color: palette.muted, fontSize: 12, marginTop: 4 }}>
-                Point the camera at the office barcode or code.
+                {t('scan.officePointCamera')}
               </Text>
             </View>
             <Pressable style={[mainAppStyles.modalCloseBtn, { borderColor: palette.border }]} onPress={onClose}>
@@ -58,11 +60,11 @@ export function OfficeScanModal({
 
           {!cameraPermissionGranted ? (
             <View style={[mainAppStyles.officeScanEmpty, { borderColor: palette.border }]}>
-              <Text style={{ color: palette.fg, fontWeight: '700', textAlign: 'center' }}>Camera permission required</Text>
+              <Text style={{ color: palette.fg, fontWeight: '700', textAlign: 'center' }}>{t('scan.cameraPermissionRequired')}</Text>
               <Pressable style={[mainAppStyles.btn, { marginTop: 12, backgroundColor: palette.accent }]} onPress={requestCameraPermission}>
                 <View style={mainAppStyles.btnContent}>
                   <Ionicons name="camera-outline" size={18} color="#fff" />
-                  <Text style={mainAppStyles.btnText}>Allow camera</Text>
+                  <Text style={mainAppStyles.btnText}>{t('scan.allowCamera')}</Text>
                 </View>
               </Pressable>
             </View>
@@ -85,7 +87,7 @@ export function OfficeScanModal({
               <View style={mainAppStyles.officeScanOverlay} pointerEvents="none">
                 <View style={mainAppStyles.officeScanFrame} />
                 <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700', marginTop: 10, textAlign: 'center' }}>
-                  Scan the office barcode
+                  {t('scan.officeScanBarcode')}
                 </Text>
               </View>
             </View>
@@ -93,10 +95,10 @@ export function OfficeScanModal({
 
           <View style={mainAppStyles.officeScanFooter}>
             <Text style={{ color: palette.muted, fontSize: 11, flex: 1 }}>
-              The scanned value will be saved into the office field.
+              {t('scan.officeSavedHint')}
             </Text>
             <Pressable style={[mainAppStyles.smallBtn, { borderColor: palette.border }]} onPress={onClose}>
-              <Text style={{ color: palette.fg, fontWeight: '700' }}>Cancel</Text>
+              <Text style={{ color: palette.fg, fontWeight: '700' }}>{t('scan.cancel')}</Text>
             </Pressable>
           </View>
         </Pressable>

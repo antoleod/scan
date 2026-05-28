@@ -1,6 +1,7 @@
 import React from 'react';
 import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 
 import { mainAppStyles } from './styles';
 
@@ -50,6 +51,7 @@ export function HistoryItemModal({
   onScanOffice?: () => void;
   onSave: () => void;
 }) {
+  const { t } = useTranslation();
   const [notesHeight, setNotesHeight] = React.useState(84);
   const isAdd = mode === 'add';
   const handleSaveShortcut = (event: unknown) => {
@@ -74,10 +76,10 @@ export function HistoryItemModal({
             <View style={mainAppStyles.modalHeader}>
               <View style={{ flex: 1 }}>
                 <Text style={[mainAppStyles.sectionTitle, { color: palette.fg }]}>
-                  {isAdd ? 'Add Item' : 'Edit Item'}
+                  {isAdd ? t('history.addItem') : t('history.editItem')}
                 </Text>
                 <Text style={{ color: palette.muted, fontSize: 12, marginTop: 4 }}>
-                  {isAdd ? 'Save a manual history entry.' : 'Update the selected history item.'}
+                  {isAdd ? t('history.addItemSubtitle') : t('history.editItemSubtitle')}
                 </Text>
               </View>
               <Pressable style={[mainAppStyles.modalCloseBtn, { borderColor: palette.border }]} onPress={onClose}>
@@ -92,11 +94,11 @@ export function HistoryItemModal({
               contentContainerStyle={{ gap: 12, paddingBottom: 16 }}
             >
               <View style={mainAppStyles.formSection}>
-                <Text style={[mainAppStyles.formLabel, { color: palette.fg }]}>Ticket</Text>
+                <Text style={[mainAppStyles.formLabel, { color: palette.fg }]}>{t('history.ticket')}</Text>
                 <TextInput
                   value={ticketNumber}
                   onChangeText={onChangeTicket}
-                  placeholder="INC..., RITM..., REQ..., SCTASK..."
+                  placeholder={t('history.ticketPlaceholder')}
                   placeholderTextColor={palette.muted}
                   autoCapitalize="characters"
                   autoCorrect={false}
@@ -110,11 +112,11 @@ export function HistoryItemModal({
               </View>
 
               <View style={mainAppStyles.formSection}>
-                <Text style={[mainAppStyles.formLabel, { color: palette.fg }]}>User</Text>
+                <Text style={[mainAppStyles.formLabel, { color: palette.fg }]}>{t('history.user')}</Text>
                 <TextInput
                   value={customLabel}
                   onChangeText={onChangeLabel}
-                  placeholder="Requested for / user"
+                  placeholder={t('history.userPlaceholder')}
                   placeholderTextColor={palette.muted}
                   autoCapitalize="words"
                   autoCorrect={false}
@@ -132,7 +134,7 @@ export function HistoryItemModal({
                 <TextInput
                   value={value}
                   onChangeText={onChangeValue}
-                  placeholder="Paste PI code (example: 02PI20...)"
+                  placeholder={t('history.piPlaceholder')}
                   placeholderTextColor={palette.muted}
                   autoCapitalize="characters"
                   autoCorrect={false}
@@ -147,17 +149,17 @@ export function HistoryItemModal({
 
               <View style={mainAppStyles.formSection}>
                 <View style={mainAppStyles.modalHeader}>
-                  <Text style={[mainAppStyles.formLabel, { color: palette.fg, marginBottom: 0 }]}>Office</Text>
+                  <Text style={[mainAppStyles.formLabel, { color: palette.fg, marginBottom: 0 }]}>{t('history.office')}</Text>
                   {onScanOffice ? (
                     <Pressable onPress={onScanOffice} hitSlop={8}>
-                      <Text style={{ color: palette.accent, fontSize: 12, fontWeight: '700' }}>Scan office</Text>
+                      <Text style={{ color: palette.accent, fontSize: 12, fontWeight: '700' }}>{t('history.scanOffice')}</Text>
                     </Pressable>
                   ) : null}
                 </View>
                 <TextInput
                   value={officeCode}
                   onChangeText={onChangeOffice}
-                  placeholder="Office barcode or code"
+                  placeholder={t('history.officePlaceholder')}
                   placeholderTextColor={palette.muted}
                   autoCapitalize="characters"
                   autoCorrect={false}
@@ -171,11 +173,11 @@ export function HistoryItemModal({
               </View>
 
               <View style={mainAppStyles.formSection}>
-                <Text style={[mainAppStyles.formLabel, { color: palette.fg }]}>Notes</Text>
+                <Text style={[mainAppStyles.formLabel, { color: palette.fg }]}>{t('history.notes')}</Text>
                 <TextInput
                   value={notes}
                   onChangeText={onChangeNotes}
-                  placeholder="Optional notes"
+                  placeholder={t('history.notesPlaceholder')}
                   placeholderTextColor={palette.muted}
                   autoCapitalize="sentences"
                   autoCorrect
@@ -195,7 +197,7 @@ export function HistoryItemModal({
 
             <View style={[mainAppStyles.pickerFooterPinned, { borderTopColor: palette.border, paddingBottom: 10 }]}>
               <Text style={{ color: palette.muted, fontSize: 11, lineHeight: 15, flex: 1, minWidth: '100%' }}>
-                {isAdd ? 'Save to add a compact history entry.' : 'Save changes to update this item.'}
+                {isAdd ? t('history.addFooterHint') : t('history.editFooterHint')}
               </Text>
               <Pressable
                 style={[
@@ -208,7 +210,7 @@ export function HistoryItemModal({
               >
                 <View style={mainAppStyles.inlineAction}>
                   <Ionicons name="save-outline" size={16} color={palette.fg} />
-                  <Text style={{ color: palette.fg }}>Save</Text>
+                  <Text style={{ color: palette.fg }}>{t('history.save')}</Text>
                 </View>
               </Pressable>
             </View>

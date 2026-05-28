@@ -164,6 +164,8 @@ injectIfMissing(`<meta name="mobile-web-app-capable" content="yes">`,           
 // ── 8b. Content Security Policy ────────────────────────────────────────────────
 //    Mitigates XSS, clickjacking, and other injection attacks.
 //    - script-src 'wasm-unsafe-eval' required for tesseract.js (WebAssembly)
+//    - cdn.jsdelivr.net + unpkg.com required for tesseract.js worker + core scripts
+//    - tessdata.projectnaptha.com required for OCR language traineddata (eng/spa/fra/nld)
 //    - style-src 'unsafe-inline' for Expo-generated dynamic styles
 //    - blob: for camera/canvas blob URLs and Reanimated worklets
 //    - Firebase Auth may load Google-hosted helper scripts
@@ -171,7 +173,7 @@ injectIfMissing(`<meta name="mobile-web-app-capable" content="yes">`,           
 //    Note: frame-ancestors is ignored in <meta> CSP. It must be delivered as
 //    an HTTP header by the hosting layer, so it is intentionally omitted here.
 replaceOrInject('http-equiv="Content-Security-Policy"',
-  `<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://www.gstatic.com https://apis.google.com https://www.google.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https: blob:; font-src 'self' data:; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://*.firebasedatabase.app https://*.firebase.google.com wss://*.firebaseio.com wss://*.firebasedatabase.app; frame-src 'self' https://*.firebaseapp.com https://*.web.app https://accounts.google.com; worker-src 'self' blob:;">`
+  `<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://www.gstatic.com https://apis.google.com https://www.google.com https://cdn.jsdelivr.net https://unpkg.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https: blob:; font-src 'self' data:; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://*.firebasedatabase.app https://*.firebase.google.com wss://*.firebaseio.com wss://*.firebasedatabase.app https://cdn.jsdelivr.net https://unpkg.com https://tessdata.projectnaptha.com; frame-src 'self' https://*.firebaseapp.com https://*.web.app https://accounts.google.com; worker-src 'self' blob:;">`
 );
 
 // ── 9. Service worker registration ───────────────────────────────────────────
@@ -198,4 +200,6 @@ html = html.replace(/<script>\s*if\s*\('serviceWorker'[\s\S]*?<\/script>/g, '');
 replaceOrInject('src="' + basePath + '/sw-register.js"', `<script defer src="${basePath}/sw-register.js"></script>`);
 
 fs.writeFileSync(htmlPath, html, 'utf-8');
+fs.writeFileSync(path.join(distDir, '404.html'), html, 'utf-8');
 console.log(`[inject-pwa] Patched ${htmlPath} (base: "${basePath || '/'}")`);
+console.log('[inject-pwa] Generated 404.html SPA fallback for GitHub Pages');

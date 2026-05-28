@@ -14,6 +14,9 @@ import { clearPin, hasPin } from '../../../core/secretPin';
 import { diag, type LogEntry } from '../../../core/diagnostics';
 import { SecretPinModal } from '../../SecretPinModal';
 import { Toast, useToast } from '../../Toast';
+import { useTranslation } from 'react-i18next';
+import { setUiLanguage } from '../../../i18n';
+import { UI_LANGUAGES, UI_LANGUAGE_LABELS } from '../../../i18n/languages';
 
 const SECTION_STATE_KEY = '@MyKit_settings_sections_v1';
 
@@ -46,6 +49,8 @@ type SettingsSectionId =
   | 'barcode'
   | 'cleanup'
   | 'data-sync'
+  | 'health'
+  | 'maintenance'
   | 'diagnostics'
   | 'advanced';
 
@@ -53,7 +58,7 @@ const SECTION_SEARCH: Record<SettingsSectionId, string> = {
   password: 'password generator private note copy save key',
   theme: 'theme selector color palette custom accent dark light noir',
   scan: 'scan options auto detect open url ocr correction camera',
-  'notes-features': 'notes features smart type medication shopping reminder draft',
+  'notes-features': 'notes features smart type medication shopping reminder draft language app interface catalog french spanish dutch english idioma langue taal interface',
   'smart-notes': 'smart notes entity detection ip hostname office pi regex',
   security: 'security pin private notes vault lock',
   clipboard: 'clipboard cloud sync background capture paste',
@@ -62,6 +67,8 @@ const SECTION_SEARCH: Record<SettingsSectionId, string> = {
   barcode: 'barcode formats qr code128 code39 ean scan types',
   cleanup: 'auto cleanup retention notes history archive delete',
   'data-sync': 'data sync backup export import firebase cloud local clear hard delete',
+  health: 'health status runtime sync backup logs errors storage app state',
+  maintenance: 'maintenance mode repair check backup sync logs clear firebase',
   diagnostics: 'production logs diagnostics logger errors warn info copy export clear behavior buttons functions',
   advanced: 'advanced prefixes urls servicenow raw text stay signed laser profile',
 };
@@ -233,6 +240,7 @@ function SectionCard({
 }
 
 function ThemeCard({ option, active, onPress, desktop }: { option: ThemeOption; active: boolean; desktop: boolean; onPress: () => void }) {
+  const { t } = useTranslation();
   const [pulse, setPulse] = useState(0);
   useEffect(() => {
     if (!active) return;
@@ -250,7 +258,7 @@ function ThemeCard({ option, active, onPress, desktop }: { option: ThemeOption; 
     >
       <View style={[styles.themeSwatch, { backgroundColor: option.accent }]} />
       <Text style={[styles.themeCardText, { color: option.text }]}>{option.label}</Text>
-      {active ? <Text style={[styles.check, { color: option.accent }]}>ACTIVE</Text> : null}
+      {active ? <Text style={[styles.check, { color: option.accent }]}>{t('settings.active')}</Text> : null}
     </Pressable>
   );
 }
@@ -267,6 +275,7 @@ export function SettingsTab({
   onHardDeleteTemplates,
   onClearArchivedNotes,
   onClearUnpinnedNotes,
+  lastBackupAt,
   onExportBackup,
   onCopyLogs,
   onExportLogs,
@@ -293,6 +302,7 @@ export function SettingsTab({
   onHardDeleteTemplates: () => void;
   onClearArchivedNotes: () => void;
   onClearUnpinnedNotes: () => void;
+  lastBackupAt?: number | null;
   onExportBackup: () => void;
   onCopyLogs: () => void | Promise<void>;
   onExportLogs: () => void | Promise<void>;
@@ -312,6 +322,7 @@ export function SettingsTab({
   const { width } = useWindowDimensions();
   const isDesktop = width >= 1024;
   const { setThemeName } = useAppTheme();
+  const { t } = useTranslation();
   const { toast, show: showToast, hide: hideToast } = useToast();
   const [passPhrase, setPassPhrase] = useState('');
   const [passwordMode, setPasswordMode] = useState<'phrases' | 'seed'>('phrases');
@@ -338,6 +349,8 @@ export function SettingsTab({
   const [diagnosticLogs, setDiagnosticLogs] = useState<LogEntry[]>([]);
   const [diagnosticFilter, setDiagnosticFilter] = useState<'all' | LogEntry['level']>('all');
   const [settingsSearch, setSettingsSearch] = useState('');
+  const [maintenanceMode, setMaintenanceMode] = useState(false);
+  const [maintenanceSummary, setMaintenanceSummary] = useState<string | null>(null);
 
   const SECTION_IDS = useMemo<SettingsSectionId[]>(() => [
     'password',
@@ -352,6 +365,8 @@ export function SettingsTab({
     'barcode',
     'cleanup',
     'data-sync',
+    'health',
+    'maintenance',
     'diagnostics',
     'advanced',
   ], []);
@@ -405,6 +420,32 @@ export function SettingsTab({
       : diagnosticLogs.filter((entry) => entry.level === diagnosticFilter);
     return source.slice(-80).reverse();
   }, [diagnosticFilter, diagnosticLogs]);
+
+  const diagnosticErrorCount = useMemo(() => diagnosticLogs.filter((entry) => entry.level === 'error').length, [diagnosticLogs]);
+  const diagnosticWarnCount = useMemo(() => diagnosticLogs.filter((entry) => entry.level === 'warn').length, [diagnosticLogs]);
+  const lastBackupLabel = lastBackupAt ? new Date(lastBackupAt).toLocaleString() : 'No local backup recorded';
+  const healthItems = useMemo(() => [
+    { label: 'Runtime', value: Platform.OS === 'web' ? 'Web/PWA' : Platform.OS, tone: 'info' as const },
+    { label: 'Persistence', value: persistenceMode === 'firebase' ? 'Firebase' : 'Local', tone: persistenceMode === 'firebase' ? 'success' as const : 'muted' as const },
+    { label: 'Account', value: isGuest ? 'Guest' : 'Signed in', tone: isGuest ? 'warn' as const : 'success' as const },
+    { label: 'Sync', value: syncBusy ? 'Syncing' : 'Idle', tone: syncBusy ? 'info' as const : 'success' as const },
+    { label: 'Backup', value: lastBackupLabel, tone: lastBackupAt ? 'success' as const : 'warn' as const },
+    { label: 'Logs', value: `${diagnosticLogs.length} events / ${diagnosticErrorCount} errors`, tone: diagnosticErrorCount ? 'warn' as const : 'success' as const },
+    { label: 'Barcode types', value: `${visibleBarcodeTypes.length} active`, tone: visibleBarcodeTypes.length ? 'success' as const : 'warn' as const },
+  ], [diagnosticErrorCount, diagnosticLogs.length, isGuest, lastBackupAt, lastBackupLabel, persistenceMode, syncBusy, visibleBarcodeTypes.length]);
+
+  const runMaintenanceCheck = useCallback(() => {
+    const summary = [
+      `${diagnosticLogs.length} log event(s)`,
+      `${diagnosticWarnCount} warning(s)`,
+      `${diagnosticErrorCount} error(s)`,
+      `${visibleBarcodeTypes.length} barcode type(s)`,
+      lastBackupAt ? `backup ${new Date(lastBackupAt).toLocaleDateString()}` : 'backup missing',
+    ].join(' | ');
+    setMaintenanceSummary(summary);
+    void diag.info('settings.maintenance.check', { summary });
+    showToast('Maintenance check completed', diagnosticErrorCount ? 'info' : 'success');
+  }, [diagnosticErrorCount, diagnosticLogs.length, diagnosticWarnCount, lastBackupAt, showToast, visibleBarcodeTypes.length]);
 
   useEffect(() => {
     if (!normalizedSettingsSearch || matchedSectionIds.length !== 1) return;
@@ -728,9 +769,9 @@ export function SettingsTab({
       <ScrollView contentContainerStyle={styles.scrollOuter} showsVerticalScrollIndicator={false}>
         <View style={styles.container}>
         <View style={styles.header}>
-          <Text style={[styles.kicker, { color: activeAccent }]}>SETTINGS</Text>
-          <Text style={[styles.pageTitle, { color: palette.fg }]}>Configuration</Text>
-          <Text style={[styles.pageSubtitle, { color: palette.muted }]}>Centered and compact configuration workspace.</Text>
+          <Text style={[styles.kicker, { color: activeAccent }]}>{t('settings.headerTitle')}</Text>
+          <Text style={[styles.pageTitle, { color: palette.fg }]}>{t('settings.headerConfiguration')}</Text>
+          <Text style={[styles.pageSubtitle, { color: palette.muted }]}>{t('settings.headerSubtitle')}</Text>
         </View>
 
         <View style={[styles.toolbar, { backgroundColor: palette.card, borderColor: palette.border }]}>
@@ -746,18 +787,18 @@ export function SettingsTab({
             <Pressable
               onPress={() => setAllSectionsLogged(true)}
               style={({ pressed }) => [styles.toolbarBtn, { borderColor: palette.border, opacity: pressed ? 0.75 : 1 }]}
-              accessibilityLabel="Expand all sections"
+              accessibilityLabel={t('settings.expand')}
             >
               <Ionicons name="chevron-down" size={13} color={palette.fg} />
-              <Text style={[styles.toolbarBtnText, { color: palette.fg }]}>Expand</Text>
+              <Text style={[styles.toolbarBtnText, { color: palette.fg }]}>{t('settings.expand')}</Text>
             </Pressable>
             <Pressable
               onPress={() => setAllSectionsLogged(false)}
               style={({ pressed }) => [styles.toolbarBtn, { borderColor: palette.border, opacity: pressed ? 0.75 : 1 }]}
-              accessibilityLabel="Collapse all sections"
+              accessibilityLabel={t('settings.collapse')}
             >
               <Ionicons name="chevron-up" size={13} color={palette.fg} />
-              <Text style={[styles.toolbarBtnText, { color: palette.fg }]}>Collapse</Text>
+              <Text style={[styles.toolbarBtnText, { color: palette.fg }]}>{t('settings.collapse')}</Text>
             </Pressable>
           </View>
         </View>
@@ -767,18 +808,18 @@ export function SettingsTab({
           <TextInput
             value={settingsSearch}
             onChangeText={setSettingsSearch}
-            placeholder="Search settings, logs, OCR, Firebase..."
+            placeholder={t('settings.searchPlaceholder')}
             placeholderTextColor={palette.muted}
             autoCapitalize="none"
             autoCorrect={false}
-            accessibilityLabel="Search settings"
+            accessibilityLabel={t('settings.searchPlaceholder')}
             style={[styles.searchInput, { color: palette.fg }]}
           />
           {settingsSearch ? (
             <Pressable
               onPress={() => setSettingsSearch('')}
               accessibilityRole="button"
-              accessibilityLabel="Clear settings search"
+              accessibilityLabel={t('settings.searchPlaceholder')}
               hitSlop={8}
               style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}
             >
@@ -790,8 +831,8 @@ export function SettingsTab({
         {normalizedSettingsSearch && matchedSectionIds.length === 0 ? (
           <View style={[styles.emptySearch, { backgroundColor: palette.card, borderColor: palette.border }]}>
             <Ionicons name="search-outline" size={20} color={palette.muted} />
-            <Text style={{ color: palette.fg, fontSize: 13, fontWeight: '700' }}>No settings found</Text>
-            <Text style={{ color: palette.muted, fontSize: 11, textAlign: 'center' }}>Try logs, OCR, backup, Firebase, PIN or barcode.</Text>
+            <Text style={{ color: palette.fg, fontSize: 13, fontWeight: '700' }}>{t('settings.noSettingsFound')}</Text>
+            <Text style={{ color: palette.muted, fontSize: 11, textAlign: 'center' }}>{t('settings.noSettingsHint')}</Text>
           </View>
         ) : null}
 
@@ -799,8 +840,8 @@ export function SettingsTab({
           visible={matchesSection('password')}
           open={sectionOpen['password']}
           onToggle={() => toggleSettingsSection('password')}
-          title="Password generator"
-          subtitle="Generate, copy and save as private note."
+          title={t('settings.passwordGenTitle')}
+          subtitle={t('settings.passwordGenSubtitle')}
           icon="key-outline"
           accent={palette.accent}
           subtitleColor={palette.muted}
@@ -822,7 +863,7 @@ export function SettingsTab({
           </View>
           {passwordMode === 'phrases' ? (
             <View style={styles.controlStack}>
-              <Text style={[styles.controlLabel, { color: palette.muted }]}>Easy-to-remember phrase count (min 2)</Text>
+              <Text style={[styles.controlLabel, { color: palette.muted }]}>{t('settings.phraseCountLabel')}</Text>
               <View style={styles.counterRow}>
                 <Pressable onPress={() => setPhraseCount((current) => Math.max(2, current - 1))} style={[styles.counterBtn, { borderColor: palette.border }]}>
                   <Text style={[styles.counterBtnText, { color: palette.fg }]}>-</Text>
@@ -839,19 +880,19 @@ export function SettingsTab({
           ) : null}
           {passwordMode === 'seed' ? (
             <View style={styles.controlStack}>
-              <Text style={[styles.controlLabel, { color: palette.muted }]}>Base word to keep in the generated password</Text>
-              <Text style={[styles.helperLine, { color: palette.muted, marginTop: 0 }]}>Example: Welcome to W3lc0mexy2026</Text>
+              <Text style={[styles.controlLabel, { color: palette.muted }]}>{t('settings.baseWordLabel')}</Text>
+              <Text style={[styles.helperLine, { color: palette.muted, marginTop: 0 }]}>{t('settings.baseWordExample')}</Text>
               <TextInput
                 style={[styles.input, { borderColor: palette.border, color: palette.fg, backgroundColor: palette.card }]}
                 value={seedText}
                 onChangeText={setSeedText}
-                placeholder="Welcome"
+                placeholder={t('settings.baseWordPlaceholder')}
                 placeholderTextColor={palette.muted}
                 autoCapitalize="words"
               />
             </View>
           ) : null}
-          <Pressable onPress={generatePassword} style={[styles.bulkButton, { backgroundColor: activeAccent }]}><Text style={[styles.bulkButtonText, { color: '#111' }]}>Generate</Text></Pressable>
+          <Pressable onPress={generatePassword} style={[styles.bulkButton, { backgroundColor: activeAccent }]}><Text style={[styles.bulkButtonText, { color: '#111' }]}>{t('settings.generate')}</Text></Pressable>
           {passPhrase ? (
             <View style={[styles.passwordResult, { borderColor: palette.border, backgroundColor: palette.card }]}>
               <Text style={[styles.passwordResultText, { color: palette.fg }]} selectable>{passPhrase}</Text>
@@ -861,14 +902,14 @@ export function SettingsTab({
                   style={({ pressed }) => [styles.passwordActionBtn, { backgroundColor: activeAccent, opacity: pressed ? 0.8 : 1 }]}
                 >
                   <Ionicons name="copy-outline" size={14} color="#111" />
-                  <Text style={[styles.passwordActionText, { color: '#111' }]}>Copy</Text>
+                  <Text style={[styles.passwordActionText, { color: '#111' }]}>{t('settings.copy')}</Text>
                 </Pressable>
                 <Pressable
                   onPress={savePasswordAsPrivateNote}
                   style={({ pressed }) => [styles.passwordActionBtn, { backgroundColor: 'transparent', borderWidth: 1, borderColor: activeAccent, opacity: pressed ? 0.8 : 1 }]}
                 >
                   <Ionicons name="lock-closed-outline" size={14} color={activeAccent} />
-                  <Text style={[styles.passwordActionText, { color: activeAccent }]}>Save as private note</Text>
+                  <Text style={[styles.passwordActionText, { color: activeAccent }]}>{t('settings.saveAsPrivateNote')}</Text>
                 </Pressable>
               </View>
             </View>
@@ -879,8 +920,8 @@ export function SettingsTab({
           visible={matchesSection('theme')}
           open={sectionOpen['theme']}
           onToggle={() => toggleSettingsSection('theme')}
-          title="Theme selector"
-          subtitle="Animated active border."
+          title={t('settings.themeTitle')}
+          subtitle={t('settings.themeSubtitle')}
           icon="color-palette-outline"
           badge={themeOptions.find((t) => t.key === settings.theme)?.label.toUpperCase()}
           badgeTone="info"
@@ -911,25 +952,25 @@ export function SettingsTab({
           visible={matchesSection('scan')}
           open={sectionOpen['scan']}
           onToggle={() => toggleSettingsSection('scan')}
-          title="Scan options"
-          subtitle="Core behavior."
+          title={t('settings.scanOptionsTitle')}
+          subtitle={t('settings.scanOptionsSubtitle')}
           icon="scan-outline"
           accent={palette.accent}
           subtitleColor={palette.muted}
           cardBackground={palette.card}
           cardBorder={palette.border}
         >
-          <View style={styles.toggleRow}><Text style={[styles.toggleLabel, { color: palette.fg }]}>Auto detect</Text><Switch accessibilityLabel="Auto detect" value={settings.autoDetect} onValueChange={(value) => patchSettingsLogged({ autoDetect: value, scanProfile: value ? 'auto' : settings.scanProfile })} /></View>
-          <View style={styles.toggleRow}><Text style={[styles.toggleLabel, { color: palette.fg }]}>Open URL</Text><Switch accessibilityLabel="Open URL" value={settings.openUrls ?? true} onValueChange={(value) => patchSettingsLogged({ openUrls: value })} /></View>
-          <View style={styles.toggleRow}><Text style={[styles.toggleLabel, { color: palette.fg }]}>OCR correction</Text><Switch accessibilityLabel="OCR correction" value={settings.ocrCorrection} onValueChange={(value) => patchSettingsLogged({ ocrCorrection: value })} /></View>
+          <View style={styles.toggleRow}><Text style={[styles.toggleLabel, { color: palette.fg }]}>{t('settings.autoDetect')}</Text><Switch accessibilityLabel={t('settings.autoDetect')} value={settings.autoDetect} onValueChange={(value) => patchSettingsLogged({ autoDetect: value, scanProfile: value ? 'auto' : settings.scanProfile })} /></View>
+          <View style={styles.toggleRow}><Text style={[styles.toggleLabel, { color: palette.fg }]}>{t('settings.openUrl')}</Text><Switch accessibilityLabel={t('settings.openUrl')} value={settings.openUrls ?? true} onValueChange={(value) => patchSettingsLogged({ openUrls: value })} /></View>
+          <View style={styles.toggleRow}><Text style={[styles.toggleLabel, { color: palette.fg }]}>{t('settings.ocrCorrection')}</Text><Switch accessibilityLabel={t('settings.ocrCorrection')} value={settings.ocrCorrection} onValueChange={(value) => patchSettingsLogged({ ocrCorrection: value })} /></View>
         </SectionCard>
 
         <SectionCard
           visible={matchesSection('notes-features')}
           open={sectionOpen['notes-features']}
           onToggle={() => toggleSettingsSection('notes-features')}
-          title="Notes features"
-          subtitle="Toggle workflows available in the Notes tab."
+          title={t('settings.notesFeaturesTitle')}
+          subtitle={t('settings.notesFeaturesSubtitle')}
           icon="document-text-outline"
           badge={notesFeatures.autoDetectSmartType ? 'AUTO' : 'OFF'}
           badgeTone={notesFeatures.autoDetectSmartType ? 'success' : 'muted'}
@@ -939,17 +980,17 @@ export function SettingsTab({
           cardBorder={palette.border}
         >
           <View style={styles.toggleRow}>
-            <Text style={[styles.toggleLabel, { color: palette.fg }]}>Auto-detect smart workflows</Text>
+            <Text style={[styles.toggleLabel, { color: palette.fg }]}>{t('settings.autoDetectSmart')}</Text>
             <Switch
-              accessibilityLabel="Auto-detect smart workflows"
+              accessibilityLabel={t('settings.autoDetectSmart')}
               value={notesFeatures.autoDetectSmartType}
               onValueChange={(value) => patchNotesFeatures({ autoDetectSmartType: value })}
             />
           </View>
           <View style={styles.toggleRow}>
-            <Text style={[styles.toggleLabel, { color: notesFeatures.autoDetectSmartType ? palette.fg : palette.muted }]}>Detect medication</Text>
+            <Text style={[styles.toggleLabel, { color: notesFeatures.autoDetectSmartType ? palette.fg : palette.muted }]}>{t('settings.detectMedication')}</Text>
             <Switch
-              accessibilityLabel="Detect medication"
+              accessibilityLabel={t('settings.detectMedication')}
               accessibilityState={{ disabled: !notesFeatures.autoDetectSmartType }}
               disabled={!notesFeatures.autoDetectSmartType}
               value={notesFeatures.detectMedication}
@@ -957,19 +998,73 @@ export function SettingsTab({
             />
           </View>
           <View style={styles.toggleRow}>
-            <Text style={[styles.toggleLabel, { color: notesFeatures.autoDetectSmartType ? palette.fg : palette.muted }]}>Detect shopping list</Text>
+            <Text style={[styles.toggleLabel, { color: notesFeatures.autoDetectSmartType ? palette.fg : palette.muted }]}>{t('settings.detectShopping')}</Text>
             <Switch
-              accessibilityLabel="Detect shopping list"
+              accessibilityLabel={t('settings.detectShopping')}
               accessibilityState={{ disabled: !notesFeatures.autoDetectSmartType }}
               disabled={!notesFeatures.autoDetectSmartType}
               value={notesFeatures.detectShopping}
               onValueChange={(value) => patchNotesFeatures({ detectShopping: value })}
             />
           </View>
+
+          <Text style={[styles.controlLabel, { color: palette.muted }]}>{t('settings.appLanguageTitle')}</Text>
+          <Text style={[styles.toggleLabel, { color: palette.muted, marginBottom: 6 }]}>
+            {t('settings.appLanguageHint')}
+          </Text>
+          <View style={styles.modeRow}>
+            {UI_LANGUAGES.map((code) => {
+              const active = settings.uiLanguage === code;
+              const label = UI_LANGUAGE_LABELS[code];
+              return (
+                <Pressable
+                  key={code}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${t('settings.appLanguageTitle')} ${label}`}
+                  accessibilityState={{ selected: active }}
+                  onPress={() => {
+                    patchSettingsLogged({ uiLanguage: code });
+                    setUiLanguage(code);
+                  }}
+                  style={[styles.modeChip, { borderColor: active ? activeAccent : palette.border, backgroundColor: active ? 'rgba(255,216,77,0.16)' : palette.card }]}
+                >
+                  <Text style={[styles.modeChipText, { color: active ? activeAccent : palette.fg }]}>{label}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+
+          <Text style={[styles.controlLabel, { color: palette.muted }]}>{t('settings.shoppingLanguageTitle')}</Text>
+          <Text style={[styles.toggleLabel, { color: palette.muted, marginBottom: 6 }]}>
+            {t('settings.shoppingLanguageHint')}
+          </Text>
+          <View style={styles.modeRow}>
+            {([
+              { code: 'en', label: 'English' },
+              { code: 'fr', label: 'Français' },
+              { code: 'es', label: 'Español' },
+              { code: 'nl', label: 'Nederlands' },
+            ] as const).map((option) => {
+              const active = settings.shoppingListLanguage === option.code;
+              return (
+                <Pressable
+                  key={option.code}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${t('settings.shoppingLanguageTitle')} ${option.label}`}
+                  accessibilityState={{ selected: active }}
+                  onPress={() => patchSettingsLogged({ shoppingListLanguage: option.code })}
+                  style={[styles.modeChip, { borderColor: active ? activeAccent : palette.border, backgroundColor: active ? 'rgba(255,216,77,0.16)' : palette.card }]}
+                >
+                  <Text style={[styles.modeChipText, { color: active ? activeAccent : palette.fg }]}>{option.label}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+
           <View style={styles.toggleRow}>
-            <Text style={[styles.toggleLabel, { color: notesFeatures.autoDetectSmartType ? palette.fg : palette.muted }]}>Detect reminder</Text>
+            <Text style={[styles.toggleLabel, { color: notesFeatures.autoDetectSmartType ? palette.fg : palette.muted }]}>{t('settings.detectReminder')}</Text>
             <Switch
-              accessibilityLabel="Detect reminder"
+              accessibilityLabel={t('settings.detectReminder')}
               accessibilityState={{ disabled: !notesFeatures.autoDetectSmartType }}
               disabled={!notesFeatures.autoDetectSmartType}
               value={notesFeatures.detectReminder}
@@ -977,9 +1072,9 @@ export function SettingsTab({
             />
           </View>
           <View style={styles.toggleRow}>
-            <Text style={[styles.toggleLabel, { color: palette.fg }]}>Auto-save draft</Text>
+            <Text style={[styles.toggleLabel, { color: palette.fg }]}>{t('settings.autoSaveDraft')}</Text>
             <Switch
-              accessibilityLabel="Auto-save draft"
+              accessibilityLabel={t('settings.autoSaveDraft')}
               value={notesFeatures.autoSaveDraft}
               onValueChange={(value) => patchNotesFeatures({ autoSaveDraft: value })}
             />
@@ -990,8 +1085,8 @@ export function SettingsTab({
           visible={matchesSection('smart-notes')}
           open={sectionOpen['smart-notes']}
           onToggle={() => toggleSettingsSection('smart-notes')}
-          title="Smart notes"
-          subtitle="Entity detection and card rendering."
+          title={t('settings.smartNotesTitle')}
+          subtitle={t('settings.smartNotesSubtitle')}
           icon="sparkles-outline"
           accent={palette.accent}
           subtitleColor={palette.muted}
@@ -999,9 +1094,9 @@ export function SettingsTab({
           cardBorder={palette.border}
         >
           <View style={styles.toggleRow}>
-            <Text style={[styles.toggleLabel, { color: palette.fg }]}>IP detection</Text>
+            <Text style={[styles.toggleLabel, { color: palette.fg }]}>{t('settings.ipDetection')}</Text>
             <Switch
-              accessibilityLabel="IP detection"
+              accessibilityLabel={t('settings.ipDetection')}
               value={settings.smartNotes?.ipDetectionEnabled ?? true}
               onValueChange={(value) => patchSettingsLogged({
                 smartNotes: {
@@ -1012,9 +1107,9 @@ export function SettingsTab({
             />
           </View>
           <View style={styles.toggleRow}>
-            <Text style={[styles.toggleLabel, { color: palette.fg }]}>Detect IP</Text>
+            <Text style={[styles.toggleLabel, { color: palette.fg }]}>{t('settings.detectIp')}</Text>
             <Switch
-              accessibilityLabel="Detect IP"
+              accessibilityLabel={t('settings.detectIp')}
               value={settings.smartNotes?.detectionEnabled.ip ?? true}
               onValueChange={(value) => patchSettingsLogged({
                 smartNotes: {
@@ -1028,9 +1123,9 @@ export function SettingsTab({
             />
           </View>
           <View style={styles.toggleRow}>
-            <Text style={[styles.toggleLabel, { color: palette.fg }]}>Detect hostname</Text>
+            <Text style={[styles.toggleLabel, { color: palette.fg }]}>{t('settings.detectHostname')}</Text>
             <Switch
-              accessibilityLabel="Detect hostname"
+              accessibilityLabel={t('settings.detectHostname')}
               value={settings.smartNotes?.detectionEnabled.hostname ?? true}
               onValueChange={(value) => patchSettingsLogged({
                 smartNotes: {
@@ -1044,9 +1139,9 @@ export function SettingsTab({
             />
           </View>
           <View style={styles.toggleRow}>
-            <Text style={[styles.toggleLabel, { color: palette.fg }]}>Detect office</Text>
+            <Text style={[styles.toggleLabel, { color: palette.fg }]}>{t('settings.detectOffice')}</Text>
             <Switch
-              accessibilityLabel="Detect office"
+              accessibilityLabel={t('settings.detectOffice')}
               value={settings.smartNotes?.detectionEnabled.office ?? true}
               onValueChange={(value) => patchSettingsLogged({
                 smartNotes: {
@@ -1060,9 +1155,9 @@ export function SettingsTab({
             />
           </View>
           <View style={styles.toggleRow}>
-            <Text style={[styles.toggleLabel, { color: palette.fg }]}>Detect PI</Text>
+            <Text style={[styles.toggleLabel, { color: palette.fg }]}>{t('settings.detectPi')}</Text>
             <Switch
-              accessibilityLabel="Detect PI"
+              accessibilityLabel={t('settings.detectPi')}
               value={settings.smartNotes?.detectionEnabled.asset ?? true}
               onValueChange={(value) => patchSettingsLogged({
                 smartNotes: {
@@ -1076,7 +1171,7 @@ export function SettingsTab({
             />
           </View>
 
-          <Text style={[styles.controlLabel, { color: palette.muted }]}>IP regex</Text>
+          <Text style={[styles.controlLabel, { color: palette.muted }]}>{t('settings.ipRegex')}</Text>
           <TextInput
             style={[styles.input, { borderColor: palette.border, color: palette.fg, backgroundColor: palette.card }]}
             value={settings.smartNotes?.regex.ip || ''}
@@ -1086,11 +1181,11 @@ export function SettingsTab({
                 regex: { ...settings.smartNotes!.regex, ip: value },
               },
             })}
-            placeholder="IPv4 regex"
+            placeholder={t('settings.ipv4RegexPlaceholder')}
             placeholderTextColor={palette.muted}
             autoCapitalize="none"
           />
-          <Text style={[styles.controlLabel, { color: palette.muted }]}>Hostname regex</Text>
+          <Text style={[styles.controlLabel, { color: palette.muted }]}>{t('settings.hostnameRegex')}</Text>
           <TextInput
             style={[styles.input, { borderColor: palette.border, color: palette.fg, backgroundColor: palette.card }]}
             value={settings.smartNotes?.regex.hostname || ''}
@@ -1100,11 +1195,11 @@ export function SettingsTab({
                 regex: { ...settings.smartNotes!.regex, hostname: value },
               },
             })}
-            placeholder="Hostname regex"
+            placeholder={t('settings.hostnameRegexPlaceholder')}
             placeholderTextColor={palette.muted}
             autoCapitalize="none"
           />
-          <Text style={[styles.controlLabel, { color: palette.muted }]}>PI regex</Text>
+          <Text style={[styles.controlLabel, { color: palette.muted }]}>{t('settings.piRegex')}</Text>
           <TextInput
             style={[styles.input, { borderColor: palette.border, color: palette.fg, backgroundColor: palette.card }]}
             value={settings.smartNotes?.regex.pi || ''}
@@ -1114,18 +1209,18 @@ export function SettingsTab({
                 regex: { ...settings.smartNotes!.regex, pi: value },
               },
             })}
-            placeholder="PI regex"
+            placeholder={t('settings.piRegexPlaceholder')}
             placeholderTextColor={palette.muted}
             autoCapitalize="none"
           />
 
-          <Text style={[styles.controlLabel, { color: palette.muted }]}>Offices</Text>
+          <Text style={[styles.controlLabel, { color: palette.muted }]}>{t('settings.offices')}</Text>
           <View style={{ flexDirection: 'row', gap: 8 }}>
             <TextInput
               style={[styles.input, { flex: 1, borderColor: palette.border, color: palette.fg, backgroundColor: palette.card }]}
               value={officeDraft}
               onChangeText={setOfficeDraft}
-              placeholder="Add office"
+              placeholder={t('settings.addOfficePlaceholder')}
               placeholderTextColor={palette.muted}
             />
             <Pressable
@@ -1147,7 +1242,7 @@ export function SettingsTab({
                 setOfficeDraft('');
               }}
             >
-              <Text style={[styles.bulkButtonText, { color: '#111' }]}>Add</Text>
+              <Text style={[styles.bulkButtonText, { color: '#111' }]}>{t('settings.add')}</Text>
             </Pressable>
           </View>
           <View style={styles.modeRow}>
@@ -1172,8 +1267,8 @@ export function SettingsTab({
           visible={matchesSection('security')}
           open={sectionOpen['security']}
           onToggle={() => toggleSettingsSection('security')}
-          title="Security"
-          subtitle="PIN to unlock private notes."
+          title={t('settings.securityTitle')}
+          subtitle={t('settings.securitySubtitle')}
           icon="lock-closed-outline"
           badge={pinExists ? 'CONFIGURED' : 'NOT SET'}
           badgeTone={pinExists ? 'success' : 'warn'}
@@ -1199,7 +1294,7 @@ export function SettingsTab({
                 onPress={startSetPin}
                 style={({ pressed }) => [styles.bulkButton, styles.bulkGridItem, isDesktop ? styles.bulkGridItemDesktop : styles.bulkGridItemMobile, { backgroundColor: activeAccent, opacity: pressed ? 0.85 : 1 }]}
               >
-                <Text style={[styles.bulkButtonText, { color: '#111' }]}>Set PIN</Text>
+                <Text style={[styles.bulkButtonText, { color: '#111' }]}>{t('settings.setPin')}</Text>
               </Pressable>
             ) : (
               <>
@@ -1207,13 +1302,13 @@ export function SettingsTab({
                   onPress={startChangePin}
                   style={({ pressed }) => [styles.bulkButton, styles.bulkGridItem, isDesktop ? styles.bulkGridItemDesktop : styles.bulkGridItemMobile, { backgroundColor: activeAccent, opacity: pressed ? 0.85 : 1 }]}
                 >
-                  <Text style={[styles.bulkButtonText, { color: '#111' }]}>Change PIN</Text>
+                  <Text style={[styles.bulkButtonText, { color: '#111' }]}>{t('settings.changePin')}</Text>
                 </Pressable>
                 <Pressable
                   onPress={startRemovePin}
                   style={({ pressed }) => [styles.bulkButton, styles.bulkGridItem, isDesktop ? styles.bulkGridItemDesktop : styles.bulkGridItemMobile, { backgroundColor: '#b91c1c', opacity: pressed ? 0.85 : 1 }]}
                 >
-                  <Text style={[styles.bulkButtonText, { color: '#fff' }]}>Remove PIN</Text>
+                  <Text style={[styles.bulkButtonText, { color: '#fff' }]}>{t('settings.removePin')}</Text>
                 </Pressable>
               </>
             )}
@@ -1225,8 +1320,8 @@ export function SettingsTab({
           visible={matchesSection('clipboard')}
           open={sectionOpen['clipboard']}
           onToggle={() => toggleSettingsSection('clipboard')}
-          title="Clipboard"
-          subtitle="Cloud sync and capture behavior."
+          title={t('settings.clipboardTitle')}
+          subtitle={t('settings.clipboardSubtitle')}
           icon="clipboard-outline"
           badge={settings.clipboardCloudSync ? 'SYNCING' : 'LOCAL'}
           badgeTone={settings.clipboardCloudSync ? 'success' : 'muted'}
@@ -1237,22 +1332,22 @@ export function SettingsTab({
         >
           <View style={styles.toggleRow}>
             <View style={{ flex: 1, minWidth: 0 }}>
-              <Text style={[styles.toggleLabel, { color: palette.fg }]}>Cloud sync</Text>
-              <Text style={[styles.toggleHint, { color: palette.muted }]}>Mirror clipboard entries to Firestore across devices.</Text>
+              <Text style={[styles.toggleLabel, { color: palette.fg }]}>{t('settings.cloudSync')}</Text>
+              <Text style={[styles.toggleHint, { color: palette.muted }]}>{t('settings.cloudSyncHint')}</Text>
             </View>
             <Switch
-              accessibilityLabel="Cloud sync"
+              accessibilityLabel={t('settings.cloudSync')}
               value={settings.clipboardCloudSync}
               onValueChange={(value) => patchSettingsLogged({ clipboardCloudSync: value })}
             />
           </View>
           <View style={styles.toggleRow}>
             <View style={{ flex: 1, minWidth: 0 }}>
-              <Text style={[styles.toggleLabel, { color: palette.fg }]}>Background capture</Text>
-              <Text style={[styles.toggleHint, { color: palette.muted }]}>Keep monitoring the clipboard while the app/tab is in the background.</Text>
+              <Text style={[styles.toggleLabel, { color: palette.fg }]}>{t('settings.backgroundCapture')}</Text>
+              <Text style={[styles.toggleHint, { color: palette.muted }]}>{t('settings.backgroundCaptureHint')}</Text>
             </View>
             <Switch
-              accessibilityLabel="Background capture"
+              accessibilityLabel={t('settings.backgroundCapture')}
               value={settings.clipboardBackgroundCapture}
               onValueChange={(value) => patchSettingsLogged({ clipboardBackgroundCapture: value })}
             />
@@ -1263,8 +1358,8 @@ export function SettingsTab({
           visible={matchesSection('shared-groups')}
           open={sectionOpen['shared-groups']}
           onToggle={() => toggleSettingsSection('shared-groups')}
-          title="Shared groups"
-          subtitle="Create/join note groups."
+          title={t('settings.sharedGroupsTitle')}
+          subtitle={t('settings.sharedGroupsSubtitle')}
           icon="people-outline"
           badge={groups.length > 0 ? `${groups.length}` : undefined}
           badgeTone="info"
@@ -1276,7 +1371,7 @@ export function SettingsTab({
           <View style={{ flexDirection: 'row', gap: 8 }}>
             <TextInput
               style={[styles.input, { flex: 1, borderColor: palette.border, color: palette.fg, backgroundColor: palette.card }]}
-              placeholder="New group name"
+              placeholder={t('settings.newGroupPlaceholder')}
               placeholderTextColor={palette.muted}
               value={groupNameDraft}
               onChangeText={setGroupNameDraft}
@@ -1285,13 +1380,13 @@ export function SettingsTab({
               style={[styles.bulkButton, { backgroundColor: activeAccent, minWidth: 100 }]}
               onPress={() => createSharedNoteGroup(groupNameDraft).then((g) => { setGroups((current) => [g, ...current]); setGroupNameDraft(''); }).catch(() => undefined)}
             >
-              <Text style={[styles.bulkButtonText, { color: '#111' }]}>Create</Text>
+              <Text style={[styles.bulkButtonText, { color: '#111' }]}>{t('settings.create')}</Text>
             </Pressable>
           </View>
           <View style={{ flexDirection: 'row', gap: 8 }}>
             <TextInput
               style={[styles.input, { flex: 1, borderColor: palette.border, color: palette.fg, backgroundColor: palette.card }]}
-              placeholder="Invite code"
+              placeholder={t('settings.inviteCodePlaceholder')}
               placeholderTextColor={palette.muted}
               value={inviteCodeDraft}
               onChangeText={setInviteCodeDraft}
@@ -1301,14 +1396,14 @@ export function SettingsTab({
               style={[styles.bulkButton, { borderWidth: 1, borderColor: palette.border, minWidth: 100 }]}
               onPress={() => joinSharedNoteGroup(inviteCodeDraft).then((g) => { if (!g) return; setGroups((current) => current.some((x) => x.id === g.id) ? current : [g, ...current]); setInviteCodeDraft(''); }).catch(() => undefined)}
             >
-              <Text style={[styles.bulkButtonText, { color: palette.fg }]}>Join</Text>
+              <Text style={[styles.bulkButtonText, { color: palette.fg }]}>{t('settings.join')}</Text>
             </Pressable>
           </View>
           {groups.length ? groups.map((g) => (
             <Text key={g.id} style={[styles.helperLine, { color: palette.muted }]}>
               {g.name} � code: {g.inviteCode} � members: {g.members?.length || 0}
             </Text>
-          )) : <Text style={[styles.helperLine, { color: palette.muted }]}>No groups yet.</Text>}
+          )) : <Text style={[styles.helperLine, { color: palette.muted }]}>{t('settings.noGroupsYet')}</Text>}
         </SectionCard>
 
         {Platform.OS === 'web' ? (
@@ -1316,8 +1411,8 @@ export function SettingsTab({
             visible={matchesSection('pwa')}
             open={sectionOpen['pwa']}
             onToggle={() => toggleSettingsSection('pwa')}
-            title="PWA"
-            subtitle="Install and desktop mode."
+            title={t('settings.pwaTitle')}
+            subtitle={t('settings.pwaSubtitle')}
             icon="cloud-download-outline"
             badge={pwaInstallAvailable ? 'READY' : undefined}
             badgeTone="success"
@@ -1333,7 +1428,7 @@ export function SettingsTab({
                   setInstallBusy(true);
                   try {
                     const result = await triggerPwaInstall();
-                    Alert.alert(result.accepted ? 'Installed' : 'Install canceled', result.accepted ? 'The app was added to desktop.' : 'You can retry from this button.');
+                    Alert.alert(result.accepted ? t('settings.installed') : t('settings.installCanceled'), result.accepted ? t('settings.installedBody') : t('settings.installRetryBody'));
                   } finally {
                     setInstallBusy(false);
                   }
@@ -1368,7 +1463,7 @@ export function SettingsTab({
               }}
               style={[styles.bulkButton, { backgroundColor: 'transparent', borderWidth: 1, borderColor: palette.border }]}
             >
-              <Text style={[styles.bulkButtonText, { color: palette.fg }]}>Open install guide</Text>
+              <Text style={[styles.bulkButtonText, { color: palette.fg }]}>{t('settings.openInstallGuide')}</Text>
             </Pressable>
             <Text style={[styles.helperLine, { color: palette.muted }]}>
               {pwaDiag.reason}
@@ -1380,8 +1475,8 @@ export function SettingsTab({
           visible={matchesSection('barcode')}
           open={sectionOpen['barcode']}
           onToggle={() => toggleSettingsSection('barcode')}
-          title="Barcode formats"
-          subtitle="Available formats."
+          title={t('settings.barcodeTitle')}
+          subtitle={t('settings.barcodeSubtitle')}
           icon="barcode-outline"
           badge={barcodeOutputFormat}
           badgeTone="info"
@@ -1408,8 +1503,8 @@ export function SettingsTab({
           visible={matchesSection('cleanup')}
           open={sectionOpen['cleanup']}
           onToggle={() => toggleSettingsSection('cleanup')}
-          title="Auto-cleanup"
-          subtitle="Notes and history retention."
+          title={t('settings.cleanupTitle')}
+          subtitle={t('settings.cleanupSubtitle')}
           icon="trash-outline"
           accent={palette.accent}
           subtitleColor={palette.muted}
@@ -1419,8 +1514,8 @@ export function SettingsTab({
           <View style={{ gap: 10 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
               <View style={{ flex: 1, minWidth: 160 }}>
-                <Text style={{ color: palette.fg, fontSize: 13, fontWeight: '600' }}>Auto-clear notes older than</Text>
-                <Text style={{ color: palette.muted, fontSize: 11, marginTop: 2 }}>Pinned notes are never deleted</Text>
+                <Text style={{ color: palette.fg, fontSize: 13, fontWeight: '600' }}>{t('settings.autoClearNotesOlder')}</Text>
+                <Text style={{ color: palette.muted, fontSize: 11, marginTop: 2 }}>{t('settings.pinnedNeverDeleted')}</Text>
               </View>
               <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
                 {([0, 30, 90, 180, 365] as const).map((days) => {
@@ -1449,8 +1544,8 @@ export function SettingsTab({
 
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
               <View style={{ flex: 1, minWidth: 160 }}>
-                <Text style={{ color: palette.fg, fontSize: 13, fontWeight: '600' }}>Auto-clear history older than</Text>
-                <Text style={{ color: palette.muted, fontSize: 11, marginTop: 2 }}>Applies to scan history entries only</Text>
+                <Text style={{ color: palette.fg, fontSize: 13, fontWeight: '600' }}>{t('settings.autoClearHistoryOlder')}</Text>
+                <Text style={{ color: palette.muted, fontSize: 11, marginTop: 2 }}>{t('settings.appliesToScanHistory')}</Text>
               </View>
               <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
                 {([0, 30, 90, 180, 365] as const).map((days) => {
@@ -1479,16 +1574,16 @@ export function SettingsTab({
 
             <View style={[styles.bulkGrid, isDesktop ? styles.bulkGridDesktop : null]}>
               <Pressable
-                onPress={() => Alert.alert('Clear archived notes', 'Delete all archived notes? Pinned notes are kept.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Clear', style: 'destructive', onPress: onClearArchivedNotes }])}
+                onPress={() => Alert.alert(t('settings.clearArchivedTitle'), t('settings.clearArchivedBody'), [{ text: t('settings.cancel'), style: 'cancel' }, { text: t('settings.clear'), style: 'destructive', onPress: onClearArchivedNotes }])}
                 style={({ pressed }) => [styles.bulkButton, styles.bulkGridItem, isDesktop ? styles.bulkGridItemDesktop : styles.bulkGridItemMobile, { backgroundColor: '#b45309', opacity: pressed ? 0.8 : 1 }]}
               >
-                <Text style={[styles.bulkButtonText, { color: '#fff' }]}>Clear archived</Text>
+                <Text style={[styles.bulkButtonText, { color: '#fff' }]}>{t('settings.clearArchived')}</Text>
               </Pressable>
               <Pressable
-                onPress={() => Alert.alert('Clear unpinned notes', 'Delete all notes that are not pinned?', [{ text: 'Cancel', style: 'cancel' }, { text: 'Clear', style: 'destructive', onPress: onClearUnpinnedNotes }])}
+                onPress={() => Alert.alert(t('settings.clearUnpinnedTitle'), t('settings.clearUnpinnedBody'), [{ text: t('settings.cancel'), style: 'cancel' }, { text: t('settings.clear'), style: 'destructive', onPress: onClearUnpinnedNotes }])}
                 style={({ pressed }) => [styles.bulkButton, styles.bulkGridItem, isDesktop ? styles.bulkGridItemDesktop : styles.bulkGridItemMobile, { backgroundColor: '#92400e', opacity: pressed ? 0.8 : 1 }]}
               >
-                <Text style={[styles.bulkButtonText, { color: '#fff' }]}>Clear unpinned</Text>
+                <Text style={[styles.bulkButtonText, { color: '#fff' }]}>{t('settings.clearUnpinned')}</Text>
               </Pressable>
             </View>
 
@@ -1498,7 +1593,7 @@ export function SettingsTab({
               style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 10, paddingHorizontal: 12, borderRadius: 10, borderWidth: 1, borderColor: reviewOpen ? activeAccent : palette.border, backgroundColor: palette.card, opacity: pressed ? 0.8 : 1 })}
             >
               <Ionicons name="calendar-outline" size={16} color={activeAccent} />
-              <Text style={{ color: palette.fg, fontSize: 13, fontWeight: '600', flex: 1 }}>Review notes by date</Text>
+              <Text style={{ color: palette.fg, fontSize: 13, fontWeight: '600', flex: 1 }}>{t('settings.reviewNotesByDate')}</Text>
               <Ionicons name={reviewOpen ? 'chevron-up' : 'chevron-down'} size={14} color={palette.muted} />
             </Pressable>
 
@@ -1539,7 +1634,7 @@ export function SettingsTab({
                 ) : reviewGroups.length === 0 ? (
                   <View style={{ padding: 24, alignItems: 'center', gap: 6 }}>
                     <Ionicons name="document-outline" size={28} color={palette.muted} />
-                    <Text style={{ color: palette.muted, fontSize: 13 }}>No notes found</Text>
+                    <Text style={{ color: palette.muted, fontSize: 13 }}>{t('settings.noNotesFound')}</Text>
                   </View>
                 ) : (
                   <View>
@@ -1624,7 +1719,7 @@ export function SettingsTab({
                   {reviewSelected.size > 0 ? (
                     <>
                       <Pressable onPress={() => setReviewSelected(new Set())} style={({ pressed }) => ({ paddingHorizontal: 12, paddingVertical: 7, borderRadius: 8, borderWidth: 1, borderColor: palette.border, opacity: pressed ? 0.7 : 1 })}>
-                        <Text style={{ color: palette.muted, fontSize: 12, fontWeight: '600' }}>Deselect</Text>
+                        <Text style={{ color: palette.muted, fontSize: 12, fontWeight: '600' }}>{t('settings.deselect')}</Text>
                       </Pressable>
                       <Pressable
                         disabled={reviewDeleting}
@@ -1668,8 +1763,8 @@ export function SettingsTab({
           visible={matchesSection('data-sync')}
           open={sectionOpen['data-sync']}
           onToggle={() => toggleSettingsSection('data-sync')}
-          title="Data + Sync"
-          subtitle="Backup and synchronization."
+          title={t('settings.dataSyncTitle')}
+          subtitle={t('settings.dataSyncSubtitle')}
           icon="cloud-upload-outline"
           badge={persistenceMode === 'firebase' ? 'CLOUD' : 'LOCAL'}
           badgeTone={persistenceMode === 'firebase' ? 'success' : 'muted'}
@@ -1679,27 +1774,102 @@ export function SettingsTab({
           cardBorder={palette.border}
         >
           <View style={[styles.bulkGrid, isDesktop ? styles.bulkGridDesktop : null]}> 
-            <Pressable onPress={() => runDataSyncAction('Export CSV', onExportCsv)} style={({ pressed }) => [styles.bulkButton, styles.bulkGridItem, isDesktop ? styles.bulkGridItemDesktop : styles.bulkGridItemMobile, { backgroundColor: activeAccent, opacity: pressed ? 0.8 : 1 }]}><Text style={[styles.bulkButtonText, { color: '#111' }]}>Export CSV</Text></Pressable>
-            <Pressable onPress={() => runDataSyncAction('Export backup', onExportBackup)} style={({ pressed }) => [styles.bulkButton, styles.bulkGridItem, isDesktop ? styles.bulkGridItemDesktop : styles.bulkGridItemMobile, { backgroundColor: activeAccent, opacity: pressed ? 0.8 : 1 }]}><Text style={[styles.bulkButtonText, { color: '#111' }]}>Export backup</Text></Pressable>
-            <Pressable onPress={() => runDataSyncAction('Import', onOpenBackupImport)} style={({ pressed }) => [styles.bulkButton, styles.bulkGridItem, isDesktop ? styles.bulkGridItemDesktop : styles.bulkGridItemMobile, { backgroundColor: activeAccent, opacity: pressed ? 0.8 : 1 }]}><Text style={[styles.bulkButtonText, { color: '#111' }]}>Import</Text></Pressable>
-            <Pressable onPress={() => runDataSyncAction('Recheck Firebase', onRecheckFirebase)} style={({ pressed }) => [styles.bulkButton, styles.bulkGridItem, isDesktop ? styles.bulkGridItemDesktop : styles.bulkGridItemMobile, { backgroundColor: activeAccent, opacity: pressed ? 0.8 : 1 }]}><Text style={[styles.bulkButtonText, { color: '#111' }]}>Recheck Firebase</Text></Pressable>
+            <Pressable onPress={() => runDataSyncAction('Export CSV', onExportCsv)} style={({ pressed }) => [styles.bulkButton, styles.bulkGridItem, isDesktop ? styles.bulkGridItemDesktop : styles.bulkGridItemMobile, { backgroundColor: activeAccent, opacity: pressed ? 0.8 : 1 }]}><Text style={[styles.bulkButtonText, { color: '#111' }]}>{t('settings.exportCsv')}</Text></Pressable>
+            <Pressable onPress={() => runDataSyncAction('Export backup', onExportBackup)} style={({ pressed }) => [styles.bulkButton, styles.bulkGridItem, isDesktop ? styles.bulkGridItemDesktop : styles.bulkGridItemMobile, { backgroundColor: activeAccent, opacity: pressed ? 0.8 : 1 }]}><Text style={[styles.bulkButtonText, { color: '#111' }]}>{t('settings.exportBackup')}</Text></Pressable>
+            <Pressable onPress={() => runDataSyncAction('Import', onOpenBackupImport)} style={({ pressed }) => [styles.bulkButton, styles.bulkGridItem, isDesktop ? styles.bulkGridItemDesktop : styles.bulkGridItemMobile, { backgroundColor: activeAccent, opacity: pressed ? 0.8 : 1 }]}><Text style={[styles.bulkButtonText, { color: '#111' }]}>{t('settings.import')}</Text></Pressable>
+            <Pressable onPress={() => runDataSyncAction('Recheck Firebase', onRecheckFirebase)} style={({ pressed }) => [styles.bulkButton, styles.bulkGridItem, isDesktop ? styles.bulkGridItemDesktop : styles.bulkGridItemMobile, { backgroundColor: activeAccent, opacity: pressed ? 0.8 : 1 }]}><Text style={[styles.bulkButtonText, { color: '#111' }]}>{t('settings.recheckFirebase')}</Text></Pressable>
             <Pressable disabled={syncBusy} onPress={() => runDataSyncAction('Sync now', onSyncNow)} style={({ pressed }) => [styles.bulkButton, styles.bulkGridItem, isDesktop ? styles.bulkGridItemDesktop : styles.bulkGridItemMobile, { backgroundColor: activeAccent, opacity: syncBusy ? 0.6 : pressed ? 0.8 : 1 }]}><Text style={[styles.bulkButtonText, { color: '#111' }]}>{syncBusy ? 'Syncing' : 'Sync now'}</Text></Pressable>
-            <Pressable onPress={() => confirmDataSyncAction('Clear history', 'Are you sure you want to clear all history?', onClearHistory)} style={({ pressed }) => [styles.bulkButton, styles.bulkGridItem, isDesktop ? styles.bulkGridItemDesktop : styles.bulkGridItemMobile, { backgroundColor: '#ef4444', opacity: pressed ? 0.8 : 1 }]}><Text style={[styles.bulkButtonText, { color: '#fff' }]}>Clear history</Text></Pressable>
-            <Pressable onPress={() => confirmDataSyncAction('Hard delete history', 'Delete all history locally, cache and cloud?', onHardDeleteHistory)} style={({ pressed }) => [styles.bulkButton, styles.bulkGridItem, isDesktop ? styles.bulkGridItemDesktop : styles.bulkGridItemMobile, { backgroundColor: '#991b1b', opacity: pressed ? 0.8 : 1 }]}><Text style={[styles.bulkButtonText, { color: '#fff' }]}>Hard delete history</Text></Pressable>
-            <Pressable onPress={() => confirmDataSyncAction('Hard delete notes', 'Delete all notes locally and in cloud?', onHardDeleteNotes)} style={({ pressed }) => [styles.bulkButton, styles.bulkGridItem, isDesktop ? styles.bulkGridItemDesktop : styles.bulkGridItemMobile, { backgroundColor: '#b91c1c', opacity: pressed ? 0.8 : 1 }]}><Text style={[styles.bulkButtonText, { color: '#fff' }]}>Hard delete notes</Text></Pressable>
-            <Pressable onPress={() => confirmDataSyncAction('Hard delete clipboard', 'Delete all clipboard memory locally?', onHardDeleteClipboard)} style={({ pressed }) => [styles.bulkButton, styles.bulkGridItem, isDesktop ? styles.bulkGridItemDesktop : styles.bulkGridItemMobile, { backgroundColor: '#b91c1c', opacity: pressed ? 0.8 : 1 }]}><Text style={[styles.bulkButtonText, { color: '#fff' }]}>Hard delete clipboard</Text></Pressable>
-            <Pressable onPress={() => confirmDataSyncAction('Hard delete templates', 'Delete all templates locally and in cloud?', onHardDeleteTemplates)} style={({ pressed }) => [styles.bulkButton, styles.bulkGridItem, isDesktop ? styles.bulkGridItemDesktop : styles.bulkGridItemMobile, { backgroundColor: '#b91c1c', opacity: pressed ? 0.8 : 1 }]}><Text style={[styles.bulkButtonText, { color: '#fff' }]}>Hard delete templates</Text></Pressable>
+            <Pressable onPress={() => confirmDataSyncAction(t('settings.clearHistory'), 'Are you sure you want to clear all history?', onClearHistory)} style={({ pressed }) => [styles.bulkButton, styles.bulkGridItem, isDesktop ? styles.bulkGridItemDesktop : styles.bulkGridItemMobile, { backgroundColor: '#ef4444', opacity: pressed ? 0.8 : 1 }]}><Text style={[styles.bulkButtonText, { color: '#fff' }]}>{t('settings.clearHistory')}</Text></Pressable>
+            <Pressable onPress={() => confirmDataSyncAction('Hard delete history', 'Delete all history locally, cache and cloud?', onHardDeleteHistory)} style={({ pressed }) => [styles.bulkButton, styles.bulkGridItem, isDesktop ? styles.bulkGridItemDesktop : styles.bulkGridItemMobile, { backgroundColor: '#991b1b', opacity: pressed ? 0.8 : 1 }]}><Text style={[styles.bulkButtonText, { color: '#fff' }]}>{t('settings.hardDeleteHistory')}</Text></Pressable>
+            <Pressable onPress={() => confirmDataSyncAction('Hard delete notes', 'Delete all notes locally and in cloud?', onHardDeleteNotes)} style={({ pressed }) => [styles.bulkButton, styles.bulkGridItem, isDesktop ? styles.bulkGridItemDesktop : styles.bulkGridItemMobile, { backgroundColor: '#b91c1c', opacity: pressed ? 0.8 : 1 }]}><Text style={[styles.bulkButtonText, { color: '#fff' }]}>{t('settings.hardDeleteNotes')}</Text></Pressable>
+            <Pressable onPress={() => confirmDataSyncAction('Hard delete clipboard', 'Delete all clipboard memory locally?', onHardDeleteClipboard)} style={({ pressed }) => [styles.bulkButton, styles.bulkGridItem, isDesktop ? styles.bulkGridItemDesktop : styles.bulkGridItemMobile, { backgroundColor: '#b91c1c', opacity: pressed ? 0.8 : 1 }]}><Text style={[styles.bulkButtonText, { color: '#fff' }]}>{t('settings.hardDeleteClipboard')}</Text></Pressable>
+            <Pressable onPress={() => confirmDataSyncAction('Hard delete templates', 'Delete all templates locally and in cloud?', onHardDeleteTemplates)} style={({ pressed }) => [styles.bulkButton, styles.bulkGridItem, isDesktop ? styles.bulkGridItemDesktop : styles.bulkGridItemMobile, { backgroundColor: '#b91c1c', opacity: pressed ? 0.8 : 1 }]}><Text style={[styles.bulkButtonText, { color: '#fff' }]}>{t('settings.hardDeleteTemplates')}</Text></Pressable>
           </View>
           <Text style={{ color: palette.muted, marginTop: 6 }}>Mode: {isGuest ? 'Guest' : 'Authenticated'} | Persistence: {persistenceMode === 'firebase' ? 'Firebase' : 'Local'}</Text>
           {userEmail ? <Text style={{ color: palette.fg, marginTop: 2 }}>{userEmail}</Text> : null}
         </SectionCard>
 
         <SectionCard
+          visible={matchesSection('health')}
+          open={sectionOpen['health']}
+          onToggle={() => toggleSettingsSection('health')}
+          title={t('settings.healthTitle')}
+          subtitle={t('settings.healthSubtitle')}
+          icon="pulse-outline"
+          badge={diagnosticErrorCount ? `${diagnosticErrorCount} ERRORS` : 'OK'}
+          badgeTone={diagnosticErrorCount ? 'warn' : 'success'}
+          accent={palette.accent}
+          subtitleColor={palette.muted}
+          cardBackground={palette.card}
+          cardBorder={palette.border}
+        >
+          <View style={[styles.healthGrid, isDesktop ? styles.healthGridDesktop : null]}>
+            {healthItems.map((item) => {
+              const toneColor = item.tone === 'success' ? '#22c55e' : item.tone === 'warn' ? '#f59e0b' : item.tone === 'info' ? palette.accent : palette.muted;
+              return (
+                <View key={item.label} style={[styles.healthTile, isDesktop ? styles.healthTileDesktop : null, { borderColor: palette.border, backgroundColor: `${palette.bg}80` }]}>
+                  <Text style={[styles.healthLabel, { color: palette.muted }]}>{item.label}</Text>
+                  <Text style={[styles.healthValue, { color: toneColor }]} numberOfLines={2}>{item.value}</Text>
+                </View>
+              );
+            })}
+          </View>
+        </SectionCard>
+
+        <SectionCard
+          visible={matchesSection('maintenance')}
+          open={sectionOpen['maintenance']}
+          onToggle={() => toggleSettingsSection('maintenance')}
+          title={t('settings.maintenanceTitle')}
+          subtitle={t('settings.maintenanceSubtitle')}
+          icon="construct-outline"
+          badge={maintenanceMode ? 'ON' : 'OFF'}
+          badgeTone={maintenanceMode ? 'warn' : 'muted'}
+          accent={palette.accent}
+          subtitleColor={palette.muted}
+          cardBackground={palette.card}
+          cardBorder={palette.border}
+        >
+          <View style={styles.toggleRow}>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={[styles.toggleLabel, { color: palette.fg }]}>{t('settings.maintenanceMode')}</Text>
+              <Text style={[styles.toggleHint, { color: palette.muted }]}>{t('settings.maintenanceModeHint')}</Text>
+            </View>
+            <Switch
+              accessibilityLabel={t('settings.maintenanceMode')}
+              value={maintenanceMode}
+              onValueChange={(value) => {
+                setMaintenanceMode(value);
+                void diag.info('settings.maintenance.mode', { enabled: value });
+              }}
+            />
+          </View>
+
+          <View style={[styles.bulkGrid, isDesktop ? styles.bulkGridDesktop : null]}>
+            <Pressable onPress={runMaintenanceCheck} style={({ pressed }) => [styles.bulkButton, styles.bulkGridItem, isDesktop ? styles.bulkGridItemDesktop : styles.bulkGridItemMobile, { backgroundColor: activeAccent, opacity: pressed ? 0.8 : 1 }]}><Text style={[styles.bulkButtonText, { color: '#111' }]}>{t('settings.runCheck')}</Text></Pressable>
+            <Pressable onPress={() => runDataSyncAction('Maintenance backup', onExportBackup)} style={({ pressed }) => [styles.bulkButton, styles.bulkGridItem, isDesktop ? styles.bulkGridItemDesktop : styles.bulkGridItemMobile, { backgroundColor: activeAccent, opacity: pressed ? 0.8 : 1 }]}><Text style={[styles.bulkButtonText, { color: '#111' }]}>{t('settings.backupNow')}</Text></Pressable>
+            <Pressable disabled={syncBusy} onPress={() => runDataSyncAction('Maintenance sync', onSyncNow)} style={({ pressed }) => [styles.bulkButton, styles.bulkGridItem, isDesktop ? styles.bulkGridItemDesktop : styles.bulkGridItemMobile, { backgroundColor: activeAccent, opacity: syncBusy ? 0.6 : pressed ? 0.8 : 1 }]}><Text style={[styles.bulkButtonText, { color: '#111' }]}>{syncBusy ? 'Syncing' : 'Sync now'}</Text></Pressable>
+            <Pressable onPress={() => runDataSyncAction('Maintenance Firebase check', onRecheckFirebase)} style={({ pressed }) => [styles.bulkButton, styles.bulkGridItem, isDesktop ? styles.bulkGridItemDesktop : styles.bulkGridItemMobile, { backgroundColor: activeAccent, opacity: pressed ? 0.8 : 1 }]}><Text style={[styles.bulkButtonText, { color: '#111' }]}>{t('settings.firebaseCheck')}</Text></Pressable>
+            <Pressable onPress={() => runDiagnosticAction('Maintenance copy logs', onCopyLogs)} style={({ pressed }) => [styles.bulkButton, styles.bulkGridItem, isDesktop ? styles.bulkGridItemDesktop : styles.bulkGridItemMobile, { backgroundColor: activeAccent, opacity: pressed ? 0.8 : 1 }]}><Text style={[styles.bulkButtonText, { color: '#111' }]}>{t('settings.copyLogs')}</Text></Pressable>
+            <Pressable
+              onPress={() => runDiagnosticAction('Maintenance clear logs', async () => {
+                await diag.clear();
+                showToast('Logs cleared', 'success');
+              })}
+              style={({ pressed }) => [styles.bulkButton, styles.bulkGridItem, isDesktop ? styles.bulkGridItemDesktop : styles.bulkGridItemMobile, { backgroundColor: '#991b1b', opacity: pressed ? 0.8 : 1 }]}
+            >
+              <Text style={[styles.bulkButtonText, { color: '#fff' }]}>{t('settings.clearLogs')}</Text>
+            </Pressable>
+          </View>
+          {maintenanceSummary ? <Text style={[styles.helperLine, { color: palette.muted }]}>{maintenanceSummary}</Text> : null}
+        </SectionCard>
+
+        <SectionCard
           visible={matchesSection('diagnostics')}
           open={sectionOpen['diagnostics']}
           onToggle={() => toggleSettingsSection('diagnostics')}
-          title="Production logs"
-          subtitle="Live local diagnostics for buttons, settings, functions and runtime errors."
+          title={t('settings.logsTitle')}
+          subtitle={t('settings.logsSubtitle')}
           icon="bug-outline"
           badge={`${diagnosticLogs.length} EVENTS`}
           badgeTone={diagnosticLogs.some((entry) => entry.level === 'error') ? 'warn' : 'info'}
@@ -1731,13 +1901,13 @@ export function SettingsTab({
               onPress={() => runDiagnosticAction('Copy logs', onCopyLogs)}
               style={({ pressed }) => [styles.bulkButton, styles.bulkGridItem, isDesktop ? styles.bulkGridItemDesktop : styles.bulkGridItemMobile, { backgroundColor: activeAccent, opacity: pressed ? 0.8 : 1 }]}
             >
-              <Text style={[styles.bulkButtonText, { color: '#111' }]}>Copy logs</Text>
+              <Text style={[styles.bulkButtonText, { color: '#111' }]}>{t('settings.copyLogs')}</Text>
             </Pressable>
             <Pressable
               onPress={() => runDiagnosticAction('Export logs', onExportLogs)}
               style={({ pressed }) => [styles.bulkButton, styles.bulkGridItem, isDesktop ? styles.bulkGridItemDesktop : styles.bulkGridItemMobile, { backgroundColor: activeAccent, opacity: pressed ? 0.8 : 1 }]}
             >
-              <Text style={[styles.bulkButtonText, { color: '#111' }]}>Export JSON</Text>
+              <Text style={[styles.bulkButtonText, { color: '#111' }]}>{t('settings.exportJson')}</Text>
             </Pressable>
             <Pressable
               onPress={() => runDiagnosticAction('Clear logs', async () => {
@@ -1746,7 +1916,7 @@ export function SettingsTab({
               })}
               style={({ pressed }) => [styles.bulkButton, styles.bulkGridItem, isDesktop ? styles.bulkGridItemDesktop : styles.bulkGridItemMobile, { backgroundColor: '#991b1b', opacity: pressed ? 0.8 : 1 }]}
             >
-              <Text style={[styles.bulkButtonText, { color: '#fff' }]}>Clear logs</Text>
+              <Text style={[styles.bulkButtonText, { color: '#fff' }]}>{t('settings.clearLogs')}</Text>
             </Pressable>
           </View>
 
@@ -1764,18 +1934,18 @@ export function SettingsTab({
                 );
               })
             ) : (
-              <Text style={[styles.helperLine, { color: palette.muted }]}>No local diagnostic events yet.</Text>
+              <Text style={[styles.helperLine, { color: palette.muted }]}>{t('settings.noDiagnosticsYet')}</Text>
             )}
           </View>
-          <Text style={[styles.helperLine, { color: palette.muted }]}>Stored locally in AsyncStorage and refreshed live while Settings is open.</Text>
+          <Text style={[styles.helperLine, { color: palette.muted }]}>{t('settings.diagnosticsStoredHint')}</Text>
         </SectionCard>
 
         <SectionCard
           visible={matchesSection('advanced')}
           open={sectionOpen['advanced']}
           onToggle={() => toggleSettingsSection('advanced')}
-          title="Advanced"
-          subtitle="Prefixes, URLs, and power-user toggles."
+          title={t('settings.advancedTitle')}
+          subtitle={t('settings.advancedSubtitle')}
           icon="construct-outline"
           badge="EXPERT"
           badgeTone="warn"
@@ -1784,7 +1954,7 @@ export function SettingsTab({
           cardBackground={palette.card}
           cardBorder={palette.border}
         >
-          <Text style={[styles.controlLabel, { color: palette.muted }]}>PI full prefix</Text>
+          <Text style={[styles.controlLabel, { color: palette.muted }]}>{t('settings.piFullPrefix')}</Text>
           <TextInput
             style={[styles.input, { borderColor: palette.border, color: palette.fg, backgroundColor: palette.card }]}
             value={settings.fullPrefix}
@@ -1794,7 +1964,7 @@ export function SettingsTab({
             autoCapitalize="characters"
             autoCorrect={false}
           />
-          <Text style={[styles.controlLabel, { color: palette.muted }]}>PI short prefix</Text>
+          <Text style={[styles.controlLabel, { color: palette.muted }]}>{t('settings.piShortPrefix')}</Text>
           <TextInput
             style={[styles.input, { borderColor: palette.border, color: palette.fg, backgroundColor: palette.card }]}
             value={settings.shortPrefix}
@@ -1804,45 +1974,45 @@ export function SettingsTab({
             autoCapitalize="characters"
             autoCorrect={false}
           />
-          <Text style={[styles.controlLabel, { color: palette.muted }]}>ServiceNow base URL</Text>
+          <Text style={[styles.controlLabel, { color: palette.muted }]}>{t('settings.serviceNowBaseUrl')}</Text>
           <TextInput
             style={[styles.input, { borderColor: palette.border, color: palette.fg, backgroundColor: palette.card }]}
             value={settings.serviceNowBaseUrl}
             onChangeText={(value) => patchSettingsLogged({ serviceNowBaseUrl: value.trim() })}
-            placeholder="https://your-instance.service-now.com"
+            placeholder={t('settings.serviceNowUrlPlaceholder')}
             placeholderTextColor={palette.muted}
             autoCapitalize="none"
             autoCorrect={false}
             keyboardType="url"
           />
-          <Text style={[styles.helperLine, { color: palette.muted, marginTop: 4 }]}>Used to open ticket URLs from scans and notes.</Text>
+          <Text style={[styles.helperLine, { color: palette.muted, marginTop: 4 }]}>{t('settings.serviceNowHint')}</Text>
 
           <View style={[styles.divider, { backgroundColor: palette.border }]} />
 
           <View style={styles.toggleRow}>
             <View style={{ flex: 1, minWidth: 0 }}>
-              <Text style={[styles.toggleLabel, { color: palette.fg }]}>Show raw text</Text>
-              <Text style={[styles.toggleHint, { color: palette.muted }]}>Display the unprocessed scan content in history.</Text>
+              <Text style={[styles.toggleLabel, { color: palette.fg }]}>{t('settings.showRawText')}</Text>
+              <Text style={[styles.toggleHint, { color: palette.muted }]}>{t('settings.showRawTextHint')}</Text>
             </View>
             <Switch
-              accessibilityLabel="Show raw text"
+              accessibilityLabel={t('settings.showRawText')}
               value={settings.showRawText}
               onValueChange={(value) => patchSettingsLogged({ showRawText: value })}
             />
           </View>
           <View style={styles.toggleRow}>
             <View style={{ flex: 1, minWidth: 0 }}>
-              <Text style={[styles.toggleLabel, { color: palette.fg }]}>Stay signed in</Text>
-              <Text style={[styles.toggleHint, { color: palette.muted }]}>Keep the Firebase session active for 15 days.</Text>
+              <Text style={[styles.toggleLabel, { color: palette.fg }]}>{t('settings.staySignedIn')}</Text>
+              <Text style={[styles.toggleHint, { color: palette.muted }]}>{t('settings.staySignedInHint')}</Text>
             </View>
             <Switch
-              accessibilityLabel="Stay signed in"
+              accessibilityLabel={t('settings.staySignedIn')}
               value={settings.staySignedIn}
               onValueChange={(value) => patchSettingsLogged({ staySignedIn: value })}
             />
           </View>
 
-          <Text style={[styles.controlLabel, { color: palette.muted }]}>Laser speed</Text>
+          <Text style={[styles.controlLabel, { color: palette.muted }]}>{t('settings.laserSpeed')}</Text>
           <View style={styles.modeRow}>
             {(['slow', 'normal', 'fast'] as const).map((speed) => {
               const active = settings.laserSpeed === speed;
@@ -1858,7 +2028,7 @@ export function SettingsTab({
             })}
           </View>
 
-          <Text style={[styles.controlLabel, { color: palette.muted }]}>Scan profile</Text>
+          <Text style={[styles.controlLabel, { color: palette.muted }]}>{t('settings.scanProfile')}</Text>
           <View style={styles.modeRow}>
             {(['auto', 'pi_full', 'pi_short'] as const).map((profile) => {
               const active = settings.scanProfile === profile;
@@ -1878,7 +2048,7 @@ export function SettingsTab({
 
         <View style={styles.bottomLogout}>
           <Pressable onPress={onLogout} style={[styles.bulkButton, styles.bottomLogoutBtn, isDesktop ? styles.bottomLogoutBtnDesktop : null, { backgroundColor: palette.accent }]}>
-            <Text style={[styles.bulkButtonText, { color: '#fff' }]}>Log off</Text>
+            <Text style={[styles.bulkButtonText, { color: '#fff' }]}>{t('settings.logOff')}</Text>
           </Pressable>
         </View>
         </View>
@@ -1926,6 +2096,12 @@ const styles = StyleSheet.create({
   statusRow: { flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1, borderRadius: 12, padding: 12 },
   statusTitle: { fontSize: 13, fontWeight: '700' },
   statusSubtitle: { fontSize: 11, lineHeight: 15, marginTop: 2 },
+  healthGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, width: '100%', minWidth: 0 },
+  healthGridDesktop: { gap: 10 },
+  healthTile: { flexGrow: 1, flexBasis: '100%', minWidth: 0, borderWidth: 1, borderRadius: 12, padding: 12, gap: 4 },
+  healthTileDesktop: { flexBasis: '31%' },
+  healthLabel: { fontSize: 10, fontWeight: '900', textTransform: 'uppercase', letterSpacing: 1, fontFamily: 'monospace' },
+  healthValue: { fontSize: 13, fontWeight: '800', lineHeight: 18 },
   divider: { height: 1, marginVertical: 6, opacity: 0.6 },
   chevron: { fontWeight: '800', fontSize: 14 },
   themeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, width: '100%', minWidth: 0 },

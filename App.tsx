@@ -21,7 +21,12 @@ import { ThemeProvider } from './src/core/theme';
 import { loadSettings } from './src/core/settings';
 import { initPwaInstallBridge } from './src/core/pwa';
 import { getAuthRedirectPath } from './src/core/routes';
+import { initI18n, setUiLanguage } from './src/i18n';
 import MainAppScreen from './src/screens/MainAppScreen';
+
+// Initialize i18next synchronously at module load (device language) so the very
+// first render has translations. AuthGate then aligns it to the persisted setting.
+initI18n();
 
 function SplashScreen() {
   const { theme } = useAppTheme();
@@ -117,6 +122,7 @@ function AuthGate() {
       .then((settings) => {
         const key = settings.theme === 'eu_blue' ? 'euBlue' : settings.theme;
         setThemeName(key as 'euBlue' | 'dark' | 'light' | 'parliament' | 'custom' | 'noirGraphite' | 'midnightSteel' | 'obsidianGold');
+        setUiLanguage(settings.uiLanguage);
       })
       .catch(() => undefined);
   }, [setThemeName]);

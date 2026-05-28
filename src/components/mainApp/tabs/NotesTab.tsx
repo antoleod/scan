@@ -16,6 +16,7 @@ import {
   upsertSharedGroupNote,
   type SharedNoteGroup,
 } from '../../../core/firebase';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../../auth/useAuth';
 import {
   NoteCategory,
@@ -82,50 +83,6 @@ import type { Palette } from '../../../theme/theme';
 type WorkspaceTab = 'notes' | 'templates' | 'clipboard';
 type NoteFilter = 'all' | 'work' | 'pinned' | 'draft' | 'archived';
 type InboxView = 'all' | 'shopping' | 'medication' | 'work' | 'reminder' | 'image';
-
-function detectUiLang(): 'en' | 'es' | 'fr' {
-  if (typeof navigator === 'undefined' || !navigator.language) return 'en';
-  const lang = navigator.language.toLowerCase();
-  if (lang.startsWith('es')) return 'es';
-  if (lang.startsWith('fr')) return 'fr';
-  return 'en';
-}
-
-const UI_COPY = {
-  en: {
-    quickNote: 'Quick Add: Note',
-    quickShopping: 'Quick Add: Shopping',
-    quickMedication: 'Quick Add: Medication',
-    online: 'Online',
-    savedOffline: 'Saved offline',
-    today: 'Today',
-    inbox: 'Inbox',
-    noteVersions: 'Note versions',
-    noVersions: 'No versions yet.',
-  },
-  es: {
-    quickNote: 'Rápido: Nota',
-    quickShopping: 'Rápido: Compras',
-    quickMedication: 'Rápido: Medicación',
-    online: 'En línea',
-    savedOffline: 'Guardado offline',
-    today: 'Hoy',
-    inbox: 'Bandeja',
-    noteVersions: 'Versiones de nota',
-    noVersions: 'Sin versiones aún.',
-  },
-  fr: {
-    quickNote: 'Ajout rapide: Note',
-    quickShopping: 'Ajout rapide: Courses',
-    quickMedication: 'Ajout rapide: Médication',
-    online: 'En ligne',
-    savedOffline: 'Sauvé hors ligne',
-    today: "Aujourd'hui",
-    inbox: 'Boîte',
-    noteVersions: 'Versions de note',
-    noVersions: 'Aucune version.',
-  },
-} as const;
 
 const DRAFT_KEY = '@MyKit_notes_draft_v2';
 
@@ -241,8 +198,9 @@ export function NotesTab({
   settings: AppSettings;
   onPatchSettings?: (next: Partial<AppSettings>) => Promise<void> | void;
 }) {
-  const uiLang = detectUiLang();
-  const t = UI_COPY[uiLang];
+  // i18n. Aliased to `tr` because `t` is heavily used as a local variable name
+  // throughout this file (arrays, DOM nodes, text buffers).
+  const { t: tr } = useTranslation();
   const { user } = useAuth();
   const { width } = useWindowDimensions();
   const isDesktop = width >= 1024;
@@ -2563,7 +2521,7 @@ export function NotesTab({
         <Pressable style={mainAppStyles.modalBackdrop} onPress={() => { setVersionNoteId(null); setSelectedVersionId(null); }}>
           <Pressable style={[mainAppStyles.modalForm, { backgroundColor: palette.card, borderColor: palette.border, maxWidth: 640 }]} onPress={() => null}>
             <View style={mainAppStyles.modalHeader}>
-              <Text style={[mainAppStyles.sectionTitle, { color: palette.fg }]}>{t.noteVersions}</Text>
+              <Text style={[mainAppStyles.sectionTitle, { color: palette.fg }]}>{tr('notes.noteVersions')}</Text>
               <Pressable style={[mainAppStyles.modalCloseBtn, { borderColor: palette.border }]} onPress={() => { setVersionNoteId(null); setSelectedVersionId(null); }}>
                 <Ionicons name="close" size={18} color={palette.fg} />
               </Pressable>
@@ -2675,7 +2633,7 @@ export function NotesTab({
                 ))}
               </View>
             ) : (
-              <Text style={{ color: palette.muted, fontSize: 12 }}>{t.noVersions}</Text>
+              <Text style={{ color: palette.muted, fontSize: 12 }}>{tr('notes.noVersions')}</Text>
             )}
           </Pressable>
         </Pressable>

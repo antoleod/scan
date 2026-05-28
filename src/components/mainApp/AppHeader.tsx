@@ -126,6 +126,7 @@ export function AppHeader({
   lastSyncedAt = null,
   persistenceMode = 'local',
   onSyncNow,
+  onOpenCommandPalette,
   profileMenuVisible = false,
   onToggleProfileMenu,
   profileMenuItems = [],
@@ -137,6 +138,7 @@ export function AppHeader({
   lastSyncedAt?: number | null;
   persistenceMode?: string;
   onSyncNow?: () => void;
+  onOpenCommandPalette?: () => void;
   profileMenuVisible?: boolean;
   onToggleProfileMenu?: () => void;
   profileMenuItems?: MenuItem[];
@@ -154,6 +156,26 @@ export function AppHeader({
 
         {/* Right side */}
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flexShrink: 1 }}>
+          <Pressable
+            onPress={onOpenCommandPalette}
+            accessibilityRole="button"
+            accessibilityLabel="Open global search"
+            hitSlop={8}
+            style={({ pressed }) => ({
+              width: 30,
+              height: 30,
+              borderRadius: 10,
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderWidth: 1,
+              borderColor: palette.border,
+              backgroundColor: palette.card,
+              opacity: pressed ? 0.75 : 1,
+            })}
+          >
+            <Ionicons name="search-outline" size={16} color={palette.accent} />
+          </Pressable>
+
           <SyncChip
             syncBusy={syncBusy}
             lastSyncedAt={lastSyncedAt}

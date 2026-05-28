@@ -5,6 +5,57 @@ declare const require: (moduleName: string) => any;
 
 const OCR_LANGUAGES = 'eng+spa+fra+nld';
 const OCR_MAX_DIMENSION = 2200;
+export type OcrCropMode = 'full' | 'center' | 'top';
+
+// Pin to the installed tesseract.js version so the worker/core/lang assets all
+// match. Keep in sync with package.json ("tesseract.js": "^7.0.0").
+const TESSERACT_VERSION = '7.0.0';
+
+// Production logs showed the default jsdelivr worker script failing to load
+// ("NetworkError ... importScripts ... worker.min.js failed to load"), which
+// broke OCR entirely. We try a primary CDN and fall back to a mirror so a
+// transient outage on one host no longer kills the feature. `langPath` points
+// at the canonical tessdata host (one directory holding every <lang>.traineddata)
+// rather than jsdelivr's per-language packages.
+type OcrCdnConfig = { name: string; workerPath: string; corePath: string; langPath: string };
+
+const OCR_CDNS: OcrCdnConfig[] = [
+  {
+    name: 'jsdelivr',
+    workerPath: `https://cdn.jsdelivr.net/npm/tesseract.js@${TESSERACT_VERSION}/dist/worker.min.js`,
+    corePath: `https://cdn.jsdelivr.net/npm/tesseract.js-core@${TESSERACT_VERSION}`,
+    langPath: 'https://tessdata.projectnaptha.com/4.0.0',
+  },
+  {
+    name: 'unpkg',
+    workerPath: `https://unpkg.com/tesseract.js@${TESSERACT_VERSION}/dist/worker.min.js`,
+    corePath: `https://unpkg.com/tesseract.js-core@${TESSERACT_VERSION}`,
+    langPath: 'https://tessdata.projectnaptha.com/4.0.0',
+  },
+];
+
+async function createOcrWorker(
+  createWorker: (langs: string, oem: number, options: Record<string, unknown>) => Promise<any>,
+  logger: (m: { status: string; progress: number }) => void,
+): Promise<any> {
+  let lastError: unknown;
+  for (const cdn of OCR_CDNS) {
+    try {
+      return await createWorker(OCR_LANGUAGES, 1, {
+        workerPath: cdn.workerPath,
+        corePath: cdn.corePath,
+        langPath: cdn.langPath,
+        logger,
+      });
+    } catch (error) {
+      lastError = error;
+      // Try the next mirror before giving up.
+    }
+  }
+  throw lastError instanceof Error
+    ? new Error(`OCR engine could not load (network). ${lastError.message}`)
+    : new Error('OCR engine could not load. Check your connection and retry.');
+}
 
 export interface OcrResult {
   text: string;
@@ -15,9 +66,27 @@ export interface OcrResult {
 export interface OcrOptions {
   onProgress?: (progress: number) => void;
   signal?: AbortSignal;
+  cropMode?: OcrCropMode;
 }
 
-async function preprocessImageForOcr(imageUri: string): Promise<string> {
+function getCropRect(width: number, height: number, cropMode: OcrCropMode) {
+  if (cropMode === 'center') {
+    const marginX = Math.round(width * 0.12);
+    const marginY = Math.round(height * 0.16);
+    return {
+      sx: marginX,
+      sy: marginY,
+      sw: Math.max(1, width - marginX * 2),
+      sh: Math.max(1, height - marginY * 2),
+    };
+  }
+  if (cropMode === 'top') {
+    return { sx: 0, sy: 0, sw: width, sh: Math.max(1, Math.round(height * 0.58)) };
+  }
+  return { sx: 0, sy: 0, sw: width, sh: height };
+}
+
+async function preprocessImageForOcr(imageUri: string, cropMode: OcrCropMode = 'full'): Promise<string> {
   if (Platform.OS !== 'web' || typeof document === 'undefined') return imageUri;
 
   return new Promise((resolve) => {
@@ -31,9 +100,10 @@ async function preprocessImageForOcr(imageUri: string): Promise<string> {
           return;
         }
 
-        const scale = Math.min(1, OCR_MAX_DIMENSION / Math.max(sourceWidth, sourceHeight));
-        const width = Math.max(1, Math.round(sourceWidth * scale));
-        const height = Math.max(1, Math.round(sourceHeight * scale));
+        const crop = getCropRect(sourceWidth, sourceHeight, cropMode);
+        const scale = Math.min(1, OCR_MAX_DIMENSION / Math.max(crop.sw, crop.sh));
+        const width = Math.max(1, Math.round(crop.sw * scale));
+        const height = Math.max(1, Math.round(crop.sh * scale));
         const canvas = document.createElement('canvas');
         canvas.width = width;
         canvas.height = height;
@@ -46,7 +116,7 @@ async function preprocessImageForOcr(imageUri: string): Promise<string> {
 
         ctx.fillStyle = '#ffffff';
         ctx.fillRect(0, 0, width, height);
-        ctx.drawImage(image, 0, 0, width, height);
+        ctx.drawImage(image, crop.sx, crop.sy, crop.sw, crop.sh, 0, 0, width, height);
 
         const frame = ctx.getImageData(0, 0, width, height);
         for (let i = 0; i < frame.data.length; i += 4) {
@@ -93,19 +163,17 @@ export async function extractTextFromImage(
       throw new Error('Tesseract not available');
     }
 
-    const worker = await createWorker(OCR_LANGUAGES, 1, {
-      logger: (m: { status: string; progress: number }) => {
-        if (options?.signal?.aborted) {
-          throw new Error('OCR cancelled');
-        }
-        if (m.status === 'recognizing text') {
-          options?.onProgress?.(Math.round(m.progress * 100));
-        }
-      },
+    const worker = await createOcrWorker(createWorker, (m) => {
+      if (options?.signal?.aborted) {
+        throw new Error('OCR cancelled');
+      }
+      if (m.status === 'recognizing text') {
+        options?.onProgress?.(Math.round(m.progress * 100));
+      }
     });
 
     try {
-      const preparedImageUri = await preprocessImageForOcr(imageUri);
+      const preparedImageUri = await preprocessImageForOcr(imageUri, options?.cropMode ?? 'full');
       const { data } = await worker.recognize(preparedImageUri, {
         preserve_interword_spaces: '1',
       });

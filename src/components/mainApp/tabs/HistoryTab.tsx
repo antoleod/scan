@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ActivityIndicator, Alert, Animated, FlatList, Linking, Modal, PanResponder, Platform, Pressable, RefreshControl, ScrollView, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
+import { useTranslation } from 'react-i18next';
 
 import { ScanRecord } from '../../../types';
 import { HistorySort } from '../../../core/smartSearch';
@@ -60,6 +61,7 @@ function HistoryItemCard({
   onToggleExpand: () => void;
   visibleScanType: (type: string) => string;
 }) {
+  const { t } = useTranslation();
   const swipeOpenRef = useRef(false);
   const swipeOffsetRef = useRef(0);
   const translateX = useRef(new Animated.Value(0)).current;
@@ -150,7 +152,7 @@ function HistoryItemCard({
           })}
         >
           <Ionicons name="trash-outline" size={18} color="#fff" />
-          <Text style={{ color: '#fff', fontSize: 9, fontWeight: '900', letterSpacing: 0.8 }}>DELETE</Text>
+          <Text style={{ color: '#fff', fontSize: 9, fontWeight: '900', letterSpacing: 0.8 }}>{t('history.deleteUpper')}</Text>
         </Pressable>
       </View>
 
@@ -207,28 +209,28 @@ function HistoryItemCard({
               </View>
               <View style={[mainAppStyles.statusChip, { backgroundColor: used ? 'rgba(120, 130, 145, 0.18)' : 'rgba(34, 197, 94, 0.18)' }]}>
                 <View style={[mainAppStyles.statusDot, { backgroundColor: used ? '#93a1b5' : '#22c55e' }]} />
-                <Text style={{ color: used ? palette.muted : '#22c55e', fontSize: 12, fontWeight: '700' }}>{used ? 'Used' : 'Ready'}</Text>
+                <Text style={{ color: used ? palette.muted : '#22c55e', fontSize: 12, fontWeight: '700' }}>{used ? t('history.used') : t('history.ready')}</Text>
               </View>
-              {isCopied ? <Text style={{ color: palette.accent, fontSize: 12, fontWeight: '700' }}>Copied</Text> : null}
+              {isCopied ? <Text style={{ color: palette.accent, fontSize: 12, fontWeight: '700' }}>{t('history.copied')}</Text> : null}
             </View>
           </Pressable>
 
           <View style={[mainAppStyles.itemActions, { alignItems: 'center' }]}>
             <Pressable style={({ pressed }) => [mainAppStyles.tinyBtn, { borderColor: palette.border, flexDirection: 'row', alignItems: 'center', gap: 6, opacity: pressed ? 0.75 : 1 }]} onPress={onCopy}>
               <Ionicons name="copy-outline" size={14} color={palette.fg} />
-              {showActionLabels ? <Text style={{ color: palette.fg, fontSize: 11, fontWeight: '700' }}>Copy</Text> : null}
+              {showActionLabels ? <Text style={{ color: palette.fg, fontSize: 11, fontWeight: '700' }}>{t('history.copy')}</Text> : null}
             </Pressable>
             <Pressable style={({ pressed }) => [mainAppStyles.tinyBtn, { borderColor: palette.border, flexDirection: 'row', alignItems: 'center', gap: 6, opacity: pressed ? 0.75 : 1 }]} onPress={onEdit}>
               <Ionicons name="create-outline" size={14} color={palette.fg} />
-              {showActionLabels ? <Text style={{ color: palette.fg, fontSize: 11, fontWeight: '700' }}>Edit</Text> : null}
+              {showActionLabels ? <Text style={{ color: palette.fg, fontSize: 11, fontWeight: '700' }}>{t('history.edit')}</Text> : null}
             </Pressable>
             <Pressable style={({ pressed }) => [mainAppStyles.tinyBtn, { borderColor: palette.border, flexDirection: 'row', alignItems: 'center', gap: 6, opacity: pressed ? 0.75 : 1 }]} onPress={onToggleUsed}>
               <Ionicons name={used ? 'checkmark-circle-outline' : 'ellipse-outline'} size={14} color={palette.fg} />
-              {showActionLabels ? <Text style={{ color: palette.fg, fontSize: 11, fontWeight: '700' }}>{used ? 'Unuse' : 'Use'}</Text> : null}
+              {showActionLabels ? <Text style={{ color: palette.fg, fontSize: 11, fontWeight: '700' }}>{used ? t('history.unuse') : t('history.use')}</Text> : null}
             </Pressable>
             <Pressable style={({ pressed }) => [mainAppStyles.tinyBtn, { borderColor: palette.border, flexDirection: 'row', alignItems: 'center', gap: 6, opacity: pressed ? 0.75 : 1 }]} onPress={onDelete}>
               <Ionicons name="trash-outline" size={14} color="#ef4444" />
-              {showActionLabels ? <Text style={{ color: '#ef4444', fontSize: 11, fontWeight: '700' }}>Delete</Text> : null}
+              {showActionLabels ? <Text style={{ color: '#ef4444', fontSize: 11, fontWeight: '700' }}>{t('history.delete')}</Text> : null}
             </Pressable>
           </View>
         </View>
@@ -288,6 +290,7 @@ export function HistoryTab({
   visibleScanType: (type: string) => string;
   onRefresh?: () => void | Promise<void>;
 }) {
+  const { t } = useTranslation();
   const { width } = useWindowDimensions();
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -395,7 +398,7 @@ export function HistoryTab({
               <TextInput
                 value={query}
                 onChangeText={onQueryChange}
-                placeholder="Search code, user, ticket, notes..."
+                placeholder={t('history.searchPlaceholder')}
                 placeholderTextColor={palette.muted}
                 style={[mainAppStyles.input, { flex: 1, color: palette.fg, borderColor: palette.border, backgroundColor: palette.bg, marginTop: 0 }]}
               />
@@ -533,7 +536,7 @@ export function HistoryTab({
           <Pressable style={[mainAppStyles.moreSheet, { backgroundColor: palette.card, borderColor: palette.border }]} onPress={() => null}>
             <View style={mainAppStyles.modalHandle} />
             <View style={mainAppStyles.moreSheetHeader}>
-              <Text style={[mainAppStyles.sectionTitle, { color: palette.fg }]}>More filters</Text>
+              <Text style={[mainAppStyles.sectionTitle, { color: palette.fg }]}>{t('history.moreFilters')}</Text>
               <Pressable style={[mainAppStyles.modalCloseBtn, { borderColor: palette.border }]} onPress={() => setMoreVisible(false)}>
                 <Ionicons name="close" size={18} color={palette.fg} />
               </Pressable>
@@ -551,7 +554,7 @@ export function HistoryTab({
                   <Text style={{ color: filterType === type ? '#fff' : palette.fg, fontSize: 12, fontWeight: '700' }}>{type}</Text>
                 </Pressable>
               )) : (
-                <Text style={{ color: palette.muted, fontSize: 11 }}>Open ALL to reveal PI, RITM, and REQ.</Text>
+                <Text style={{ color: palette.muted, fontSize: 11 }}>{t('history.moreFiltersHint')}</Text>
               )}
             </ScrollView>
           </Pressable>
@@ -572,7 +575,7 @@ export function HistoryTab({
           >
             <View style={mainAppStyles.modalHandle} />
             <View style={mainAppStyles.modalHeader}>
-              <Text style={[mainAppStyles.sectionTitle, { color: palette.fg }]}>Delete item</Text>
+              <Text style={[mainAppStyles.sectionTitle, { color: palette.fg }]}>{t('history.deleteItem')}</Text>
               <Pressable style={[mainAppStyles.modalCloseBtn, { borderColor: palette.border }]} onPress={() => setDeleteTarget(null)}>
                 <Ionicons name="close" size={18} color={palette.fg} />
               </Pressable>
@@ -588,7 +591,7 @@ export function HistoryTab({
                 style={({ pressed }) => [{ flex: 1, borderWidth: 1, borderColor: palette.border, borderRadius: 10, minHeight: 40, alignItems: 'center', justifyContent: 'center', opacity: pressed ? 0.8 : 1 }]}
                 onPress={() => setDeleteTarget(null)}
               >
-                <Text style={{ color: palette.fg, fontSize: 12, fontWeight: '700' }}>Cancel</Text>
+                <Text style={{ color: palette.fg, fontSize: 12, fontWeight: '700' }}>{t('history.cancel')}</Text>
               </Pressable>
               <Pressable
                 style={({ pressed }) => [{ flex: 1, borderRadius: 10, minHeight: 40, alignItems: 'center', justifyContent: 'center', backgroundColor: '#b91c1c', opacity: pressed ? 0.82 : 1 }]}
@@ -599,7 +602,7 @@ export function HistoryTab({
                   onDeleteItem(target);
                 }}
               >
-                <Text style={{ color: '#fff', fontSize: 12, fontWeight: '800' }}>Delete</Text>
+                <Text style={{ color: '#fff', fontSize: 12, fontWeight: '800' }}>{t('history.delete')}</Text>
               </Pressable>
             </View>
           </Pressable>
