@@ -6,6 +6,8 @@ import { extractFields } from './extract';
 import { addHistoryUnique, createHistoryId } from './history';
 import { normalizeCodeValue, detectCodeType } from './codeStrategy';
 import { piLogic } from './settings';
+import { analytics } from './analyticsService';
+import { getFirebaseRuntime } from './firebase';
 
 export const IMAGE_SCAN_BARCODE_TYPES: BarcodeType[] = ['qr', 'code128', 'code39', 'ean13', 'ean8'];
 
@@ -146,6 +148,7 @@ export async function processScanInput(
     };
   }
 
+  const scanUid = getFirebaseRuntime()?.auth?.currentUser?.uid ?? null;
   const result = await addHistoryUnique(built.record);
   if (!result.inserted) {
     return {
@@ -156,6 +159,9 @@ export async function processScanInput(
     };
   }
 
+  if (scanUid) {
+    analytics.scanSuccess(scanUid, { scanType: built.classified.type, source });
+  }
   return {
     status: 'saved',
     message: built.record.codeNormalized,

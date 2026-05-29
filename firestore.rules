@@ -13,6 +13,20 @@ service cloud.firestore {
       return request.resource.data.keys().hasOnly(allowed);
     }
 
+    // Admin role check: caller must have a document in /admins/{uid} with role 'admin'.
+    // Uses exists() (cheap) for write-gate; get() only where role value matters.
+    function callerIsAdmin() {
+      return signedIn()
+        && exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+        && get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    // Tester or admin — both can read analytics. Admins can also write.
+    function callerIsTesterOrAdmin() {
+      return signedIn()
+        && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
     function noteTombstoneValid() {
       return hasOnlyKeys([
         'id',
@@ -136,13 +150,16 @@ service cloud.firestore {
     }
 
     match /users/{uid} {
-      allow read: if isOwner(uid);
+      allow read: if isOwner(uid) || callerIsAdmin();
 
       // Keep the root doc blocked unless the app explicitly starts using it.
       allow create, update, delete: if false;
 
       match /private/{docId} {
-        allow read, write: if isOwner(uid);
+        // Admins may read profile docs for user management (email/username lookup).
+        // Writes remain owner-only.
+        allow read: if isOwner(uid) || callerIsAdmin();
+        allow write: if isOwner(uid);
       }
 
       match /scans/{scanId} {
@@ -242,6 +259,119 @@ service cloud.firestore {
       // Server-side only (Cloud Function rate limiter writes via Admin SDK,
       // which bypasses rules).
       allow read, write: if false;
+    }
+
+    // ── Admin role allowlist ─────────────────────────────────────────────────
+    // /admins/{uid}: { uid, role: 'admin'|'tester', addedAt, addedBy, email?, displayName? }
+    //
+    // Bootstrap: write the first admin document directly via Firebase console.
+    // Subsequent grants are made by an existing admin via setAdminRole().
+    match /admins/{uid} {
+      // Any signed-in user may read their OWN record (for role check on login).
+      allow get: if isOwner(uid);
+      // Admins may list all admin records (for admin management UI).
+      allow list: if callerIsAdmin();
+      // Only admins may create/update/delete admin records.
+      allow create, update: if callerIsAdmin()
+        && request.resource.data.uid is string
+        && request.resource.data.role in ['admin', 'tester']
+        && request.resource.data.addedBy is string;
+      allow delete: if callerIsAdmin();
+    }
+
+    // ── Analytics collections (Phase 2) — stubs, locked until then ──────────
+    // analyticsDaily/{yyyyMMdd}     — global daily aggregates
+    // userAnalytics/{uid}/daily/{yyyyMMdd} — per-user daily aggregates
+    //
+    // Normal users can only read their own analytics.
+    // Admins/testers can read all analytics.
+    // Writes come from the app client (aggregates) or Cloud Functions (server).
+    match /analyticsDaily/{dateKey} {
+      allow read: if callerIsTesterOrAdmin();
+      // Client writes aggregated counters using increment(); only the owning
+      // uid can write its own presence mark in the activeUsers subcollection.
+      allow update: if signedIn(); // increment() calls from authenticated clients
+      allow create: if signedIn();
+      allow delete: if callerIsAdmin();
+
+      match /activeUsers/{uid} {
+        allow read: if callerIsTesterOrAdmin();
+        allow write: if isOwner(uid); // each user writes their own presence mark
+      }
+    }
+
+    match /userAnalytics/{uid} {
+      allow read: if isOwner(uid) || callerIsTesterOrAdmin();
+      allow write: if false; // client writes go to subcollection below
+
+      match /daily/{dateKey} {
+        allow read: if isOwner(uid) || callerIsTesterOrAdmin();
+        // Client increments own counters; admin can write any.
+        allow create, update: if isOwner(uid) || callerIsAdmin();
+        allow delete: if callerIsAdmin();
+      }
+    }
+
+    // ── User stats (Phase 2) — aggregate totals per user ────────────────────
+    // users/{uid}/stats/summary: lifetime totals
+    match /users/{uid}/stats/{docId} {
+      allow read: if isOwner(uid) || callerIsTesterOrAdmin();
+      allow create, update: if isOwner(uid) || callerIsAdmin();
+      allow delete: if callerIsAdmin();
+    }
+
+    // ── Cloud relay quota (Phase 4) ──────────────────────────────────────────
+
+    // Global relay state — admin-writable; testers/admins can read.
+    // Normal users can only read whether the relay is enabled (for UI gates).
+    match /cloudRelay/globalState {
+      allow get: if signedIn();            // any signed-in user needs to know if relay is on
+      allow list: if callerIsTesterOrAdmin();
+      allow create, update: if callerIsAdmin();
+      allow delete: if callerIsAdmin();
+    }
+
+    // Per-user usage — owner can read their own; admins see all.
+    // Writes come from Firestore transactions (via client runTransaction).
+    match /cloudRelay/userUsage/{uid}/{periodKey} {
+      allow read: if isOwner(uid) || callerIsTesterOrAdmin();
+      allow write: if isOwner(uid) || callerIsAdmin();
+    }
+
+    // Transfer sessions — owner can read their own session.
+    match /transferSessions/{sessionId} {
+      allow read: if signedIn()
+        && (resource.data.ownerUid == request.auth.uid
+            || resource.data.receiverUid == request.auth.uid
+            || callerIsAdmin());
+      // Sessions are created by the client via runTransaction in the preflight.
+      allow create: if signedIn()
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.status == 'reserved'
+        && request.resource.data.sizeBytes is number
+        && request.resource.data.filename is string;
+      allow update: if signedIn()
+        && (resource.data.ownerUid == request.auth.uid
+            || resource.data.receiverUid == request.auth.uid
+            || callerIsAdmin());
+      allow delete: if callerIsAdmin();
+    }
+
+    // Admin alerts — only admins/testers can read; writes come from app via service.
+    match /adminAlerts/{alertId} {
+      allow read: if callerIsTesterOrAdmin();
+      allow create: if signedIn();        // service creates during quota events
+      allow update: if callerIsTesterOrAdmin(); // mark read/resolved
+      allow delete: if callerIsAdmin();
+    }
+
+    // ── userIndex (lightweight user registry written by analytics) ──────────
+    // Contains only: { uid, platform, appVersion, lastSeenAt } — NO PII.
+    match /userIndex/{uid} {
+      // Owner writes their own entry; admins and testers can list/read all.
+      allow read: if callerIsTesterOrAdmin();
+      allow create, update: if isOwner(uid);
+      allow delete: if callerIsAdmin();
     }
 
     match /{document=**} {

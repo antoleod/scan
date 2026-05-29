@@ -10,6 +10,7 @@ import { loadSettings } from '../core/settings';
 import { getBiometricStatus, authenticateWithBiometrics, type BiometricStatus } from '../core/biometrics';
 import { clearQueue } from '../core/offlineQueue';
 import { clearNotesChecksum } from '../core/syncChecksum';
+import { analytics } from '../core/analyticsService';
 import { clearDeletedHistoryKeys } from '../core/historyDeletions';
 import { clearDeletedNoteKeys } from '../core/noteDeletions';
 import { clearAppLocalStorage, clearCacheStorage, purgeAllRelatedIndexedDB } from '../core/dataSync';
@@ -141,6 +142,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               setIsGuest(false);
               setIsBiometricLocked(false);
               void diag.info('auth.state.changed', { authenticated: true, uid: nextUser.uid });
+              analytics.appOpen(nextUser.uid);
               setIsLoading(false);
             }
           })().catch(async (error) => {
@@ -189,6 +191,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       await saveBiometricEnabled(true);
     }
     await diag.info('auth.login.success', { uid: authenticatedUser.uid });
+    analytics.loginSuccess(authenticatedUser.uid);
     return authenticatedUser;
   };
 
@@ -223,6 +226,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       await saveBiometricEnabled(true);
     }
     await diag.info('auth.google.success', { uid: authenticatedUser.uid });
+    analytics.loginSuccess(authenticatedUser.uid);
     return authenticatedUser;
   };
 
@@ -242,6 +246,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       await saveBiometricEnabled(true);
     }
     await diag.info('auth.magiclink.success', { uid: authenticatedUser.uid });
+    analytics.loginSuccess(authenticatedUser.uid);
     return authenticatedUser;
   };
 
@@ -257,6 +262,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const logoutCurrentUser = async () => {
+    if (user?.uid) analytics.logout(user.uid);
     await clearQueue();
     await clearNotesChecksum();
     await logout();

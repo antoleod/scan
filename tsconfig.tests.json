@@ -44,6 +44,9 @@
     "src/features/airdrop/webrtc/index.ts",
     "src/features/airdrop/transfer/transferService.ts",
     "src/features/airdrop/transfer/fileDelivery.ts",
-    "src/features/airdrop/sessions/sessionService.ts"
+    "src/features/airdrop/sessions/sessionService.ts",
+    "src/core/analyticsService.ts",
+    "src/core/analyticsAggregator.ts",
+    "src/core/cloudRelayConfig.ts"
   ]
 }

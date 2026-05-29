@@ -5,6 +5,7 @@ import * as Clipboard from 'expo-clipboard';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { AppSettings, type PersistenceMode } from '../../../types';
+import { useAdminRole } from '../../../hooks/useAdminRole';
 import { BARCODE_FORMAT_OPTIONS, type BarcodeFormat } from '../../../core/barcode';
 import { canInstallPwa, detectBrowserInstallSupport, getManualInstallInstructions, getPwaInstallDiagnostics, subscribePwaInstallAvailability, triggerPwaInstall } from '../../../core/pwa';
 import { createSharedNoteGroup, fetchSharedGroupsForCurrentUser, joinSharedNoteGroup, type SharedNoteGroup } from '../../../core/firebase';
@@ -283,6 +284,7 @@ export function SettingsTab({
   onRecheckFirebase,
   onSyncNow,
   onLogout,
+  onOpenAdmin,
   syncBusy,
   userEmail,
   userUidPrefix,
@@ -310,6 +312,7 @@ export function SettingsTab({
   onRecheckFirebase: () => void;
   onSyncNow: () => void;
   onLogout: () => void;
+  onOpenAdmin?: () => void;
   syncBusy: boolean;
   userEmail: string | null;
   userUidPrefix: string | null;
@@ -323,6 +326,7 @@ export function SettingsTab({
   const isDesktop = width >= 1024;
   const { setThemeName } = useAppTheme();
   const { t } = useTranslation();
+  const { isTester: isAdminOrTester } = useAdminRole();
   const { toast, show: showToast, hide: hideToast } = useToast();
   const [passPhrase, setPassPhrase] = useState('');
   const [passwordMode, setPasswordMode] = useState<'phrases' | 'seed'>('phrases');
@@ -2058,6 +2062,34 @@ export function SettingsTab({
             })}
           </View>
         </SectionCard>
+
+        {/* Admin Analytics Center — visible only to admins and testers */}
+        {isAdminOrTester && onOpenAdmin ? (
+          <Pressable
+            onPress={onOpenAdmin}
+            accessibilityRole="button"
+            accessibilityLabel="Open Admin Analytics Center"
+            style={({ pressed }) => ({
+              flexDirection: 'row', alignItems: 'center', gap: 10,
+              padding: 14, borderRadius: 14,
+              backgroundColor: '#F59E0B0d',
+              borderWidth: 1, borderColor: '#F59E0B33',
+              opacity: pressed ? 0.7 : 1,
+              marginBottom: 4,
+            })}
+          >
+            <Ionicons name="shield-checkmark-outline" size={20} color="#F59E0B" />
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: palette.fg, fontSize: 14, fontWeight: '800' }}>
+                Admin Analytics Center
+              </Text>
+              <Text style={{ color: palette.muted, fontSize: 12, marginTop: 1 }}>
+                Users, usage, cloud relay controls
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={16} color={palette.muted} />
+          </Pressable>
+        ) : null}
 
         <View style={styles.bottomLogout}>
           <Pressable onPress={onLogout} style={[styles.bulkButton, styles.bottomLogoutBtn, isDesktop ? styles.bottomLogoutBtnDesktop : null, { backgroundColor: palette.accent }]}>

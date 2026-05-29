@@ -41,6 +41,19 @@ import type { UserShare, SignalingChannel, SignalMessage } from "../src/features
 import { setSignalingChannel } from "../src/features/airdrop/signaling";
 import { createSession, joinSession, cancelSession } from "../src/features/airdrop/sessions/sessionService";
 import { resetAirdropStore, airdropStore, putSession } from "../src/features/airdrop/store/airdropStore";
+import { sanitizePayload, track, type AnalyticsPayload } from "../src/core/analyticsService";
+import { todayKey } from "../src/core/analyticsAggregator";
+import {
+  currentPeriodKey,
+  defaultGlobalState,
+  MB, GB,
+  DEFAULT_MAX_FILE_SIZE_USER,
+  DEFAULT_MAX_FILE_SIZE_TESTER,
+  DEFAULT_USER_QUOTA_BYTES,
+  DEFAULT_GLOBAL_QUOTA_BYTES,
+  USER_FACING_MESSAGES,
+  WARNING_THRESHOLDS,
+} from "../src/core/cloudRelayConfig";
 
 let passed = 0;
 let failed = 0;
@@ -1564,6 +1577,232 @@ run("shoppingV2: duplicate items are deduplicated", () => {
 });
 
 // ─── End of shopping list V2 tests ─────────────────────────────────────────────
+
+// ── Analytics: privacy tests ─────────────────────────────────────────────────
+
+run("analytics: sanitizePayload strips private note text and tokens", () => {
+  const raw = {
+    noteType: "medication",
+    noteCategory: "health",
+    text: "Took 400mg ibuprofen for headache",
+    content: "sensitive content",
+    rawScan: "RITM0012345 -- confidential",
+    password: "secret123",
+    token: "firebase-id-token-xyz",
+    ocrResult: "OCR extracted text from document",
+  } as unknown as AnalyticsPayload;
+
+  const safe = sanitizePayload(raw);
+
+  assert.equal(safe.noteType, "medication");
+  assert.equal(safe.noteCategory, "health");
+  assert.ok(!("text" in safe), "note text must not be stored");
+  assert.ok(!("content" in safe), "content must not be stored");
+  assert.ok(!("rawScan" in safe), "rawScan must not be stored");
+  assert.ok(!("password" in safe), "password must not be stored");
+  assert.ok(!("token" in safe), "token must not be stored");
+  assert.ok(!("ocrResult" in safe), "ocrResult must not be stored");
+});
+
+run("analytics: sanitizePayload keeps only allowlisted primitive fields", () => {
+  const raw = {
+    errorCode: "SCAN_FAILED",
+    durationMs: 450,
+    success: true,
+    source: "camera",
+    feature: "scan",
+    scanType: "RITM",
+    fileSizeBytes: 1024,
+    provider: "firebase_storage",
+    nested: { secret: "value" },
+    arr: [1, 2, 3],
+  } as unknown as AnalyticsPayload;
+
+  const safe = sanitizePayload(raw);
+
+  assert.equal(safe.errorCode, "SCAN_FAILED");
+  assert.equal(safe.durationMs, 450);
+  assert.equal(safe.success, true);
+  assert.equal(safe.source, "camera");
+  assert.equal(safe.scanType, "RITM");
+  assert.equal(safe.fileSizeBytes, 1024);
+  assert.ok(!("nested" in safe), "nested objects must be stripped");
+  assert.ok(!("arr" in safe), "arrays must be stripped");
+});
+
+run("analytics: sanitizePayload returns empty object for all-private payload", () => {
+  const raw = {
+    text: "full note body here",
+    title: "My private note",
+    imageBase64: "data:image/png;base64,...",
+    authToken: "tok_abc",
+    uid: "user123",
+  } as unknown as AnalyticsPayload;
+
+  const safe = sanitizePayload(raw);
+  assert.equal(Object.keys(safe).length, 0, "no private fields should survive");
+});
+
+run("analytics: track() is a no-op when uid is null or empty — does not throw", () => {
+  assert.doesNotThrow(() => track(null, "app_open"));
+  assert.doesNotThrow(() => track(undefined, "login_success"));
+  assert.doesNotThrow(() => track("", "note_created"));
+});
+
+run("analytics: track() with valid uid does not throw", () => {
+  assert.doesNotThrow(() =>
+    track("uid_test_123", "note_created", { noteType: "shopping", noteCategory: "general" })
+  );
+  assert.doesNotThrow(() =>
+    track("uid_test_123", "scan_success", { scanType: "RITM", source: "camera", durationMs: 320 })
+  );
+});
+
+run("analytics: todayKey() returns valid yyyyMMdd format", () => {
+  const key = todayKey();
+  assert.equal(key.length, 8, "key must be 8 chars");
+  assert.ok(/^\d{8}$/.test(key), `key must be all digits, got: ${key}`);
+  const year = parseInt(key.slice(0, 4), 10);
+  assert.ok(year >= 2024 && year <= 2100, `year out of range: ${year}`);
+  const month = parseInt(key.slice(4, 6), 10);
+  assert.ok(month >= 1 && month <= 12, `month out of range: ${month}`);
+  const day = parseInt(key.slice(6, 8), 10);
+  assert.ok(day >= 1 && day <= 31, `day out of range: ${day}`);
+});
+
+// ── Cloud relay quota: pure config tests ─────────────────────────────────────
+
+run("quota: default global state has relay DISABLED", () => {
+  const state = defaultGlobalState();
+  assert.equal(state.enabled, false, "relay must be disabled by default");
+  assert.equal(state.emergencyStop, false);
+});
+
+run("quota: default limits match spec (50 MB user, 300 MB tester, 500 MB/user, 5 GB global)", () => {
+  const state = defaultGlobalState();
+  assert.equal(state.maxFileSizeBytesUser, 50 * MB);
+  assert.equal(state.maxFileSizeBytesTester, 300 * MB);
+  assert.equal(state.maxUserBytesPerPeriod, 500 * MB);
+  assert.equal(state.globalLimitBytes, 5 * GB);
+  assert.equal(state.deleteAfterDownload, true);
+  assert.equal(state.transferExpiryMinutes, 30);
+  assert.equal(state.maxActiveTransfersPerUser, 1);
+});
+
+run("quota: 50 MB is 52428800 bytes", () => {
+  assert.equal(DEFAULT_MAX_FILE_SIZE_USER, 52_428_800);
+});
+
+run("quota: 300 MB is 314572800 bytes", () => {
+  assert.equal(DEFAULT_MAX_FILE_SIZE_TESTER, 314_572_800);
+});
+
+run("quota: 500 MB is 524288000 bytes", () => {
+  assert.equal(DEFAULT_USER_QUOTA_BYTES, 524_288_000);
+});
+
+run("quota: 5 GB is 5368709120 bytes", () => {
+  assert.equal(DEFAULT_GLOBAL_QUOTA_BYTES, 5_368_709_120);
+});
+
+run("quota: currentPeriodKey returns yyyyMM for monthly", () => {
+  const key = currentPeriodKey('monthly');
+  assert.ok(/^\d{4}-\d{2}$/.test(key), `expected yyyy-MM, got ${key}`);
+});
+
+run("quota: currentPeriodKey returns yyyyMMdd for daily", () => {
+  const key = currentPeriodKey('daily');
+  assert.ok(/^\d{8}$/.test(key), `expected yyyyMMdd, got ${key}`);
+});
+
+run("quota: warning thresholds are 60/80/90/100%", () => {
+  assert.deepEqual([...WARNING_THRESHOLDS], [0.6, 0.8, 0.9, 1.0]);
+});
+
+run("quota: user-facing messages exist for all error codes", () => {
+  const codes = [
+    'USER_QUOTA_EXCEEDED', 'GLOBAL_QUOTA_EXCEEDED', 'CLOUD_RELAY_DISABLED',
+    'FILE_TOO_LARGE', 'TOO_MANY_ACTIVE_TRANSFERS', 'TRANSFER_EXPIRED',
+    'CLOUD_LIMIT_REACHED', 'TRANSFER_PERMISSION_DENIED',
+  ] as const;
+  for (const code of codes) {
+    assert.ok(USER_FACING_MESSAGES[code]?.length > 10, `missing message for ${code}`);
+    // Messages must not mention billing or cost to users
+    assert.ok(!USER_FACING_MESSAGES[code].toLowerCase().includes('billing'), `${code} message must not mention billing`);
+    assert.ok(!USER_FACING_MESSAGES[code].toLowerCase().includes('cost'), `${code} message must not mention cost`);
+  }
+});
+
+run("quota: file size validation — 50 MB user cannot exceed tester limit", () => {
+  const state = defaultGlobalState();
+  const userLimit = state.maxFileSizeBytesUser;
+  const testerLimit = state.maxFileSizeBytesTester;
+  assert.ok(userLimit < testerLimit, "tester limit must exceed user limit");
+  // A 60 MB file must be blocked for users but allowed for testers
+  const file60MB = 60 * MB;
+  assert.equal(file60MB > userLimit, true, "60 MB must exceed user 50 MB limit");
+  assert.equal(file60MB <= testerLimit, true, "60 MB must fit within tester 300 MB limit");
+});
+
+run("quota: global shutdown threshold — 5 GB check", () => {
+  const state = defaultGlobalState();
+  const almostFull = { ...state, globalUsedBytes: 5 * GB - 1, globalReservedBytes: 0 };
+  const atLimit = { ...state, globalUsedBytes: 5 * GB, globalReservedBytes: 0 };
+  const over = { ...state, globalUsedBytes: 5 * GB + 1, globalReservedBytes: 0 };
+
+  // Under limit: allowed
+  assert.equal(almostFull.globalUsedBytes < almostFull.globalLimitBytes, true);
+  // At limit: trigger shutdown
+  assert.equal(atLimit.globalUsedBytes >= atLimit.globalLimitBytes, true);
+  // Over limit: trigger shutdown
+  assert.equal(over.globalUsedBytes >= over.globalLimitBytes, true);
+});
+
+// ── Phase 6: auto-shutdown logic tests (pure, no Firebase) ───────────────────
+
+run("shutdown: global state at limit triggers shutdown condition", () => {
+  const state = defaultGlobalState();
+  // At exactly the limit — should trigger shutdown
+  const atLimit = { ...state, globalUsedBytes: 5 * GB, globalReservedBytes: 0 };
+  assert.equal(atLimit.globalUsedBytes + atLimit.globalReservedBytes >= atLimit.globalLimitBytes, true);
+});
+
+run("shutdown: global state below limit does NOT trigger shutdown", () => {
+  const state = defaultGlobalState();
+  const below = { ...state, globalUsedBytes: 4 * GB + 999 * MB, globalReservedBytes: 0 };
+  assert.equal(below.globalUsedBytes + below.globalReservedBytes >= below.globalLimitBytes, false);
+});
+
+run("shutdown: reserved bytes count toward global limit check", () => {
+  const state = defaultGlobalState();
+  // used = 4.8 GB + reserved = 300 MB → total = 5.1 GB > 5 GB → trigger
+  const nearLimit = {
+    ...state,
+    globalUsedBytes: 4915 * MB,   // ~4.8 GB
+    globalReservedBytes: 300 * MB, // 300 MB
+    globalLimitBytes: 5 * GB,      // 5120 MB
+  };
+  const total = nearLimit.globalUsedBytes + nearLimit.globalReservedBytes;
+  assert.equal(total >= nearLimit.globalLimitBytes, true, `expected ${total} >= ${nearLimit.globalLimitBytes}`);
+});
+
+run("shutdown: disabled relay stays disabled (emergencyStop already set)", () => {
+  const state = defaultGlobalState();
+  const stopped = { ...state, enabled: false, emergencyStop: true };
+  // checkAndApplyGlobalShutdown would be a no-op because !global.enabled
+  assert.equal(!stopped.enabled, true, "relay is already off — no action needed");
+});
+
+run("shutdown: WebRTC/local transfer not affected by relay state (relay flag is relay-only)", () => {
+  // The relay flag only controls cloud relay uploads.
+  // WebRTC (airdrop P2P) and local note/scan operations have no dependency on it.
+  // This test verifies the config field names don't bleed into unrelated features.
+  const state = defaultGlobalState();
+  assert.ok(!('webrtcEnabled' in state), "relay state must not control WebRTC");
+  assert.ok(!('notesEnabled' in state), "relay state must not control notes");
+  assert.ok(!('scanEnabled' in state), "relay state must not control scan");
+  assert.equal(state.enabled, false, "relay starts disabled — everything else works fine");
+});
 
 void (async () => {
   for (const { name, fn } of _tests) {

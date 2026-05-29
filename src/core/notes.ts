@@ -17,6 +17,7 @@ import type { SmartWorkflowType } from './smartNoteWorkflows';
 import { detectSmartTypeFromContent } from './smartNoteWorkflows';
 import { detectSmartNoteLabel, type SmartNoteLabel } from './noteIntelligence';
 import { applyMarkTaken, applySnooze, applyDismiss, applyReactivate } from './medicationCycle';
+import { analytics } from './analyticsService';
 // Re-export the pure cycle helpers so existing import sites keep working; the
 // implementations live in the platform-free medicationCycle module.
 export {
@@ -407,6 +408,8 @@ export async function addNoteUnique(
     await saveNotes(mapped);
     return normalizeNotes(mapped);
   });
+  const uid = getFirebaseRuntime()?.auth?.currentUser?.uid;
+  if (uid) analytics.noteCreated(uid, { noteCategory: category, source: 'manual' });
   return { notes: finalNotes, inserted: true, insertedId: id };
 }
 
@@ -478,6 +481,14 @@ export async function addRichNoteUnique(
     await saveNotes(mapped);
     return normalizeNotes(mapped);
   });
+  const uid2 = getFirebaseRuntime()?.auth?.currentUser?.uid;
+  if (uid2) {
+    analytics.noteCreated(uid2, { noteType: smartType, noteCategory: category });
+    if (smartType === 'shopping') analytics.shoppingListCreated(uid2);
+    else if (smartType === 'medication') analytics.medicationNoteCreated(uid2);
+    else if (smartType === 'reminder') analytics.reminderCreated(uid2);
+    else if (smartType === 'task') analytics.taskCreated(uid2);
+  }
   return { notes: finalNotes, inserted: true, insertedId: id };
 }
 
@@ -555,6 +566,8 @@ export async function removeNote(id: string): Promise<NoteItem[]> {
   } catch (error) {
     await diag.warn('notes.delete.remote.error', { message: String(error), noteId: id });
   }
+  const uidDel = getFirebaseRuntime()?.auth?.currentUser?.uid;
+  if (uidDel) analytics.noteDeleted(uidDel);
   return normalized;
 }
 

@@ -8,8 +8,9 @@ import { useTranslation } from 'react-i18next';
 import type { Palette } from '../../../theme/theme';
 import { AirdropCard } from '../components/AirdropCard';
 import { FileChip } from '../components/FileChip';
+import { MyDevicesSection } from '../components/MyDevicesSection';
 import { TransferProgressView } from '../components/TransferProgressView';
-import { useSession, useTransfer } from '../hooks/useAirdrop';
+import { useSession, useTransfer, useUserShares } from '../hooks/useAirdrop';
 import { isAirdropQr, pairFromQrString } from '../qr/qrPairing';
 import {
   joinSession,
@@ -40,9 +41,11 @@ export function ReceiveScreen({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [offer, setOffer] = useState<FileMeta | null>(null);
+  const [pairingTimedOut, setPairingTimedOut] = useState(false);
   const lockedRef = useRef(false);
   const session = useSession(joinedId);
   const transfer = useTransfer(joinedId);
+  const userShares = useUserShares();
 
   // Stable refs so attachReceiver's closure always calls the current setter,
   // even if the component re-renders between join and the offer arriving.
@@ -90,6 +93,16 @@ export function ReceiveScreen({
     // Run once for the initial code; handleScanned guards re-entry via lockedRef.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoJoinCode]);
+
+  // Pairing timeout: if stuck in 'pairing' for 20s, surface a helpful message.
+  useEffect(() => {
+    if (session?.status !== 'pairing') {
+      setPairingTimedOut(false);
+      return;
+    }
+    const id = setTimeout(() => setPairingTimedOut(true), 20_000);
+    return () => clearTimeout(id);
+  }, [session?.status]);
 
   const handleManualJoin = async () => {
     const raw = manualCode.trim();
@@ -146,7 +159,8 @@ export function ReceiveScreen({
       session.status === 'connected' ||
       session.status === 'transferring' ||
       session.status === 'completed';
-    const isErrored = session.status === 'error';
+    const isErrored = session.status === 'error' || session.status === 'cancelled';
+    const isPairing = !isConnected && !isErrored;
 
     return (
       <ScrollView contentContainerStyle={{ flexGrow: 1, padding: 18, gap: 16, paddingBottom: 130 }}>
@@ -164,18 +178,53 @@ export function ReceiveScreen({
           </Text>
         </View>
 
-        {/* Surface a connection error (WebRTC failed / peer left) — otherwise the
-            user waits forever with no feedback. session.error is set by onPeerState. */}
+        {/* WebRTC failed / peer left */}
         {isErrored ? (
-          <ErrorBanner
-            palette={palette}
-            message={session.error ?? 'Connection failed (the network may block direct transfer).'}
-            onDismiss={() => void leave()}
-          />
+          <>
+            <ErrorBanner
+              palette={palette}
+              message={
+                session.status === 'cancelled'
+                  ? 'The sender cancelled the session.'
+                  : (session.error ?? 'Connection failed. The network may block direct P2P transfer.')
+              }
+              onDismiss={() => void leave()}
+            />
+            {userShares.length > 0 ? (
+              <AirdropCard palette={palette}>
+                <Text style={{ color: palette.fg, fontSize: 13, fontWeight: '800', marginBottom: 8 }}>
+                  Download directly from your account
+                </Text>
+                <Text style={{ color: palette.muted, fontSize: 12, lineHeight: 17, marginBottom: 10 }}>
+                  The sender's file may also be available below — no QR needed when you're on the same account.
+                </Text>
+                <MyDevicesSection palette={palette} />
+              </AirdropCard>
+            ) : null}
+          </>
         ) : null}
 
-        {!isErrored && !isConnected ? (
-          <PairingIndicator palette={palette} />
+        {/* Pairing in progress */}
+        {isPairing ? <PairingIndicator palette={palette} /> : null}
+
+        {/* Timeout hint: still pairing after 20s → guide the user */}
+        {isPairing && pairingTimedOut ? (
+          <AirdropCard palette={palette}>
+            <Text style={{ color: '#F59E0B', fontSize: 13, fontWeight: '800', marginBottom: 6 }}>
+              Taking longer than expected…
+            </Text>
+            <Text style={{ color: palette.muted, fontSize: 12, lineHeight: 17 }}>
+              Direct P2P can fail when devices are on different networks. Make sure the sender's screen is still open.
+              {userShares.length > 0
+                ? ' Or use the direct download below — no scan needed when you\'re on the same account.'
+                : ' If you\'re both signed in to the same account, go back and use the "Your devices" shortcut instead.'}
+            </Text>
+            {userShares.length > 0 ? (
+              <View style={{ marginTop: 12 }}>
+                <MyDevicesSection palette={palette} />
+              </View>
+            ) : null}
+          </AirdropCard>
         ) : null}
 
         {offer ? (
@@ -214,10 +263,18 @@ export function ReceiveScreen({
 
   return (
     <ScrollView contentContainerStyle={{ padding: 14, gap: 14, paddingBottom: 120 }}>
+      {/* Same-account direct download — shown first when available so the user
+          doesn't need to scan a QR at all if sender is on the same account. */}
+      {userShares.length > 0 ? (
+        <AirdropCard palette={palette} accent>
+          <MyDevicesSection palette={palette} />
+        </AirdropCard>
+      ) : null}
+
       {/* Info card */}
       <AirdropCard palette={palette}>
         <Text style={{ color: palette.fg, fontSize: 14, fontWeight: '800', marginBottom: 6 }}>
-          Scan to receive
+          {userShares.length > 0 ? 'Or scan a QR code' : 'Scan to receive'}
         </Text>
         <Text style={{ color: palette.muted, fontSize: 12, lineHeight: 17 }}>
           Point your camera at the sender's AirDrop QR code to instantly join their session.

@@ -68,6 +68,9 @@ import { QrModal } from '../components/mainApp/QrModal';
 import { ScanTab } from '../components/mainApp/tabs/ScanTab';
 import { ScanHistoryToggle } from '../components/mainApp/ScanHistoryToggle';
 import { AirDropScreen } from '../features/airdrop';
+import { AdminScreen } from './admin/AdminScreen';
+import { analytics } from '../core/analyticsService';
+import { useCloudRelayGuard } from '../hooks/useCloudRelayGuard';
 import { SelectionFooter } from '../components/mainApp/SelectionFooter';
 import { SettingsTab } from '../components/mainApp/tabs/SettingsTab';
 import { hardDeleteAllNotes, hardDeleteAllTemplates, clearArchivedNotes, clearUnpinnedNotes, clearNotesOlderThan, loadNotes, saveNotes as saveWorkNotes, saveTemplates as saveNoteTemplates, type NoteItem } from '../core/notes';
@@ -159,6 +162,7 @@ class SimpleErrorBoundary extends React.Component<{ children: React.ReactNode },
 
 function MainApp() {
   const { user, isGuest, logout } = useAuth();
+  useCloudRelayGuard(); // periodic global quota check + auto-shutdown
   const { height, width } = useWindowDimensions();
   const [bootStatus, setBootStatus] = useState<BootStatus>('booting');
   const [persistenceMode, setPersistenceMode] = useState<PersistenceMode>('local');
@@ -174,6 +178,7 @@ function MainApp() {
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
 
   const [selection, setSelection] = useState<Set<string>>(new Set());
+  const [adminVisible, setAdminVisible] = useState(false);
   const [qrModalVisible, setQrModalVisible] = useState(false);
   const [qrData, setQrData] = useState('');
   const [barcodeModalVisible, setBarcodeModalVisible] = useState(false);
@@ -771,12 +776,14 @@ function MainApp() {
       if (lastPayloadRef.current.value === payload && now - lastPayloadRef.current.ts < SCAN_TUNING.duplicateWindowMs) return;
       lastPayloadRef.current = { value: payload, ts: now };
 
+      if (user?.uid) analytics.scanStarted(user.uid, source);
       const outcome = await processScanInput(payload, source, settings, templates);
 
       if (outcome.status === 'empty') {
         return;
       }
       if (outcome.status === 'invalid') {
+        if (user?.uid) analytics.scanFailed(user.uid, { errorCode: 'INVALID_FORMAT', source });
         setScanState('error');
         scanCooldownRef.current = Date.now() + SCAN_TUNING.cooldownAfterInvalidMs;
         clearScanTimers();
@@ -1974,10 +1981,21 @@ function MainApp() {
               persistenceMode={persistenceMode}
               visibleBarcodeTypes={SCAN_BARCODE_TYPES}
               barcodeOutputFormat={settings.barcodeOutputFormat}
+              onOpenAdmin={() => setAdminVisible(true)}
             />
           )}
           </View>
         </KeyboardAvoidingView>
+
+      {/* Admin Analytics Center — overlay, protected by role check inside AdminScreen */}
+      {adminVisible ? (
+        <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 9999 }}>
+          <AdminScreen
+            palette={{ bg: palette.bg, fg: palette.fg, accent: palette.accent, muted: palette.muted, card: palette.card, border: palette.border }}
+            onClose={() => setAdminVisible(false)}
+          />
+        </View>
+      ) : null}
 
       <BarcodeModal
         visible={barcodeModalVisible}

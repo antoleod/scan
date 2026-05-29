@@ -14,8 +14,9 @@ import { MyDevicesSection } from '../components/MyDevicesSection';
 import { AirdropLogPanel } from '../components/AirdropLogPanel';
 import { SendScreen } from './SendScreen';
 import { ReceiveScreen } from './ReceiveScreen';
+import { InternetTransferScreen } from './InternetTransferScreen';
 
-type Mode = 'home' | 'send' | 'receive' | 'logs';
+type Mode = 'home' | 'send' | 'receive' | 'logs' | 'internet';
 
 /**
  * AirDrop tab — single minimalist screen, AirDrop-style.
@@ -52,6 +53,9 @@ export function AirDropScreen({ palette }: { palette: Palette }) {
   };
 
   if (mode !== 'home') {
+    if (mode === 'internet') {
+      return <InternetTransferScreen palette={palette} onClose={goHome} />;
+    }
     const title = mode === 'send' ? 'Send' : mode === 'receive' ? 'Receive' : 'Diagnostics';
     return (
       <View style={{ flex: 1, backgroundColor: palette.bg }}>
@@ -137,6 +141,29 @@ export function AirDropScreen({ palette }: { palette: Palette }) {
             }}
           />
         </View>
+
+        {/* Internet Transfer (cloud relay) — secondary action */}
+        <Pressable
+          onPress={() => {
+            void Haptics.selectionAsync().catch(() => undefined);
+            setMode('internet');
+          }}
+          accessibilityRole="button"
+          accessibilityLabel="Internet Transfer via cloud"
+          style={({ pressed }) => ({
+            flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+            paddingVertical: 14, borderRadius: 16,
+            backgroundColor: palette.card,
+            borderWidth: 1, borderColor: palette.border,
+            opacity: pressed ? 0.7 : 1,
+          })}
+        >
+          <Ionicons name="cloud-upload-outline" size={20} color={palette.muted} />
+          <Text style={{ color: palette.fg, fontSize: 14, fontWeight: '700' }}>Internet Transfer</Text>
+          <View style={{ paddingHorizontal: 6, paddingVertical: 2, borderRadius: 999, backgroundColor: palette.muted + '18' }}>
+            <Text style={{ color: palette.muted, fontSize: 10, fontWeight: '700' }}>BETA</Text>
+          </View>
+        </Pressable>
 
         {/* Diagnostics affordance — discreet, for debugging pairing */}
         <Pressable
