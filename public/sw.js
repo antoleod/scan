@@ -1,5 +1,5 @@
-const CACHE_NAME = 'MyKit-cache-v5';
-const STATIC_CACHE = 'MyKit-static-v5';
+const CACHE_NAME = 'MyKit-cache-v6';
+const STATIC_CACHE = 'MyKit-static-v6';
 
 // Detect the base path at runtime from the service worker's own URL.
 // e.g. if sw.js is at /MyKit/sw.js → BASE = "/MyKit"
@@ -50,12 +50,21 @@ self.addEventListener('fetch', (event) => {
   if (STATIC_EXTENSIONS.test(url.pathname)) {
     event.respondWith(
       caches.open(STATIC_CACHE).then(async (cache) => {
-        const cached = await cache.match(request);
-        const fetchPromise = fetch(request).then((response) => {
-          if (response.ok) cache.put(request, response.clone());
-          return response;
-        }).catch(() => null);
-        return cached || fetchPromise || new Response('', { status: 503 });
+        try {
+          const cached = await cache.match(request);
+          // Fire background fetch; catch network errors so we never resolve to null
+          const networkResponse = await fetch(request).then((response) => {
+            if (response.ok) cache.put(request, response.clone());
+            return response;
+          }).catch(() => null);
+          // Return cached version if available, then network, then hard 503
+          if (cached) return cached;
+          if (networkResponse) return networkResponse;
+          return new Response('', { status: 503 });
+        } catch (err) {
+          const cached = await cache.match(request);
+          return cached || new Response('', { status: 503 });
+        }
       })
     );
     return;
@@ -90,6 +99,8 @@ self.addEventListener('fetch', (event) => {
         }
         return response;
       })
-      .catch(() => caches.match(request).then((cached) => cached || new Response('', { status: 503 })))
+      .catch(() =>
+        caches.match(request).then((cached) => cached || new Response('Not found', { status: 404 }))
+      )
   );
 });

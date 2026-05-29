@@ -172,8 +172,15 @@ injectIfMissing(`<meta name="mobile-web-app-capable" content="yes">`,           
 //    - wss: for Firestore/Realtime Database listeners (WebSocket Secure)
 //    Note: frame-ancestors is ignored in <meta> CSP. It must be delivered as
 //    an HTTP header by the hosting layer, so it is intentionally omitted here.
+// CSP notes:
+// - script-src needs 'unsafe-eval' for Tesseract.js blob: workers (dynamic eval inside worker)
+//   and 'wasm-unsafe-eval' for WebAssembly (also used by Tesseract.js).
+// - worker-src 'self' blob: allows blob: URL workers spawned by Tesseract.js.
+// - connect-src blob: allows fetch() of blob: URLs inside workers (Tesseract core fetch).
+// - tessdata.projectnaptha.com serves OCR traineddata files (eng/spa/fra/nld).
+// - frame-ancestors cannot be set via <meta> CSP — must be an HTTP header.
 replaceOrInject('http-equiv="Content-Security-Policy"',
-  `<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval' blob: https://www.gstatic.com https://apis.google.com https://www.google.com https://cdn.jsdelivr.net https://unpkg.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https: blob:; font-src 'self' data:; connect-src 'self' blob: https://*.googleapis.com https://*.firebaseio.com https://*.firebasedatabase.app https://*.firebase.google.com wss://*.firebaseio.com wss://*.firebasedatabase.app https://cdn.jsdelivr.net https://unpkg.com https://tessdata.projectnaptha.com; frame-src 'self' https://*.firebaseapp.com https://*.web.app https://accounts.google.com; worker-src 'self' blob:;">`
+  `<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-eval' 'wasm-unsafe-eval' blob: https://www.gstatic.com https://apis.google.com https://www.google.com https://cdn.jsdelivr.net https://unpkg.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https: blob:; font-src 'self' data:; connect-src 'self' blob: https://*.googleapis.com https://*.firebaseio.com https://*.firebasedatabase.app https://*.firebase.google.com wss://*.firebaseio.com wss://*.firebasedatabase.app https://cdn.jsdelivr.net https://unpkg.com https://tessdata.projectnaptha.com; frame-src 'self' https://*.firebaseapp.com https://*.web.app https://accounts.google.com; worker-src 'self' blob:;">`
 );
 
 // ── 9. Service worker registration ───────────────────────────────────────────

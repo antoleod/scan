@@ -1220,12 +1220,18 @@ export async function subscribeToSharedGroups(
   const user = rt.auth.currentUser;
   if (!user) return () => {};
   const groupsRef = collection(rt.db, 'noteGroups');
-  return onSnapshot(query(groupsRef, where('members', 'array-contains', user.uid)), (snap) => {
-    if (snap.metadata.fromCache) return;
-    const groups: SharedNoteGroup[] = [];
-    snap.forEach((d) => groups.push({ ...(d.data() as SharedNoteGroup), id: d.id }));
-    callback(groups);
-  });
+  return onSnapshot(
+    query(groupsRef, where('members', 'array-contains', user.uid)),
+    (snap) => {
+      if (snap.metadata.fromCache) return;
+      const groups: SharedNoteGroup[] = [];
+      snap.forEach((d) => groups.push({ ...(d.data() as SharedNoteGroup), id: d.id }));
+      callback(groups);
+    },
+    async (error) => {
+      await diag.warn('sharedGroups.subscribe.error', { message: String(error) });
+    },
+  );
 }
 
 export async function subscribeToSharedGroupNotes(
@@ -1264,7 +1270,9 @@ export async function subscribeToSharedGroupNotes(
     if (!user) return;
 
     const groupsRef = collection(db, 'noteGroups');
-    groupsUnsub = onSnapshot(query(groupsRef, where('members', 'array-contains', user.uid)), (groupsSnap) => {
+    groupsUnsub = onSnapshot(
+      query(groupsRef, where('members', 'array-contains', user.uid)),
+      (groupsSnap) => {
       if (groupsSnap.metadata.fromCache) return;
       const seen = new Set<string>();
       groupsSnap.forEach((d) => {
@@ -1274,17 +1282,23 @@ export async function subscribeToSharedGroupNotes(
         if (perGroupUnsub.size >= MAX_GROUP_LISTENERS) return; // M-2: cap reached
 
         const notesRef = collection(db, 'noteGroups', groupId, 'notes');
-        const unsub = onSnapshot(query(notesRef), (notesSnap) => {
-          if (notesSnap.metadata.fromCache) return;
-          const items = notesSnap.docs
-            .map((docSnap) => {
-              const raw = docSnap.data() as NoteItem;
-              return { ...raw, id: raw.id || docSnap.id, groupId };
-            })
-            .filter((n) => !n.deletedAt);
-          latestByGroup.set(groupId, items);
-          emit();
-        });
+        const unsub = onSnapshot(
+          query(notesRef),
+          (notesSnap) => {
+            if (notesSnap.metadata.fromCache) return;
+            const items = notesSnap.docs
+              .map((docSnap) => {
+                const raw = docSnap.data() as NoteItem;
+                return { ...raw, id: raw.id || docSnap.id, groupId };
+              })
+              .filter((n) => !n.deletedAt);
+            latestByGroup.set(groupId, items);
+            emit();
+          },
+          async (error) => {
+            await diag.warn('sharedGroupNotes.subscribe.error', { groupId, message: String(error) });
+          },
+        );
         perGroupUnsub.set(groupId, unsub);
       });
 
@@ -1297,7 +1311,11 @@ export async function subscribeToSharedGroupNotes(
       });
 
       emit();
-    });
+    },
+    async (error) => {
+      await diag.warn('sharedGroupNotes.groups.subscribe.error', { message: String(error) });
+    },
+    );
   });
 
   return () => {

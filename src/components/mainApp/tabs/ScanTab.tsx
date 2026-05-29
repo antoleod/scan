@@ -156,6 +156,15 @@ export function ScanTab({
               <Ionicons name="camera-outline" size={16} color="#fff" />
               <Text style={styles.allowBtnText}>{t('scan.allowCamera')}</Text>
             </Pressable>
+            {/* Desktop hint: image scan and manual entry still work without camera permission */}
+            {isDesktop ? (
+              <View style={styles.desktopHint}>
+                <Ionicons name="information-circle-outline" size={14} color={C.muted} />
+                <Text style={styles.desktopHintText}>
+                  {t('scan.desktopHint', 'On desktop, use Image Scan below or paste codes in the Notes tab')}
+                </Text>
+              </View>
+            ) : null}
           </View>
         ) : (
           <>
@@ -406,6 +415,20 @@ const styles = StyleSheet.create({
   permissionText: {
     color: C.text,
     fontSize: 14,
+  },
+  desktopHint: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 4,
+    paddingHorizontal: 24,
+    maxWidth: 400,
+  },
+  desktopHintText: {
+    color: C.muted,
+    fontSize: 12,
+    lineHeight: 18,
+    textAlign: 'center',
   },
   allowBtn: {
     flexDirection: 'row',

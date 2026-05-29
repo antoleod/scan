@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   Easing,
   interpolate,
@@ -27,6 +27,78 @@ import MainAppScreen from './src/screens/MainAppScreen';
 // Initialize i18next synchronously at module load (device language) so the very
 // first render has translations. AuthGate then aligns it to the persisted setting.
 initI18n();
+
+// ─── Top-level error boundary ────────────────────────────────────────────────
+// Catches crashes in AuthGate / AuthProvider before MainAppScreen's own boundary
+// can take over. Without this, a throw in AuthContext or ThemeProvider leaves a
+// completely blank screen with no recovery path.
+class AppErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { error: Error | null }
+> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { error: null };
+  }
+
+  static getDerivedStateFromError(error: Error) {
+    return { error };
+  }
+
+  render() {
+    if (this.state.error) {
+      return (
+        <View style={appErrStyles.container}>
+          <Text style={appErrStyles.title}>MyKit encountered a problem</Text>
+          <Text style={appErrStyles.message}>{String(this.state.error.message)}</Text>
+          <Pressable
+            accessibilityRole="button"
+            style={appErrStyles.btn}
+            onPress={() => this.setState({ error: null })}
+          >
+            <Text style={appErrStyles.btnText}>Try again</Text>
+          </Pressable>
+        </View>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+const appErrStyles = StyleSheet.create({
+  container: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#070d1b',
+    padding: 32,
+    gap: 12,
+  },
+  title: {
+    color: '#e6e6e6',
+    fontSize: 17,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  message: {
+    color: '#999',
+    fontSize: 13,
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  btn: {
+    marginTop: 8,
+    paddingHorizontal: 24,
+    paddingVertical: 10,
+    borderRadius: 8,
+    backgroundColor: '#FF6B00',
+  },
+  btnText: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: 14,
+  },
+});
 
 function SplashScreen() {
   const { theme } = useAppTheme();
@@ -176,11 +248,13 @@ export default function App() {
 
   return (
     <SafeAreaProvider>
-      <ThemeProvider initialThemeName="noirGraphite">
-        <AuthProvider>
-          <AuthGate />
-        </AuthProvider>
-      </ThemeProvider>
+      <AppErrorBoundary>
+        <ThemeProvider initialThemeName="noirGraphite">
+          <AuthProvider>
+            <AuthGate />
+          </AuthProvider>
+        </ThemeProvider>
+      </AppErrorBoundary>
     </SafeAreaProvider>
   );
 }

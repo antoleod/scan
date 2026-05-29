@@ -4,6 +4,24 @@ const KEY = 'barra_diag_logs';
 const MAX = 500;
 const MAX_DATA_CHARS = 1200;
 
+/**
+ * Returns true for transient Firebase/WebChannel errors that are expected
+ * during network interruptions and should not appear as red console errors.
+ * Firebase reconnects automatically; these are not actionable by the user.
+ */
+function isTransientFirebaseError(args: unknown[]): boolean {
+  const msg = args.map((a) => String(a ?? '')).join(' ');
+  // WebChannel 400 errors on Firestore listen/write channels
+  if (/WebChannelConnection|webchannel/i.test(msg) && /\b(400|401|403|503)\b/.test(msg)) return true;
+  // Firebase SDK internal: "Could not reach Cloud Firestore backend"
+  if (/Could not reach Cloud Firestore backend/i.test(msg)) return true;
+  // Firebase Auth token refresh errors during offline periods
+  if (/auth\/network-request-failed/i.test(msg)) return true;
+  // gRPC-web transport errors emitted by the Firestore SDK on reconnect
+  if (/\[FirebaseError\].*\bfailed-precondition\b/.test(msg)) return true;
+  return false;
+}
+
 export interface LogEntry {
   ts: string;
   level: 'info' | 'warn' | 'error';
@@ -64,6 +82,15 @@ class Diagnostics {
     };
 
     console.error = (...args: unknown[]) => {
+      // Downgrade known transient Firebase/WebChannel reconnect errors so they
+      // don't appear as red console errors in production. These 400-level
+      // WebChannel responses are expected during network interruptions and
+      // Firebase reconnects automatically — they are not actionable.
+      if (isTransientFirebaseError(args)) {
+        originalConsole.warn?.(...args);
+        void this.warn('console.warn.firebase_webchannel', { args: this.serializeData(args) });
+        return;
+      }
       originalConsole.error?.(...args);
       void this.error('console.error', { args: this.serializeData(args) });
     };

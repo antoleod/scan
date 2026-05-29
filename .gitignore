@@ -49,3 +49,4 @@ yarn-error.*
 
 firebase-debug.log
 *.local.log
+.claude/scheduled_tasks.lock

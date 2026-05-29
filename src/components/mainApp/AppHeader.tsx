@@ -4,6 +4,37 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { mainAppStyles } from './styles';
 import { ProfileMenu } from './ProfileMenu';
+import { isDeviceOnline, onNetworkStatusChange } from '../../core/network';
+
+/** Tracks online/offline status (web). On native always reports online. */
+function useOnlineStatus(): boolean {
+  const [online, setOnline] = useState(() => isDeviceOnline());
+  useEffect(() => onNetworkStatusChange(setOnline), []);
+  return online;
+}
+
+function OfflineChip() {
+  return (
+    <View
+      accessibilityRole="alert"
+      accessibilityLabel="Sin conexión. Los cambios se guardan localmente y se sincronizarán al reconectar."
+      style={{
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 5,
+        paddingHorizontal: 8,
+        paddingVertical: 3,
+        borderRadius: 999,
+        backgroundColor: '#F59E0B22',
+        borderWidth: 1,
+        borderColor: '#F59E0B55',
+      }}
+    >
+      <Ionicons name="cloud-offline-outline" size={13} color="#F59E0B" />
+      <Text style={{ color: '#F59E0B', fontSize: 11, fontWeight: '600' }}>Sin conexión</Text>
+    </View>
+  );
+}
 
 type Palette = {
   bg: string;
@@ -143,6 +174,7 @@ export function AppHeader({
   onToggleProfileMenu?: () => void;
   profileMenuItems?: MenuItem[];
 }) {
+  const online = useOnlineStatus();
   return (
     <>
       <View style={[mainAppStyles.header, { backgroundColor: palette.bg, borderColor: palette.border, height: 56, paddingHorizontal: 16 }]}>
@@ -176,14 +208,18 @@ export function AppHeader({
             <Ionicons name="search-outline" size={16} color={palette.accent} />
           </Pressable>
 
-          <SyncChip
-            syncBusy={syncBusy}
-            lastSyncedAt={lastSyncedAt}
-            persistenceMode={persistenceMode}
-            accent={palette.accent}
-            muted={palette.muted}
-            onPress={onSyncNow ?? (() => undefined)}
-          />
+          {online ? (
+            <SyncChip
+              syncBusy={syncBusy}
+              lastSyncedAt={lastSyncedAt}
+              persistenceMode={persistenceMode}
+              accent={palette.accent}
+              muted={palette.muted}
+              onPress={onSyncNow ?? (() => undefined)}
+            />
+          ) : (
+            <OfflineChip />
+          )}
 
           {/* Divider */}
           <View style={{ width: 1, height: 20, backgroundColor: palette.border }} />

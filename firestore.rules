@@ -142,6 +142,43 @@ service cloud.firestore {
       return request.resource.data.uid == request.auth.uid;
     }
 
+    // analyticsDaily counter documents only ever hold these numeric counter
+    // fields (written via increment() from authenticated clients). Validating
+    // the key set prevents a signed-in user from stuffing arbitrary fields or
+    // overwriting the doc with a non-counter payload.
+    function analyticsDailyValid() {
+      return hasOnlyKeys([
+        'appOpens',
+        'loginCount',
+        'noteCreatedCount',
+        'noteUpdatedCount',
+        'noteDeletedCount',
+        'scanCount',
+        'scanFailedCount',
+        'transferCount',
+        'transferFailedCount'
+      ])
+      && (!('appOpens' in request.resource.data) || request.resource.data.appOpens is number)
+      && (!('loginCount' in request.resource.data) || request.resource.data.loginCount is number)
+      && (!('noteCreatedCount' in request.resource.data) || request.resource.data.noteCreatedCount is number)
+      && (!('noteUpdatedCount' in request.resource.data) || request.resource.data.noteUpdatedCount is number)
+      && (!('noteDeletedCount' in request.resource.data) || request.resource.data.noteDeletedCount is number)
+      && (!('scanCount' in request.resource.data) || request.resource.data.scanCount is number)
+      && (!('scanFailedCount' in request.resource.data) || request.resource.data.scanFailedCount is number)
+      && (!('transferCount' in request.resource.data) || request.resource.data.transferCount is number)
+      && (!('transferFailedCount' in request.resource.data) || request.resource.data.transferFailedCount is number);
+    }
+
+    // adminAlerts created by clients during quota events. Validate the shape so
+    // a signed-in user cannot spam the admin panel with arbitrary documents.
+    function adminAlertValid() {
+      return request.resource.data.type is string
+        && request.resource.data.type.size() < 64
+        && request.resource.data.createdAt is number
+        && (!('message' in request.resource.data) || (request.resource.data.message is string && request.resource.data.message.size() < 1000))
+        && (!('uid' in request.resource.data) || request.resource.data.uid == request.auth.uid);
+    }
+
     function usernameDocValid() {
       return hasOnlyKeys(['username', 'uid', 'authEmailSource', 'updatedAt'])
         && request.resource.data.uid == request.auth.uid
@@ -269,19 +306,18 @@ service cloud.firestore {
       // Admins may list all admin records (for admin management UI).
       allow list: if callerIsAdmin();
 
-      // ── BOOTSTRAP PATH ────────────────────────────────────────────────────
-      // A user may create their OWN admin/tester document exactly ONCE —
-      // only when no record for their uid exists yet. This unblocks the
-      // first-time setup without requiring Firebase console access or a
-      // service account. Once the document exists, this path is a no-op.
+      // ── BOOTSTRAP PATH (CLOSED) ───────────────────────────────────────────
+      // Client-side self-promotion is DISABLED. The previous rule let any
+      // signed-in user create their own /admins/{uid} doc with role 'admin'
+      // as long as no record existed yet — meaning the first attacker to
+      // reach a fresh deployment could self-promote to admin.
       //
-      // NOTE: remove or restrict this rule after the owner bootstraps their
-      // account if you want to prevent other users from self-promoting.
-      // For a single-owner deployment this is acceptable.
-      allow create: if isOwner(uid)
-        && !exists(/databases/$(database)/documents/admins/$(uid))
-        && request.resource.data.uid == request.auth.uid
-        && request.resource.data.role in ['admin', 'tester'];
+      // The first admin is now provisioned server-side only, via
+      // `scripts/bootstrap.js` (Admin SDK / REST with the owner's
+      // credentials), which bypasses these rules. Subsequent admins/testers
+      // are granted through the `allow update` path below by an existing
+      // admin. There is no client create path.
+      allow create: if false;
 
       // Normal path: only existing admins may grant/update roles.
       allow update: if callerIsAdmin()
@@ -302,8 +338,10 @@ service cloud.firestore {
       allow read: if callerIsTesterOrAdmin();
       // Client writes aggregated counters using increment(); only the owning
       // uid can write its own presence mark in the activeUsers subcollection.
-      allow update: if signedIn(); // increment() calls from authenticated clients
-      allow create: if signedIn();
+      // Payload is restricted to the known numeric counter fields so a
+      // signed-in user cannot overwrite the doc with arbitrary data.
+      allow update: if signedIn() && analyticsDailyValid();
+      allow create: if signedIn() && analyticsDailyValid();
       allow delete: if callerIsAdmin();
 
       match /activeUsers/{uid} {
@@ -371,7 +409,7 @@ service cloud.firestore {
     // Admin alerts — only admins/testers can read; writes come from app via service.
     match /adminAlerts/{alertId} {
       allow read: if callerIsTesterOrAdmin();
-      allow create: if signedIn();        // service creates during quota events
+      allow create: if signedIn() && adminAlertValid();  // service creates during quota events
       allow update: if callerIsTesterOrAdmin(); // mark read/resolved
       allow delete: if callerIsAdmin();
     }

@@ -392,6 +392,11 @@ export function HistoryTab({
         }
         onEndReached={handleEndReached}
         onEndReachedThreshold={0.3}
+        removeClippedSubviews={Platform.OS !== 'web'}
+        maxToRenderPerBatch={8}
+        updateCellsBatchingPeriod={50}
+        initialNumToRender={12}
+        windowSize={5}
         ListFooterComponent={
           hasMore ? <ActivityIndicator size="small" color={palette.accent} style={{ padding: 16 }} /> : null
         }
