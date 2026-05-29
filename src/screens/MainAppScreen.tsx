@@ -75,6 +75,7 @@ import { SelectionFooter } from '../components/mainApp/SelectionFooter';
 import { SettingsTab } from '../components/mainApp/tabs/SettingsTab';
 import { hardDeleteAllNotes, hardDeleteAllTemplates, clearArchivedNotes, clearUnpinnedNotes, clearNotesOlderThan, loadNotes, saveNotes as saveWorkNotes, saveTemplates as saveNoteTemplates, type NoteItem } from '../core/notes';
 import { clearClipboardEntries, reinitClipboardFirebaseSync } from '../core/clipboard';
+import { useTranslation } from 'react-i18next';
 import { Toast, useToast } from '../components/Toast';
 import { BatchSessionModal } from '../components/mainApp/BatchSessionModal';
 import { useVoiceCommands } from '../hooks/useVoiceCommands';
@@ -161,6 +162,7 @@ class SimpleErrorBoundary extends React.Component<{ children: React.ReactNode },
 }
 
 function MainApp() {
+  const { t } = useTranslation();
   const { user, isGuest, logout } = useAuth();
   useCloudRelayGuard(); // periodic global quota check + auto-shutdown
   const { height, width } = useWindowDimensions();
@@ -1374,9 +1376,9 @@ function MainApp() {
       await clearArchivedNotes();
       // Trigger a refresh — NotesTab will reload from storage
       await diag.info('notes.clearArchived.success', {});
-      showToast('Archived notes cleared', 'success');
+      showToast(t('toasts.archivedNotesCleared'), 'success');
     } catch (error) {
-      showToast('Failed to clear archived notes', 'error');
+      showToast(t('toasts.clearArchivedFailed'), 'error');
       await diag.error('notes.clearArchived.error', { message: String(error) });
     }
   }
@@ -1386,9 +1388,9 @@ function MainApp() {
       await clearUnpinnedNotes();
       // Trigger a refresh — NotesTab will reload from storage
       await diag.info('notes.clearUnpinned.success', {});
-      showToast('Unpinned notes cleared', 'success');
+      showToast(t('toasts.unpinnedNotesCleared'), 'success');
     } catch (error) {
-      showToast('Failed to clear unpinned notes', 'error');
+      showToast(t('toasts.clearUnpinnedFailed'), 'error');
       await diag.error('notes.clearUnpinned.error', { message: String(error) });
     }
   }
@@ -1405,9 +1407,9 @@ function MainApp() {
       await clearCacheStorage('note');
       await purgeIndexedDBByKeyword('note');
       await diag.info('notes.hard_delete');
-      showToast('Notes permanently deleted from all storage layers', 'success');
+      showToast(t('toasts.notesHardDeleted'), 'success');
     } catch (error) {
-      showToast('Failed to delete notes', 'error');
+      showToast(t('toasts.deleteNotesFailed'), 'error');
       await diag.error('notes.hardDelete.error', { message: String(error) });
     }
   }
@@ -1443,8 +1445,8 @@ function MainApp() {
     await diag.info('history.hard_delete');
     showToast(
       remoteCleared
-        ? 'History permanently deleted — local and cloud'
-        : 'Local history deleted — cloud delete failed',
+        ? t('toasts.historyHardDeleted')
+        : t('toasts.historyDeletedCloudFailed'),
       remoteCleared ? 'success' : 'error',
     );
   }
@@ -1464,8 +1466,8 @@ function MainApp() {
     await diag.info('clipboard.hard_delete');
     showToast(
       remoteCleared
-        ? 'Clipboard permanently deleted — local and cloud'
-        : 'Local clipboard deleted — cloud delete failed',
+        ? t('toasts.clipboardHardDeleted')
+        : t('toasts.clipboardDeletedCloudFailed'),
       remoteCleared ? 'success' : 'error',
     );
   }
@@ -1478,9 +1480,9 @@ function MainApp() {
       clearAppLocalStorage('template');
       await purgeIndexedDBByKeyword('template');
       await diag.info('templates.hard_delete');
-      showToast('Templates permanently deleted from all storage layers', 'success');
+      showToast(t('toasts.templatesHardDeleted'), 'success');
     } catch (error) {
-      showToast('Failed to delete templates', 'error');
+      showToast(t('toasts.deleteTemplatesFailed'), 'error');
       await diag.error('templates.hardDelete.error', { message: String(error) });
     }
   }
@@ -1835,14 +1837,14 @@ function MainApp() {
           profileMenuVisible={profileMenuVisible}
           onToggleProfileMenu={() => setProfileMenuVisible((v) => !v)}
           profileMenuItems={[
-            { icon: 'settings-outline', label: 'Settings', onPress: () => setActiveTab('settings') },
-            { icon: 'help-circle-outline', label: 'Help & Support', onPress: () => {
+            { icon: 'settings-outline', label: t('menu.settings'), onPress: () => setActiveTab('settings') },
+            { icon: 'help-circle-outline', label: t('menu.help'), onPress: () => {
               if (Platform.OS === 'web') {
                 window.open('https://github.com/anthropics/claude-code/issues', '_blank');
               }
             } },
-            { icon: 'information-circle-outline', label: 'About MyKit', onPress: () => showToast('MyKit v1.0 — Scan & organize codes', 'info') },
-            { icon: 'log-out-outline', label: 'Sign Out', onPress: () => logout().catch(() => undefined), destructive: true },
+            { icon: 'information-circle-outline', label: t('menu.about'), onPress: () => showToast(t('menu.aboutToast'), 'info') },
+            { icon: 'log-out-outline', label: t('menu.signOut'), onPress: () => logout().catch(() => undefined), destructive: true },
           ]}
         />
 

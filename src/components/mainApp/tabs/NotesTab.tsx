@@ -685,7 +685,7 @@ export function NotesTab({
             const dataUri = String(reader.result || '');
             if (dataUri) {
               setDraftImages((current) => Array.from(new Set([dataUri, ...current])).slice(0, 6));
-              showToast('Image pasted');
+              showToast(tr('notesToast.imagePasted'));
             }
           };
           reader.readAsDataURL(blob);
@@ -856,7 +856,7 @@ export function NotesTab({
     const picked = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.9, base64: false });
     if (picked.canceled || !picked.assets?.length) return;
     const uri = await resolveImageUri(picked.assets[0].uri);
-    if (!uri) { showToast('Could not load image'); return; }
+    if (!uri) { showToast(tr('notesToast.couldNotLoadImage')); return; }
     setDraftImages((current) => Array.from(new Set([uri, ...current])).slice(0, 6));
   }
 
@@ -871,7 +871,7 @@ export function NotesTab({
     });
     if (picked.canceled || !picked.assets?.length) return;
     const uri = await resolveImageUri(picked.assets[0].uri);
-    if (!uri) { showToast('Could not load image'); return; }
+    if (!uri) { showToast(tr('notesToast.couldNotLoadImage')); return; }
     setDraftImages((current) => Array.from(new Set([uri, ...current])).slice(0, 6));
   }
 
@@ -891,7 +891,7 @@ export function NotesTab({
                 const dataUri = String(reader.result || '');
                 if (dataUri) {
                   setDraftImages((current) => Array.from(new Set([dataUri, ...current])).slice(0, 6));
-                  showToast('Image pasted');
+                  showToast(tr('notesToast.imagePasted'));
                 }
                 resolve();
               };
@@ -902,28 +902,28 @@ export function NotesTab({
           }
         }
         // Clipboard had no image
-        showToast('No image in clipboard — copy an image first, or use Ctrl+V');
+        showToast(tr('notesToast.noImageClipboardHint'));
         return;
       } catch {
         // Permission denied or API not available — guide user to use keyboard shortcut
-        showToast('Press Ctrl+V to paste an image');
+        showToast(tr('notesToast.pressCtrlV'));
         return;
       }
     }
     // Native: expo-clipboard
     const getImageAsync = (Clipboard as unknown as { getImageAsync?: () => Promise<{ data: string } | null> }).getImageAsync;
     if (!getImageAsync) {
-      showToast('Image paste not supported on this device');
+      showToast(tr('notesToast.imagePasteUnsupported'));
       return;
     }
     const image = await getImageAsync();
     if (!image?.data) {
-      showToast('No image in clipboard');
+      showToast(tr('notesToast.noImageClipboard'));
       return;
     }
     const dataUri = `data:image/png;base64,${image.data}`;
     setDraftImages((current) => Array.from(new Set([dataUri, ...current])).slice(0, 6));
-    showToast('Image pasted');
+    showToast(tr('notesToast.imagePasted'));
   }
 
   function resetDraftEditor() {
@@ -953,7 +953,7 @@ export function NotesTab({
 
   async function saveDraftAsNote(forceSecret?: boolean) {
     if (!draftTextValue.trim() && draftImages.length === 0) {
-      showToast('Add text or an image first');
+      showToast(tr('notesToast.addTextOrImageFirst'));
       return;
     }
 
@@ -1055,13 +1055,13 @@ export function NotesTab({
     // Validate medication name is provided
     const medicationName = String(metadata.medicationName || '').trim();
     if (!medicationName) {
-      showToast('Medication name is required');
+      showToast(tr('notesToast.medNameRequired'));
       return;
     }
 
     // Validate follow-up time is in the future if provided
     if (metadata.followUpAt && metadata.followUpAt <= Date.now()) {
-      showToast('Follow-up time must be in the future');
+      showToast(tr('notesToast.followUpFuture'));
       return;
     }
 
@@ -1133,7 +1133,9 @@ export function NotesTab({
       return `${entry.name}${dose}${next}`;
     });
 
-    const header = cycleMeds.length > 1 ? `Medication Follow-up · ${cycleMeds.length} meds` : 'Medication Follow-up';
+    const header = cycleMeds.length > 1
+      ? tr('notesToast.medFollowUpHeaderPlural', { count: cycleMeds.length })
+      : tr('notesToast.medFollowUpHeader');
     const lines = [
       header,
       ...medLines,
@@ -1148,7 +1150,7 @@ export function NotesTab({
     // deduped against an existing note (e.g. our own auto-saved draft).
     const targetId = result.insertedId || result.duplicateId;
     if (!targetId) {
-      showToast('Failed to create medication follow-up');
+      showToast(tr('notesToast.medFollowUpFailed'));
       return;
     }
     setFilter('all');
@@ -1201,7 +1203,7 @@ export function NotesTab({
       await scheduleReminder(noteId, medIndex, focus.nextSuggestedAt, focus.name).catch(() => undefined);
       showToast(`Cycle reset · next ${new Date(focus.nextSuggestedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`);
     } else {
-      showToast('Marked taken · follow prescription');
+      showToast(tr('notesToast.markedTakenFollowPrescription'));
     }
   }
 
@@ -1215,14 +1217,14 @@ export function NotesTab({
     } else {
       await snoozeReminder(noteId, medIndex, snoozeMs).catch(() => undefined);
     }
-    showToast('Snoozed');
+    showToast(tr('notesToast.snoozed'));
   }
 
   async function handleMedicationDismissCycle(noteId: string, medIndex: number) {
     const updated = await dismissMedication(noteId, medIndex);
     setNotes(updated);
     await dismissReminder(noteId, medIndex).catch(() => undefined);
-    showToast('Reminder dismissed');
+    showToast(tr('notesToast.reminderDismissed'));
   }
 
   async function handleMedicationReactivate(noteId: string, medIndex: number) {
@@ -1233,7 +1235,7 @@ export function NotesTab({
     if (focus && typeof focus.nextSuggestedAt === 'number' && focus.nextSuggestedAt > Date.now()) {
       await scheduleReminder(noteId, medIndex, focus.nextSuggestedAt, focus.name).catch(() => undefined);
     }
-    showToast('Reminder reactivated');
+    showToast(tr('notesToast.reminderReactivated'));
   }
 
   function handleRemoveImage(index: number) {
@@ -1249,7 +1251,7 @@ export function NotesTab({
       const shoppingAnalysis = analyzeShoppingListCandidate(ocrText);
       if (shoppingAnalysis.isCandidate && shoppingAnalysis.parsedItems.length >= 3) {
         openShoppingWorkflowFromDraft(shoppingAnalysis);
-        showToast('OCR routed to shopping review');
+        showToast(tr('notesToast.ocrRoutedToShopping'));
       }
     }
   }
@@ -1260,7 +1262,7 @@ export function NotesTab({
       const shoppingAnalysis = analyzeShoppingListCandidate(ocrText);
       if (shoppingAnalysis.isCandidate && shoppingAnalysis.parsedItems.length >= 3) {
         openShoppingWorkflowFromDraft(shoppingAnalysis);
-        showToast('OCR routed to shopping review');
+        showToast(tr('notesToast.ocrRoutedToShopping'));
       }
     }
   }
@@ -1281,7 +1283,7 @@ export function NotesTab({
     } else {
       setDraftText((current) => current ? `${current}\n${entry.content}` : entry.content);
     }
-    showToast('Added to note composer', 'info');
+    showToast(tr('notesToast.addedToComposer'), 'info');
   }
 
   async function createNoteFromPreview() {
@@ -1301,7 +1303,7 @@ export function NotesTab({
   function sendClipboardToTemplate(entry: ClipboardEntry) {
     setWorkspaceTab('templates');
     setTemplateBody((current) => current ? `${current}\n${entry.content}` : entry.content);
-    showToast('Added to template', 'info');
+    showToast(tr('notesToast.addedToTemplate'), 'info');
   }
 
   function buildTemplateShareText(template: NoteTemplate) {
@@ -1473,22 +1475,22 @@ export function NotesTab({
   }
 
   const notesEmptyTitle = notes.length === 0
-    ? 'Create your first note'
-    : filter === 'archived' ? 'No archived notes'
-    : filter === 'draft' ? 'No drafts'
-    : filter === 'pinned' ? 'Nothing pinned yet'
-    : filter === 'work' ? 'No work notes'
-    : 'No results';
+    ? tr('notesEmpty.firstTitle')
+    : filter === 'archived' ? tr('notesEmpty.archivedTitle')
+    : filter === 'draft' ? tr('notesEmpty.draftTitle')
+    : filter === 'pinned' ? tr('notesEmpty.pinnedTitle')
+    : filter === 'work' ? tr('notesEmpty.workTitle')
+    : tr('notesEmpty.noResultsTitle');
   const notesEmptyText = notes.length === 0
-    ? 'Write something in the editor, then save it to get started.'
-    : filter === 'archived' ? 'Notes you archive will appear here. Your other notes are still safe under "All".'
-    : filter === 'draft' ? 'Notes auto-save as drafts while you type. They show up here until you tap Save.'
-    : filter === 'pinned' ? 'Pin a note from its menu and it will live here.'
-    : 'Clear the search or change the filter to see notes.';
-  const templatesEmptyTitle = templates.length === 0 ? 'Create your first template' : 'No results';
+    ? tr('notesEmpty.firstText')
+    : filter === 'archived' ? tr('notesEmpty.archivedText')
+    : filter === 'draft' ? tr('notesEmpty.draftText')
+    : filter === 'pinned' ? tr('notesEmpty.pinnedText')
+    : tr('notesEmpty.noResultsText');
+  const templatesEmptyTitle = templates.length === 0 ? tr('notesEmpty.templateFirstTitle') : tr('notesEmpty.noResultsTitle');
   const templatesEmptyText = templates.length === 0
-    ? 'Save your first template to reuse common messages.'
-    : 'Refine your search to find templates.';
+    ? tr('notesEmpty.templateFirstText')
+    : tr('notesEmpty.templateNoResultsText');
 
   const uiPalette = {
     bg: palette.bg,
@@ -1545,7 +1547,7 @@ export function NotesTab({
             <Ionicons name="chevron-back" size={22} color={uiPalette.textBody} />
           </Pressable>
           <Ionicons name="lock-closed" size={16} color="#F59E0B" />
-          <Text style={{ color: uiPalette.textBody, fontSize: 16, fontWeight: '700', flex: 1 }}>Vault</Text>
+          <Text style={{ color: uiPalette.textBody, fontSize: 16, fontWeight: '700', flex: 1 }}>{tr('notes.vault')}</Text>
           <Text style={{ color: uiPalette.textDim, fontSize: 11 }}>{secretCount}</Text>
         </View>
       ) : null}
@@ -1602,12 +1604,12 @@ export function NotesTab({
                     >
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                         <Ionicons name="lock-closed" size={16} color="#F59E0B" />
-                        <Text style={{ color: uiPalette.textBody, fontSize: 13, fontWeight: '700', flex: 1 }}>Secret note</Text>
+                        <Text style={{ color: uiPalette.textBody, fontSize: 13, fontWeight: '700', flex: 1 }}>{tr('notes.secretNote')}</Text>
                         <Text style={{ color: uiPalette.textDim, fontSize: 10 }}>
                           {new Date(note.updatedAt).toLocaleDateString()}
                         </Text>
                       </View>
-                      <Text style={{ color: uiPalette.textDim, fontSize: 11 }}>Tap to unlock</Text>
+                      <Text style={{ color: uiPalette.textDim, fontSize: 11 }}>{tr('notes.tapToUnlock')}</Text>
                     </Pressable>
                   </View>
                 );
@@ -1643,10 +1645,10 @@ export function NotesTab({
                         clearDraftFlag(note.id).then(setNotes);
                         setEditingNoteId(null);
                         setEditingText('');
-                        showToast('Note saved', 'success');
+                        showToast(tr('notesToast.noteSaved'), 'success');
                       }).catch((error) => {
                         console.error('Failed to save note:', error);
-                        showToast('Failed to save note', 'error');
+                        showToast(tr('notesToast.saveFailed'), 'error');
                       });
                     }}
                     onCancelEdit={() => {
@@ -1715,7 +1717,7 @@ export function NotesTab({
                   // Tap = save current draft as secret note immediately (auto-save + lock)
                   const hasContent = draftTextValue.trim().length > 0 || draftImages.length > 0;
                   if (!hasContent) {
-                    showToast('Write something first');
+                    showToast(tr('notesToast.writeSomethingFirst'));
                     return;
                   }
                   const exists = await hasPin();
@@ -1771,7 +1773,7 @@ export function NotesTab({
                   if (!shoppingTemplateText) return;
                   setDraftText(shoppingTemplateText);
                   setManualCategory('shopping');
-                  showToast('Shopping item added');
+                  showToast(tr('notesToast.shoppingItemAdded'));
                 }}
                 onConvertShoppingCandidate={(analysis) => {
                   openShoppingWorkflowFromDraft(analysis);
@@ -1799,12 +1801,12 @@ export function NotesTab({
                   {draftAutoSaveStatus === 'saving' ? (
                     <>
                       <ActivityIndicator size="small" color={palette.fg} />
-                      <Text style={{ color: palette.fg, fontSize: 12, fontWeight: '500' }}>Saving draft...</Text>
+                      <Text style={{ color: palette.fg, fontSize: 12, fontWeight: '500' }}>{tr('notes.savingDraft')}</Text>
                     </>
                   ) : (
                     <>
                       <Ionicons name="checkmark-circle" size={14} color={palette.fg} />
-                      <Text style={{ color: palette.fg, fontSize: 12, fontWeight: '500' }}>Draft saved</Text>
+                      <Text style={{ color: palette.fg, fontSize: 12, fontWeight: '500' }}>{tr('notes.draftSaved')}</Text>
                     </>
                   )}
                 </View>
@@ -1824,7 +1826,7 @@ export function NotesTab({
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                     <MaterialCommunityIcons name="pencil-outline" size={15} color="#F59E0B" />
                     <Text style={{ color: '#F59E0B', fontSize: 13, fontWeight: '700', flex: 1 }}>
-                      Unfinished draft
+                      {tr('notes.unfinishedDraft')}
                     </Text>
                     {pendingDraft.updatedAt ? (
                       <Text style={{ color: '#97650A', fontSize: 11 }}>
@@ -1864,7 +1866,7 @@ export function NotesTab({
                         backgroundColor: pressed ? '#F59E0Bcc' : '#F59E0B',
                       })}
                     >
-                      <Text style={{ color: '#000', fontSize: 12, fontWeight: '700' }}>Continue editing</Text>
+                      <Text style={{ color: '#000', fontSize: 12, fontWeight: '700' }}>{tr('notes.continueEditing')}</Text>
                     </Pressable>
                     <Pressable
                       accessibilityRole="button"
@@ -1887,7 +1889,7 @@ export function NotesTab({
                           : undefined;
                         setNotes(dup?.draft ? await clearDraftFlag(dup.id) : result.notes);
                         await AsyncStorage.removeItem(DRAFT_KEY);
-                        showToast('Draft saved as note');
+                        showToast(tr('notesToast.draftSavedAsNote'));
                       }}
                       style={({ pressed }) => ({
                         paddingHorizontal: 14,
@@ -2207,7 +2209,7 @@ export function NotesTab({
                         { icon: 'create-outline' as const,      label: 'Editar',     color: palette.fg,  onPress: () => startEditingTemplate(template) },
                         { icon: 'copy-outline' as const,        label: 'Copiar',     color: palette.fg,  onPress: () => forceCopyToClipboard(buildTemplateShareText(template)).catch(() => undefined) },
                         { icon: 'logo-whatsapp' as const,       label: 'WhatsApp',   color: '#25D366',   onPress: () => { const parts = [template.subject ? `*${template.subject}*` : '', template.body || ''].filter(Boolean); void Linking.openURL(`https://wa.me/?text=${encodeURIComponent(parts.join('\n\n'))}`); } },
-                        { icon: 'mail-outline' as const,        label: 'Email',      color: palette.accent, onPress: () => { if (!template.to?.trim()) { showToast('Add a recipient email to use this action'); return; } void Linking.openURL(`mailto:${encodeURIComponent(template.to)}?subject=${encodeURIComponent(template.subject || template.name)}&body=${encodeURIComponent(template.body || '')}`); } },
+                        { icon: 'mail-outline' as const,        label: tr('notesToast.emailLabel'),      color: palette.accent, onPress: () => { if (!template.to?.trim()) { showToast(tr('notesToast.addRecipientEmail')); return; } void Linking.openURL(`mailto:${encodeURIComponent(template.to)}?subject=${encodeURIComponent(template.subject || template.name)}&body=${encodeURIComponent(template.body || '')}`); } },
                         { icon: 'trash-outline' as const,       label: 'Eliminar',   color: '#ef4444',   onPress: () => removeTemplate(template.id).then(setTemplates) },
                       ].map((action, idx, arr) => (
                         <Pressable
@@ -2370,7 +2372,7 @@ export function NotesTab({
           const result = await addRichNoteUnique(text, category, [], groupId);
           setNotes(result.notes);
           setFilter('all');
-          if (result.inserted) showToast('Note created');
+          if (result.inserted) showToast(tr('notesToast.noteCreated'));
         }}
         onCreateTemplate={({ text, category }) => createTemplateFromSuggestion(text, category)}
       />
@@ -2386,15 +2388,15 @@ export function NotesTab({
           const result = await addRichNoteUnique(text, 'general', [], groupId);
           setNotes(result.notes);
           setFilter('all');
-          showToast('Note created from image');
+          showToast(tr('notesToast.noteCreatedFromImage'));
         }}
         onAppendToDraft={(text) => {
           handleOcrAppendText(text).catch(() => undefined);
-          showToast('OCR text added to draft');
+          showToast(tr('notesToast.ocrTextAdded'));
         }}
         onReplaceDraft={(text) => {
           handleOcrReplaceText(text).catch(() => undefined);
-          showToast('OCR text replaced draft');
+          showToast(tr('notesToast.ocrTextReplaced'));
         }}
       />
 
@@ -2409,7 +2411,7 @@ export function NotesTab({
           if (String(text || '').trim()) next = await updateNoteText(id, String(text || ''));
           next = await updateNoteTitle(id, title);
           setNotes(next);
-          showToast('Note updated');
+          showToast(tr('notesToast.noteUpdated'));
         }}
         onSetColor={(color) => { if (detailNote) setNoteColor(detailNote.id, color).then((n) => { setNotes(n); setDetailNote((prev) => prev ? n.find((x) => x.id === prev.id) ?? null : null); }); }}
         onTogglePinned={(id) => togglePinned(id).then((n) => { setNotes(n); setDetailNote((prev) => prev?.id === id ? n.find((x) => x.id === id) ?? null : prev); })}
@@ -2432,7 +2434,7 @@ export function NotesTab({
         }}
         onSave={(metadata) => {
           createMedicationFollowUpNote(metadata).then(() => {
-            showToast('Medication follow-up created', 'success');
+            showToast(tr('notesToast.medFollowUpCreated'), 'success');
             setDraftText((current) => {
               const quickText = Array.isArray(workflowModalData.medicationNames)
                 ? (workflowModalData.medicationNames as string[]).join(', ')
@@ -2446,7 +2448,7 @@ export function NotesTab({
             setDetectedWorkflow(null);
           }).catch((error) => {
             console.error('Error creating medication note:', error);
-            showToast('Failed to create medication follow-up', 'error');
+            showToast(tr('notesToast.medFollowUpFailed'), 'error');
             setWorkflowModalType(null);
             setWorkflowModalData({});
           });
@@ -2471,7 +2473,7 @@ export function NotesTab({
             ? `Shopping List\n${checklist.map((item) => `- ${item}`).join('\n')}`
             : '';
           if (!shoppingNote) {
-            showToast('Empty shopping list', 'error');
+            showToast(tr('notesToast.emptyShoppingList'), 'error');
             setWorkflowModalType(null);
             setDetectedWorkflow(null);
             return;
@@ -2481,7 +2483,7 @@ export function NotesTab({
               setNotes(result.notes);
               const targetId = result.insertedId || result.duplicateId;
               if (!targetId) {
-                showToast('Failed to create shopping list', 'error');
+                showToast(tr('notesToast.shoppingListFailed'), 'error');
                 return;
               }
               const targetNote = result.notes.find((n) => n.id === targetId);
@@ -2509,13 +2511,13 @@ export function NotesTab({
               setDetectedWorkflow(null);
             } catch (error) {
               console.error('Failed to create shopping list:', error);
-              showToast('Failed to create shopping list', 'error');
+              showToast(tr('notesToast.shoppingListFailed'), 'error');
               setWorkflowModalType(null);
               setWorkflowModalData({});
             }
           }).catch((error) => {
             console.error('Error adding shopping note:', error);
-            showToast('Failed to create shopping list', 'error');
+            showToast(tr('notesToast.shoppingListFailed'), 'error');
             setWorkflowModalType(null);
             setWorkflowModalData({});
           });

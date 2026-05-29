@@ -95,7 +95,7 @@ export const ComposerSection = forwardRef<TextInput, {
     },
     ref
   ) {
-    const { t } = useTranslation();
+    const { t, i18n } = useTranslation();
     const draftTextValue = typeof draftText === 'string' ? draftText : '';
     const [inputHeight, setInputHeight] = useState(68);
     const [pickerVisible, setPickerVisible] = useState(false);
@@ -154,7 +154,7 @@ export const ComposerSection = forwardRef<TextInput, {
 
     const startDictation = async () => {
       if (Platform.OS !== 'web' || typeof window === 'undefined') {
-        setDictationMessage('Voice dictation is only available in supported web browsers. Use your keyboard microphone here.');
+        setDictationMessage(t('dictation.webOnly'));
         localInputRef.current?.focus();
         return;
       }
@@ -184,13 +184,13 @@ export const ComposerSection = forwardRef<TextInput, {
       }).SpeechRecognition || (window as unknown as { webkitSpeechRecognition?: new () => any }).webkitSpeechRecognition;
 
       if (!SpeechRecognition) {
-        setDictationMessage('Voice dictation needs Chrome or Edge on web. You can still use your device keyboard microphone.');
+        setDictationMessage(t('dictation.needsChromeEdge'));
         localInputRef.current?.focus();
         return;
       }
 
       if (typeof window.isSecureContext === 'boolean' && !window.isSecureContext) {
-        setDictationMessage('Voice dictation needs HTTPS or localhost to access the microphone.');
+        setDictationMessage(t('dictation.needsHttps'));
         localInputRef.current?.focus();
         return;
       }
@@ -202,8 +202,12 @@ export const ComposerSection = forwardRef<TextInput, {
         }
 
         const recognition = new SpeechRecognition();
-        const browserLang = typeof navigator !== 'undefined' && navigator.language ? navigator.language : 'es-ES';
-        recognition.lang = browserLang;
+        // Prefer the app's selected UI language for dictation, then the browser
+        // language, then English — never silently default to Spanish.
+        const speechLocale: Record<string, string> = { en: 'en-US', es: 'es-ES', fr: 'fr-FR', nl: 'nl-NL' };
+        const uiLang = (i18n.language || '').slice(0, 2);
+        const browserLang = typeof navigator !== 'undefined' && navigator.language ? navigator.language : '';
+        recognition.lang = speechLocale[uiLang] || browserLang || 'en-US';
         recognition.continuous = true;
         recognition.interimResults = true;
         recognition.maxAlternatives = 1;
@@ -211,7 +215,7 @@ export const ComposerSection = forwardRef<TextInput, {
         let hadError = false;
         let stopped = false;
         const stop = () => { if (!stopped) { stopped = true; try { recognition.stop(); } catch { /* ignore */ } } };
-        recognition.onstart = () => setDictationMessage('🎙 Escuchando… habla ahora');
+        recognition.onstart = () => setDictationMessage(`🎙 ${t('dictation.listening')}`);
         recognition.onresult = (event: any) => {
           // Collect all final segments
           let finalText = '';
@@ -236,37 +240,37 @@ export const ComposerSection = forwardRef<TextInput, {
           hadError = true;
           const error = event.error || 'unknown';
           if (error === 'not-allowed' || error === 'service-not-allowed') {
-            setDictationMessage('Micrófono bloqueado. Permite el acceso al micrófono en el navegador.');
+            setDictationMessage(t('dictation.micBlocked'));
             return;
           }
           if (error === 'audio-capture') {
-            setDictationMessage('No se detectó micrófono. Verifica tu dispositivo de audio.');
+            setDictationMessage(t('dictation.noMic'));
             return;
           }
           if (error === 'no-speech') {
-            setDictationMessage('No se detectó voz. Pulsa Dictar y habla más cerca del micrófono.');
+            setDictationMessage(t('dictation.noSpeech'));
             return;
           }
           if (error === 'network') {
-            setDictationMessage('Servicio de voz no disponible. Verifica la conexión e intenta de nuevo.');
+            setDictationMessage(t('dictation.networkError'));
             return;
           }
           if (error !== 'aborted') {
-            setDictationMessage(`Dictado detenido: ${error}.`);
+            setDictationMessage(t('dictation.stopped', { error }));
           }
         };
         recognition.onend = () => {
           if (!heardSpeech && !hadError) {
-            setDictationMessage('No se detectó voz. Pulsa Dictar y habla más cerca del micrófono.');
+            setDictationMessage(t('dictation.noSpeech'));
           }
         };
         recognition.start();
       } catch (error) {
         const name = error instanceof Error ? error.name : '';
         if (name === 'NotAllowedError' || name === 'SecurityError') {
-          setDictationMessage('Microphone permission is blocked. Allow microphone access in the browser and try again.');
+          setDictationMessage(t('dictation.permissionBlocked'));
         } else {
-          setDictationMessage('Voice dictation could not start. Use Chrome or Edge, then allow microphone access.');
+          setDictationMessage(t('dictation.couldNotStart'));
         }
         localInputRef.current?.focus();
       }

@@ -11,6 +11,7 @@ import {
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { detectNoteEntities, buildSmartNoteModel, segmentNoteText, parseServiceNowFields, buildRedactedText, SmartNoteEntities, SmartNoteModel, ServiceNowField, ServiceNowModel, NoteSegment, SENSITIVE_FIELD_KEYS } from '../core/smartNotes';
 import { isShoppingList, parseShoppingList } from '../core/shoppingList';
 import { detectSmartNoteLabel, getSmartNoteLabelMeta } from '../core/noteIntelligence';
@@ -186,6 +187,7 @@ function NoteCardBase({
   onMedicationReactivate?: (id: string, medIndex: number) => void;
   settings: AppSettings;
 }) {
+  const { t } = useTranslation();
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   const heartPulse = useRef(new Animated.Value(1)).current;
@@ -399,9 +401,9 @@ function NoteCardBase({
             zIndex: 1,
           }}
         >
-          <SwipeAction bg="#2563eb" icon="alarm-outline"   label="Remind"  onPress={handleReminder} />
-          <SwipeAction bg="#7c3aed" icon="archive-outline" label="Archive" onPress={handleArchive} />
-          <SwipeAction bg="#dc2626" icon="trash-outline"   label="Delete"  onPress={handleDeleteTap} roundRight />
+          <SwipeAction bg="#2563eb" icon="alarm-outline"   label={t('noteCard.remind')}  onPress={handleReminder} />
+          <SwipeAction bg="#7c3aed" icon="archive-outline" label={t('noteCard.archive')} onPress={handleArchive} />
+          <SwipeAction bg="#dc2626" icon="trash-outline"   label={t('common.delete')}  onPress={handleDeleteTap} roundRight />
         </View>
 
         {/* ── Animated card — slides left to reveal actions ── */}
@@ -495,12 +497,12 @@ function NoteCardBase({
                       textTransform: 'uppercase',
                     }}>
                       {note.syncStatus === 'failed'
-                        ? 'Sync failed'
+                        ? t('noteCard.syncFailed')
                         : note.syncStatus === 'offline'
-                        ? 'Saved offline'
+                        ? t('noteCard.savedOffline')
                         : note.syncStatus === 'retrying'
-                        ? 'Retrying'
-                        : 'Pending sync'}
+                        ? t('noteCard.retrying')
+                        : t('noteCard.pendingSync')}
                     </Text>
                   </View>
                 ) : null}
@@ -655,7 +657,7 @@ function NoteCardBase({
             {/* ── Color picker (editing mode only) ── */}
             {editing ? (
               <View style={{ paddingTop: 8, borderTopWidth: 1, borderTopColor: palette.border, gap: 8 }}>
-                <Text style={{ color: palette.textDim, fontSize: 11, fontWeight: '600' }}>Note color</Text>
+                <Text style={{ color: palette.textDim, fontSize: 11, fontWeight: '600' }}>{t('noteCard.noteColor')}</Text>
                 <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
                   {colorSwatches.map((swatch) => {
                     const active = (note.color ?? 'default') === swatch.key;
@@ -732,20 +734,20 @@ function NoteCardBase({
               ) : (
                 <>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, flexWrap: 'wrap', rowGap: 5 }}>
-                    <ActionPill icon="copy-outline"         label="Copy"  color="#0891b2" onPress={() => {
+                    <ActionPill icon="copy-outline"         label={t('common.copy')}  color="#0891b2" onPress={() => {
                       const text = sfModel.isStructured
                         ? buildRedactedText(sfModel, note.text, hiddenKeys)
                         : note.text;
                       onCopy(text);
                     }} />
-                    <ActionPill icon="create-outline"       label="Edit"  color="#059669" onPress={onStartEdit} />
+                    <ActionPill icon="create-outline"       label={t('common.edit')}  color="#059669" onPress={onStartEdit} />
 
                     {/* More menu button */}
                     <Pressable
                       onPress={() => setMoreMenuOpen(!moreMenuOpen)}
                       hitSlop={8}
                       accessibilityRole="button"
-                      accessibilityLabel="More options"
+                      accessibilityLabel={t('noteCard.moreOptions')}
                       accessibilityState={{ expanded: moreMenuOpen }}
                       style={({ pressed }) => ({
                         height: 28,
@@ -790,9 +792,9 @@ function NoteCardBase({
                   {/* More menu dropdown */}
                   {moreMenuOpen && (
                     <View style={{ flexDirection: 'row', gap: 5, paddingTop: 2, borderTopWidth: 1, borderTopColor: palette.chipBorder }}>
-                      <ActionPill icon="share-social-outline" label="Share" color="#7c3aed" onPress={() => { onShare(); setMoreMenuOpen(false); }} />
+                      <ActionPill icon="share-social-outline" label={t('noteCard.share')} color="#7c3aed" onPress={() => { onShare(); setMoreMenuOpen(false); }} />
                       {onDuplicate ? (
-                        <ActionPill icon="copy-outline" label="Dupe" color="#F59E0B" onPress={() => { onDuplicate(); setMoreMenuOpen(false); }} />
+                        <ActionPill icon="copy-outline" label={t('noteCard.duplicate')} color="#F59E0B" onPress={() => { onDuplicate(); setMoreMenuOpen(false); }} />
                       ) : null}
                     </View>
                   )}
@@ -821,27 +823,27 @@ function NoteCardBase({
           >
             <View style={{ alignSelf: 'center', width: 42, height: 4, borderRadius: 99, backgroundColor: palette.chipBorder }} />
             <Text style={{ color: palette.textBody, fontSize: 15, fontWeight: '600', textAlign: 'center' }}>
-              Delete this note?
+              {t('noteCard.deleteConfirmTitle')}
             </Text>
             <Text style={{ color: palette.textMuted, fontSize: 13, textAlign: 'center' }}>
-              This action cannot be undone.
+              {t('noteCard.deleteConfirmBody')}
             </Text>
             <View style={{ flexDirection: 'row', gap: 10 }}>
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel="Cancel"
+                accessibilityLabel={t('common.cancel')}
                 onPress={() => setConfirmDelete(false)}
                 style={{ flex: 1, minHeight: 44, borderRadius: 12, borderWidth: 1, borderColor: palette.border, alignItems: 'center', justifyContent: 'center' }}
               >
-                <Text style={{ color: palette.textBody, fontSize: 13, fontWeight: '600' }}>Cancel</Text>
+                <Text style={{ color: palette.textBody, fontSize: 13, fontWeight: '600' }}>{t('common.cancel')}</Text>
               </Pressable>
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel="Delete note"
+                accessibilityLabel={t('noteCard.deleteNote')}
                 onPress={() => { setConfirmDelete(false); onDelete(); }}
                 style={{ flex: 1, minHeight: 44, borderRadius: 12, backgroundColor: '#dc2626', alignItems: 'center', justifyContent: 'center' }}
               >
-                <Text style={{ color: '#fff', fontSize: 13, fontWeight: '700' }}>Delete</Text>
+                <Text style={{ color: '#fff', fontSize: 13, fontWeight: '700' }}>{t('common.delete')}</Text>
               </Pressable>
             </View>
           </Pressable>
@@ -1041,6 +1043,7 @@ function FieldVisibilityPanel({
   onToggle: (key: string) => void;
   palette: Palette;
 }) {
+  const { t } = useTranslation();
   return (
     <View style={{
       marginTop: 10,
@@ -1052,7 +1055,7 @@ function FieldVisibilityPanel({
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 4 }}>
         <Ionicons name="eye-outline" size={12} color={palette.textMuted} />
         <Text style={{ color: palette.textMuted, fontSize: 10, fontWeight: '800', letterSpacing: 0.6 }}>
-          FIELD VISIBILITY
+          {t('noteCard.fieldVisibility')}
         </Text>
       </View>
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>

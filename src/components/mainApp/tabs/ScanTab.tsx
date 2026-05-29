@@ -10,6 +10,12 @@ import { ScanState } from '../../../types';
 import type { VoiceState } from '../../../hooks/useVoiceCommands';
 import { ScanFeedbackBanner } from '../ScanFeedbackBanner';
 import { ScanViewfinder } from '../ScanViewfinder';
+import { APP_LAYOUT_MAX_WIDTH } from '../AppLayout';
+
+// Camera feed stays narrower than the app shell — a full-width webcam preview
+// looks oversized on desktop. The controls panel below it aligns to the shared
+// app width so tabs don't "jump" in width when switching.
+const CAMERA_MAX_WIDTH = 920;
 
 const C = {
   bg: '#111111',
@@ -369,7 +375,7 @@ const styles = StyleSheet.create({
   cameraWrapperDesktop: {
     alignSelf: 'center',
     width: '100%',
-    maxWidth: 920,
+    maxWidth: CAMERA_MAX_WIDTH,
     borderRadius: 20,
     marginTop: 4,
   },
@@ -458,7 +464,7 @@ const styles = StyleSheet.create({
   bottomPanelDesktop: {
     alignSelf: 'center',
     width: '100%',
-    maxWidth: 920,
+    maxWidth: APP_LAYOUT_MAX_WIDTH,
     marginTop: 4,
     borderRadius: 20,
     overflow: 'hidden',

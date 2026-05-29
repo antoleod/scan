@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ActivityIndicator, Alert, Animated, FlatList, Linking, Modal, PanResponder, Platform, Pressable, RefreshControl, ScrollView, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTranslation } from 'react-i18next';
 
 import { ScanRecord } from '../../../types';
@@ -14,6 +15,7 @@ type DateFilter = 'ALL' | 'TODAY' | 'WEEK' | 'MONTH';
 
 const PRIMARY_FILTERS = ['ALL', 'INC'];
 const HIDDEN_BY_DEFAULT = ['PI', 'RITM', 'REQ'];
+const SWIPE_HINT_SEEN_KEY = '@MyKit_history_swipe_hint_seen';
 
 function formatType(type: string) {
   return String(type || '').trim().toUpperCase() || 'OTHER';
@@ -305,6 +307,21 @@ export function HistoryTab({
   const [page, setPage] = useState(1);
   const editLockRef = useRef(false);
 
+  // One-time swipe-to-delete hint (touch platforms only — there is no swipe on web).
+  const [showSwipeHint, setShowSwipeHint] = useState(false);
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
+    let cancelled = false;
+    AsyncStorage.getItem(SWIPE_HINT_SEEN_KEY)
+      .then((seen) => { if (!cancelled && !seen) setShowSwipeHint(true); })
+      .catch(() => undefined);
+    return () => { cancelled = true; };
+  }, []);
+  const dismissSwipeHint = useCallback(() => {
+    setShowSwipeHint(false);
+    AsyncStorage.setItem(SWIPE_HINT_SEEN_KEY, '1').catch(() => undefined);
+  }, []);
+
   // Palette bridge for MiniCalendar (which expects the extended Palette type)
   const calPalette = {
     bg: palette.bg, accent: palette.accent, border: palette.border,
@@ -491,6 +508,29 @@ export function HistoryTab({
                 />
               ) : null}
             </View>
+
+            {showSwipeHint && historyCount > 0 ? (
+              <Pressable
+                onPress={dismissSwipeHint}
+                accessibilityRole="button"
+                accessibilityLabel={t('history.swipeHintDismiss')}
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 8,
+                  paddingHorizontal: 10,
+                  paddingVertical: 8,
+                  borderRadius: 10,
+                  backgroundColor: `${palette.accent}14`,
+                  borderWidth: 1,
+                  borderColor: `${palette.accent}33`,
+                }}
+              >
+                <Ionicons name="arrow-back-outline" size={14} color={palette.accent} />
+                <Text style={{ color: palette.muted, fontSize: 11, flex: 1 }}>{t('history.swipeHint')}</Text>
+                <Ionicons name="close" size={13} color={palette.muted} />
+              </Pressable>
+            ) : null}
           </View>
         )}
         stickyHeaderIndices={[0]}

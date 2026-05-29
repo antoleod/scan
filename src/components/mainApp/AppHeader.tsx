@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Animated, Platform, Pressable, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 
 import { mainAppStyles } from './styles';
 import { ProfileMenu } from './ProfileMenu';
@@ -14,10 +16,11 @@ function useOnlineStatus(): boolean {
 }
 
 function OfflineChip() {
+  const { t } = useTranslation();
   return (
     <View
       accessibilityRole="alert"
-      accessibilityLabel="Sin conexión. Los cambios se guardan localmente y se sincronizarán al reconectar."
+      accessibilityLabel={t('header.offlineA11y')}
       style={{
         flexDirection: 'row',
         alignItems: 'center',
@@ -31,7 +34,7 @@ function OfflineChip() {
       }}
     >
       <Ionicons name="cloud-offline-outline" size={13} color="#F59E0B" />
-      <Text style={{ color: '#F59E0B', fontSize: 11, fontWeight: '600' }}>Sin conexión</Text>
+      <Text style={{ color: '#F59E0B', fontSize: 11, fontWeight: '600' }}>{t('header.offline')}</Text>
     </View>
   );
 }
@@ -69,11 +72,11 @@ function LogoMark({ accent, foreground }: { accent: string; foreground: string }
   );
 }
 
-function formatSyncTime(ts: number): string {
+function formatSyncTime(ts: number, t: TFunction): string {
   const now = Date.now();
   const diff = now - ts;
-  if (diff < 60_000) return 'ahora';
-  if (diff < 3_600_000) return `hace ${Math.floor(diff / 60_000)}m`;
+  if (diff < 60_000) return t('common.justNow');
+  if (diff < 3_600_000) return t('common.minutesAgo', { count: Math.floor(diff / 60_000) });
   return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
@@ -92,6 +95,7 @@ function SyncChip({
   muted: string;
   onPress: () => void;
 }) {
+  const { t } = useTranslation();
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const [, setTick] = useState(0);
   const [pressed, setPressed] = useState(false);
@@ -113,11 +117,11 @@ function SyncChip({
     return (
       <View
         accessibilityRole="progressbar"
-        accessibilityLabel="Sync in progress"
+        accessibilityLabel={t('header.syncInProgress')}
         style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}
       >
         <ActivityIndicator size={12} color={accent} />
-        <Text style={{ color: accent, fontSize: 11 }}>sync…</Text>
+        <Text style={{ color: accent, fontSize: 11 }}>{t('header.syncing')}</Text>
       </View>
     );
   }
@@ -126,7 +130,7 @@ function SyncChip({
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={persistenceMode === 'firebase' ? 'Sync now' : 'Local storage status'}
+      accessibilityLabel={persistenceMode === 'firebase' ? t('header.syncNow') : t('header.localStorageStatus')}
       hitSlop={10}
       onPressIn={() => setPressed(true)}
       onPressOut={() => setPressed(false)}
@@ -135,7 +139,7 @@ function SyncChip({
       <Animated.View style={{ opacity: fadeAnim, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
         <Ionicons name="sync-circle-outline" size={14} color={accent} />
         <Text style={{ color: muted, fontSize: 11 }}>
-          {persistenceMode === 'firebase' ? (lastSyncedAt ? formatSyncTime(lastSyncedAt) : 'auto sync') : 'local'}
+          {persistenceMode === 'firebase' ? (lastSyncedAt ? formatSyncTime(lastSyncedAt, t) : t('header.autoSync')) : t('header.localOnly')}
         </Text>
       </Animated.View>
     </Pressable>
@@ -174,6 +178,7 @@ export function AppHeader({
   onToggleProfileMenu?: () => void;
   profileMenuItems?: MenuItem[];
 }) {
+  const { t } = useTranslation();
   const online = useOnlineStatus();
   return (
     <>
@@ -191,7 +196,7 @@ export function AppHeader({
           <Pressable
             onPress={onOpenCommandPalette}
             accessibilityRole="button"
-            accessibilityLabel="Open global search"
+            accessibilityLabel={t('header.openSearch')}
             hitSlop={8}
             style={({ pressed }) => ({
               width: 30,
@@ -227,7 +232,7 @@ export function AppHeader({
           <Pressable
             onPress={onToggleProfileMenu}
             accessibilityRole="button"
-            accessibilityLabel="Open profile menu"
+            accessibilityLabel={t('header.openProfileMenu')}
             accessibilityState={{ expanded: profileMenuVisible }}
             hitSlop={8}
             style={{ flexDirection: 'row', alignItems: 'center', gap: 6, maxWidth: 160, flexShrink: 1 }}
