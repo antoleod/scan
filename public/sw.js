@@ -1,5 +1,5 @@
-const CACHE_NAME = 'MyKit-cache-v4';
-const STATIC_CACHE = 'MyKit-static-v4';
+const CACHE_NAME = 'MyKit-cache-v5';
+const STATIC_CACHE = 'MyKit-static-v5';
 
 // Detect the base path at runtime from the service worker's own URL.
 // e.g. if sw.js is at /MyKit/sw.js → BASE = "/MyKit"
@@ -37,6 +37,9 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const { request } = event;
   if (request.method !== 'GET') return;
+
+  // Skip blob: and data: — these are in-memory and can't be cached or re-fetched
+  if (request.url.startsWith('blob:') || request.url.startsWith('data:')) return;
 
   const url = new URL(request.url);
 

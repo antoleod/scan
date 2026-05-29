@@ -38,7 +38,6 @@ import {
   createShoppingItemFromCatalog,
   inferCategoryFromText,
 } from '../core/shoppingListV2';
-import { findGroceryById } from '../utils/groceryDetection';
 import { loadFavorites, saveFavorites, loadQtyMemory, saveQtyMemory, FavoriteItem } from '../core/shoppingStorage';
 import { SHOPPING_TEMPLATES, ShoppingTemplate } from '../core/shoppingTemplates';
 import { GROCERY_CATALOG } from '../data/groceryCatalog';
@@ -154,14 +153,6 @@ function ItemRowV2({
   const [nameEdit, setNameEdit] = useState(item.name);
   const [noteEdit, setNoteEdit] = useState(item.note || '');
 
-  // Get suggested quantity from catalog
-  const suggestedQty = useMemo(() => {
-    if (item.catalogId && !item.quantity) {
-      const catalog = findGroceryById(item.catalogId);
-      return catalog?.defaultQuantity || null;
-    }
-    return null;
-  }, [item.catalogId, item.quantity]);
 
   const handleCheck = useCallback(() => {
     Animated.sequence([
@@ -305,33 +296,6 @@ function ItemRowV2({
               </View>
             ))}
 
-            {/* Suggested quantity button */}
-            {suggestedQty && (
-              <Pressable
-                onPress={() => {
-                  onEditQty(item.id);
-                }}
-                style={({ pressed }) => ({
-                  paddingHorizontal: 5,
-                  paddingVertical: 1,
-                  borderRadius: 4,
-                  backgroundColor: pressed ? '#FCD34D22' : '#FCD34D0d',
-                  borderWidth: 0.5,
-                  borderColor: '#FCD34D44',
-                })}
-              >
-                <Text
-                  style={{
-                    fontSize: 8,
-                    fontWeight: '500',
-                    color: '#D97706',
-                    textTransform: 'lowercase',
-                  }}
-                >
-                  suggested: {suggestedQty}
-                </Text>
-              </Pressable>
-            )}
           </View>
         </View>
 

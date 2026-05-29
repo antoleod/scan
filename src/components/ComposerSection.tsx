@@ -202,46 +202,62 @@ export const ComposerSection = forwardRef<TextInput, {
         }
 
         const recognition = new SpeechRecognition();
-        recognition.lang = typeof navigator !== 'undefined' && navigator.language ? navigator.language : 'en-US';
-        recognition.continuous = false;
-        recognition.interimResults = false;
+        const browserLang = typeof navigator !== 'undefined' && navigator.language ? navigator.language : 'es-ES';
+        recognition.lang = browserLang;
+        recognition.continuous = true;
+        recognition.interimResults = true;
         recognition.maxAlternatives = 1;
         let heardSpeech = false;
         let hadError = false;
-        recognition.onstart = () => setDictationMessage('Listening...');
+        let stopped = false;
+        const stop = () => { if (!stopped) { stopped = true; try { recognition.stop(); } catch { /* ignore */ } } };
+        recognition.onstart = () => setDictationMessage('🎙 Escuchando… habla ahora');
         recognition.onresult = (event: any) => {
-          const transcript = safeText(event.results?.[0]?.[0]?.transcript).trim();
-          if (!transcript) return;
-          heardSpeech = true;
-          onChangeText(draftTextValue.trim() ? `${draftTextValue}\n${transcript}` : transcript);
-          setDictationMessage(null);
+          // Collect all final segments
+          let finalText = '';
+          let interimText = '';
+          for (let i = 0; i < event.results.length; i++) {
+            const result = event.results[i];
+            const t = safeText(result?.[0]?.transcript);
+            if (result.isFinal) { finalText += (finalText ? ' ' : '') + t; }
+            else { interimText += t; }
+          }
+          if (interimText) {
+            setDictationMessage(`🎙 ${interimText}`);
+          }
+          if (finalText) {
+            heardSpeech = true;
+            onChangeText(draftTextValue.trim() ? `${draftTextValue}\n${finalText.trim()}` : finalText.trim());
+            setDictationMessage(null);
+            stop();
+          }
         };
         recognition.onerror = (event: { error?: string }) => {
           hadError = true;
           const error = event.error || 'unknown';
           if (error === 'not-allowed' || error === 'service-not-allowed') {
-            setDictationMessage('Microphone permission is blocked. Allow microphone access in the browser and try again.');
+            setDictationMessage('Micrófono bloqueado. Permite el acceso al micrófono en el navegador.');
             return;
           }
           if (error === 'audio-capture') {
-            setDictationMessage('No microphone was detected. Check your input device and try again.');
+            setDictationMessage('No se detectó micrófono. Verifica tu dispositivo de audio.');
             return;
           }
           if (error === 'no-speech') {
-            setDictationMessage('No speech detected. Tap Dictate and speak again.');
+            setDictationMessage('No se detectó voz. Pulsa Dictar y habla más cerca del micrófono.');
             return;
           }
           if (error === 'network') {
-            setDictationMessage('Voice dictation service is unavailable right now. Check the connection or try again later.');
+            setDictationMessage('Servicio de voz no disponible. Verifica la conexión e intenta de nuevo.');
             return;
           }
           if (error !== 'aborted') {
-            setDictationMessage(`Voice dictation stopped: ${error}.`);
+            setDictationMessage(`Dictado detenido: ${error}.`);
           }
         };
         recognition.onend = () => {
           if (!heardSpeech && !hadError) {
-            setDictationMessage('No speech detected. Tap Dictate and speak again.');
+            setDictationMessage('No se detectó voz. Pulsa Dictar y habla más cerca del micrófono.');
           }
         };
         recognition.start();
