@@ -852,27 +852,74 @@ export function NotesTab({
     }
   }
 
+  // Share a note's text through the OS-native share sheet (all available apps),
+  // falling back to clipboard copy on web browsers without the Web Share API.
+  async function shareNoteNative(text: string) {
+    const body = String(text || '').trim();
+    if (!body) { showToast(tr('notesToast.writeSomethingFirst')); return; }
+    try {
+      if (Platform.OS === 'web') {
+        const nav = typeof navigator !== 'undefined' ? (navigator as Navigator & { share?: (data: { text: string }) => Promise<void> }) : undefined;
+        if (nav?.share) {
+          await nav.share({ text: body });
+        } else {
+          await Clipboard.setStringAsync(body);
+          showToast(tr('notesToast.copiedToClipboard'));
+        }
+        return;
+      }
+      // Native: write a temp .txt and open the OS share sheet via expo-sharing,
+      // which lists every app that can receive text (Messages, WhatsApp, Mail…).
+      if (await Sharing.isAvailableAsync()) {
+        const path = `${FileSystem.cacheDirectory}MyKit_note_${Date.now()}.txt`;
+        await FileSystem.writeAsStringAsync(path, body);
+        await Sharing.shareAsync(path, { mimeType: 'text/plain', dialogTitle: tr('notes.shareNote') });
+      } else {
+        await Clipboard.setStringAsync(body);
+        showToast(tr('notesToast.copiedToClipboard'));
+      }
+    } catch (error) {
+      showToast(tr('notesToast.shareFailed'), 'error');
+      await diag.warn('notes.share.error', { message: String(error) });
+    }
+  }
+
   async function addImageToDraft() {
-    const picked = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.9, base64: false });
-    if (picked.canceled || !picked.assets?.length) return;
-    const uri = await resolveImageUri(picked.assets[0].uri);
-    if (!uri) { showToast(tr('notesToast.couldNotLoadImage')); return; }
-    setDraftImages((current) => Array.from(new Set([uri, ...current])).slice(0, 6));
+    try {
+      // Media library permission is required on iOS/Android before opening the picker.
+      if (Platform.OS !== 'web') {
+        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (status !== 'granted') { showToast(tr('notesToast.galleryPermissionDenied'), 'error'); return; }
+      }
+      const picked = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.9, base64: false });
+      if (picked.canceled || !picked.assets?.length) return;
+      const uri = await resolveImageUri(picked.assets[0].uri);
+      if (!uri) { showToast(tr('notesToast.couldNotLoadImage'), 'error'); return; }
+      setDraftImages((current) => Array.from(new Set([uri, ...current])).slice(0, 6));
+    } catch (error) {
+      showToast(tr('notesToast.imagePickFailed'), 'error');
+      await diag.warn('notes.addImage.error', { message: String(error) });
+    }
   }
 
   async function takePhotoToDraft() {
-    const { status } = await ImagePicker.requestCameraPermissionsAsync();
-    if (status !== 'granted') return;
-    const picked = await ImagePicker.launchCameraAsync({
-      mediaTypes: ['images'],
-      quality: 0.72,
-      base64: false,
-      exif: false,
-    });
-    if (picked.canceled || !picked.assets?.length) return;
-    const uri = await resolveImageUri(picked.assets[0].uri);
-    if (!uri) { showToast(tr('notesToast.couldNotLoadImage')); return; }
-    setDraftImages((current) => Array.from(new Set([uri, ...current])).slice(0, 6));
+    try {
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== 'granted') { showToast(tr('notesToast.cameraPermissionDenied'), 'error'); return; }
+      const picked = await ImagePicker.launchCameraAsync({
+        mediaTypes: ['images'],
+        quality: 0.72,
+        base64: false,
+        exif: false,
+      });
+      if (picked.canceled || !picked.assets?.length) return;
+      const uri = await resolveImageUri(picked.assets[0].uri);
+      if (!uri) { showToast(tr('notesToast.couldNotLoadImage'), 'error'); return; }
+      setDraftImages((current) => Array.from(new Set([uri, ...current])).slice(0, 6));
+    } catch (error) {
+      showToast(tr('notesToast.cameraFailed'), 'error');
+      await diag.warn('notes.takePhoto.error', { message: String(error) });
+    }
   }
 
   async function pasteImageFromClipboardToDraft() {
@@ -911,19 +958,24 @@ export function NotesTab({
       }
     }
     // Native: expo-clipboard
-    const getImageAsync = (Clipboard as unknown as { getImageAsync?: () => Promise<{ data: string } | null> }).getImageAsync;
-    if (!getImageAsync) {
-      showToast(tr('notesToast.imagePasteUnsupported'));
-      return;
+    try {
+      const getImageAsync = (Clipboard as unknown as { getImageAsync?: () => Promise<{ data: string } | null> }).getImageAsync;
+      if (!getImageAsync) {
+        showToast(tr('notesToast.imagePasteUnsupported'));
+        return;
+      }
+      const image = await getImageAsync();
+      if (!image?.data) {
+        showToast(tr('notesToast.noImageClipboard'));
+        return;
+      }
+      const dataUri = `data:image/png;base64,${image.data}`;
+      setDraftImages((current) => Array.from(new Set([dataUri, ...current])).slice(0, 6));
+      showToast(tr('notesToast.imagePasted'));
+    } catch (error) {
+      showToast(tr('notesToast.imagePasteFailed'), 'error');
+      await diag.warn('notes.pasteImage.error', { message: String(error) });
     }
-    const image = await getImageAsync();
-    if (!image?.data) {
-      showToast(tr('notesToast.noImageClipboard'));
-      return;
-    }
-    const dataUri = `data:image/png;base64,${image.data}`;
-    setDraftImages((current) => Array.from(new Set([dataUri, ...current])).slice(0, 6));
-    showToast(tr('notesToast.imagePasted'));
   }
 
   function resetDraftEditor() {
@@ -1870,26 +1922,38 @@ export function NotesTab({
                     </Pressable>
                     <Pressable
                       accessibilityRole="button"
-                      accessibilityLabel="Save the unfinished draft as a note"
+                      accessibilityLabel={tr('notes.saveDraftA11y')}
                       onPress={async () => {
                         const draft = pendingDraft;
-                        setPendingDraft(null);
+                        // Guard: nothing to save (no text and no images).
+                        if (!draft || (!draft.text?.trim() && !draft.images?.length)) {
+                          showToast(tr('notesToast.writeSomethingFirst'));
+                          return;
+                        }
                         const groupId = activeGroupId === 'personal' ? undefined : activeGroupId;
-                        const result = await addRichNoteUnique(
-                          draft.text,
-                          draft.category || detectAutoCategory(draft.text),
-                          draft.images,
-                          groupId,
-                          false,
-                          true,
-                          draft.smartLabel || detectSmartNoteLabel(draft.text).label,
-                        );
-                        const dup = !result.inserted && result.duplicateId
-                          ? result.notes.find((n) => n.id === result.duplicateId)
-                          : undefined;
-                        setNotes(dup?.draft ? await clearDraftFlag(dup.id) : result.notes);
-                        await AsyncStorage.removeItem(DRAFT_KEY);
-                        showToast(tr('notesToast.draftSavedAsNote'));
+                        try {
+                          const result = await addRichNoteUnique(
+                            draft.text,
+                            draft.category || detectAutoCategory(draft.text),
+                            draft.images,
+                            groupId,
+                            false,
+                            true,
+                            draft.smartLabel || detectSmartNoteLabel(draft.text).label,
+                          );
+                          const dup = !result.inserted && result.duplicateId
+                            ? result.notes.find((n) => n.id === result.duplicateId)
+                            : undefined;
+                          setNotes(dup?.draft ? await clearDraftFlag(dup.id) : result.notes);
+                          // Only clear the draft AFTER a successful save — so a failure
+                          // never silently loses the user's unfinished text.
+                          setPendingDraft(null);
+                          await AsyncStorage.removeItem(DRAFT_KEY);
+                          showToast(tr('notesToast.draftSavedAsNote'));
+                        } catch (error) {
+                          showToast(tr('notesToast.saveFailed'), 'error');
+                          await diag.warn('notes.saveDraft.error', { message: String(error) });
+                        }
                       }}
                       style={({ pressed }) => ({
                         paddingHorizontal: 14,
@@ -1900,20 +1964,20 @@ export function NotesTab({
                         backgroundColor: pressed ? '#F59E0B22' : 'transparent',
                       })}
                     >
-                      <Text style={{ color: '#F59E0B', fontSize: 12, fontWeight: '600' }}>Save as note</Text>
+                      <Text style={{ color: '#F59E0B', fontSize: 12, fontWeight: '600' }}>{tr('notes.saveAsNote')}</Text>
                     </Pressable>
                     <Pressable
                       accessibilityRole="button"
-                      accessibilityLabel="Discard the unfinished draft"
-                      accessibilityHint="Permanently deletes the saved draft text"
+                      accessibilityLabel={tr('notes.discardDraftA11y')}
+                      accessibilityHint={tr('notes.discardDraftHint')}
                       onPress={() => {
                         Alert.alert(
-                          'Discard draft?',
-                          'This text will be permanently deleted.',
+                          tr('notes.discardDraftTitle'),
+                          tr('notes.discardDraftBody'),
                           [
-                            { text: 'Cancel', style: 'cancel' },
+                            { text: tr('common.cancel'), style: 'cancel' },
                             {
-                              text: 'Discard', style: 'destructive', onPress: async () => {
+                              text: tr('notes.discard'), style: 'destructive', onPress: async () => {
                                 const orphanId = pendingDraft.noteId;
                                 setPendingDraft(null);
                                 await AsyncStorage.removeItem(DRAFT_KEY);
@@ -1935,7 +1999,7 @@ export function NotesTab({
                         backgroundColor: pressed ? `${palette.muted}12` : 'transparent',
                       })}
                     >
-                      <Text style={{ color: palette.muted, fontSize: 12, fontWeight: '500' }}>Discard</Text>
+                      <Text style={{ color: palette.muted, fontSize: 12, fontWeight: '500' }}>{tr('notes.discard')}</Text>
                     </Pressable>
                   </View>
                 </View>
@@ -2297,41 +2361,45 @@ export function NotesTab({
         <Pressable style={mainAppStyles.modalBackdrop} onPress={() => setShareNote(null)}>
           <Pressable style={[mainAppStyles.modalForm, { backgroundColor: palette.card, borderColor: palette.border, maxWidth: 560 }]} onPress={() => null}>
             <View style={mainAppStyles.modalHeader}>
-              <Text style={[mainAppStyles.sectionTitle, { color: palette.fg }]}>Share note</Text>
-              <Pressable style={[mainAppStyles.modalCloseBtn, { borderColor: palette.border }]} onPress={() => setShareNote(null)}>
+              <Text style={[mainAppStyles.sectionTitle, { color: palette.fg }]}>{tr('notes.shareNote')}</Text>
+              <Pressable style={[mainAppStyles.modalCloseBtn, { borderColor: palette.border }]} accessibilityRole="button" accessibilityLabel={tr('common.close')} onPress={() => setShareNote(null)}>
                 <Ionicons name="close" size={18} color={palette.fg} />
               </Pressable>
             </View>
             <Text style={{ color: palette.muted, fontSize: 11, marginBottom: 10 }}>
-              Choose WhatsApp, email, or internal group share.
+              {tr('notes.shareHint')}
             </Text>
-            <View style={styles.shareRow}>
-              <Pressable style={[styles.previewBtn, { borderColor: palette.border }]} onPress={() => { if (!shareNote) return; void Linking.openURL(`https://wa.me/?text=${encodeURIComponent(shareNote.text)}`); }}>
-                <Text style={{ color: palette.fg, fontSize: 12, fontWeight: '700' }}>WhatsApp</Text>
-              </Pressable>
-              <Pressable style={[styles.previewBtn, { borderColor: palette.border }]} onPress={() => { if (!shareNote) return; void Linking.openURL(`mailto:?subject=${encodeURIComponent('Shared note')}&body=${encodeURIComponent(shareNote.text)}`); }}>
-                <Text style={{ color: palette.fg, fontSize: 12, fontWeight: '700' }}>Email</Text>
-              </Pressable>
-            </View>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={tr('notes.shareToApps')}
+              style={({ pressed }) => [styles.previewBtn, { borderColor: palette.accent, backgroundColor: pressed ? `${palette.accent}22` : `${palette.accent}11`, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }]}
+              onPress={() => { if (!shareNote) return; const n = shareNote; setShareNote(null); void shareNoteNative(n.text); }}
+            >
+              <Ionicons name="share-social-outline" size={16} color={palette.accent} />
+              <Text style={{ color: palette.accent, fontSize: 13, fontWeight: '700' }}>{tr('notes.shareToApps')}</Text>
+            </Pressable>
             {groups.length ? (
               <View style={{ marginTop: 10, gap: 8 }}>
+                <Text style={{ color: palette.muted, fontSize: 11 }}>{tr('notes.shareToGroup')}</Text>
                 {groups.map((g) => (
                   <Pressable
                     key={g.id}
+                    accessibilityRole="button"
                     style={[styles.previewBtn, { borderColor: palette.border }]}
                     onPress={() => {
                       if (!shareNote) return;
                       void upsertSharedGroupNote(g.id, { ...shareNote, groupId: g.id });
                       setShareNote(null);
+                      showToast(tr('notesToast.sharedToGroup', { name: g.name }));
                     }}
                   >
-                    <Text style={{ color: palette.fg, fontSize: 12, fontWeight: '700' }}>Share to {g.name}</Text>
+                    <Text style={{ color: palette.fg, fontSize: 12, fontWeight: '700' }}>{g.name}</Text>
                   </Pressable>
                 ))}
               </View>
             ) : (
               <Text style={{ color: palette.muted, fontSize: 11, marginTop: 8 }}>
-                No groups found. Go to Settings {'>'} Shared groups to create or join one, then return here.
+                {tr('notes.noGroupsHint')}
               </Text>
             )}
           </Pressable>
