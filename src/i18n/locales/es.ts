@@ -88,6 +88,8 @@ const es = {
     cameraPermissionDenied: 'Permiso de cámara denegado. Permite el acceso a la cámara para tomar una foto.',
     cameraFailed: 'No se pudo abrir la cámara',
     imagePasteFailed: 'No se pudo pegar la imagen',
+    pdfShared: 'PDF listo',
+    pdfFailed: 'No se pudo crear el PDF',
   },
   dictation: {
     listening: 'Escuchando… habla ahora',
@@ -375,6 +377,7 @@ const es = {
     shareNote: 'Compartir nota',
     shareHint: 'Envía a cualquier app de tu dispositivo, o comparte a un grupo interno.',
     shareToApps: 'Compartir con apps…',
+    shareAsPdf: 'Compartir como PDF',
     shareToGroup: 'Compartir a un grupo',
     noGroupsHint: 'No hay grupos. Ve a Ajustes > Grupos compartidos para crear o unirte a uno, y vuelve aquí.',
     saveAsNote: 'Guardar como nota',

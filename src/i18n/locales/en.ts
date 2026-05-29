@@ -94,6 +94,8 @@ const en = {
     cameraPermissionDenied: 'Camera permission denied. Allow camera access to take a photo.',
     cameraFailed: 'Could not open the camera',
     imagePasteFailed: 'Could not paste the image',
+    pdfShared: 'PDF ready',
+    pdfFailed: 'Could not create the PDF',
   },
   dictation: {
     listening: 'Listening… speak now',
@@ -397,6 +399,7 @@ const en = {
     shareNote: 'Share note',
     shareHint: 'Send to any app on your device, or share to an internal group.',
     shareToApps: 'Share to apps…',
+    shareAsPdf: 'Share as PDF',
     shareToGroup: 'Share to a group',
     noGroupsHint: 'No groups found. Go to Settings > Shared groups to create or join one, then return here.',
     saveAsNote: 'Save as note',

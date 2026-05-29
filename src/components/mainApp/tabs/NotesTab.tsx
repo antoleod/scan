@@ -65,6 +65,7 @@ import { ClipboardEntry } from '../../../core/clipboard.types';
 import { loadDeletedNoteKeys, markDeletedNoteKey, noteStorageKey } from '../../../core/noteDeletions';
 import { WorkflowMetadata } from '../../../core/notes';
 import { diag } from '../../../core/diagnostics';
+import { exportNoteToPdf } from '../../../core/noteExport';
 import { ClipboardScreen } from '../../../screens/ClipboardScreen';
 import { mainAppStyles } from '../styles';
 import { TabBar } from '../../TabBar';
@@ -2377,6 +2378,21 @@ export function NotesTab({
             >
               <Ionicons name="share-social-outline" size={16} color={palette.accent} />
               <Text style={{ color: palette.accent, fontSize: 13, fontWeight: '700' }}>{tr('notes.shareToApps')}</Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={tr('notes.shareAsPdf')}
+              style={({ pressed }) => [styles.previewBtn, { marginTop: 8, borderColor: palette.border, backgroundColor: pressed ? `${palette.muted}14` : 'transparent', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }]}
+              onPress={async () => {
+                if (!shareNote) return;
+                const n = shareNote;
+                setShareNote(null);
+                const result = await exportNoteToPdf(n, tr);
+                showToast(result.ok ? tr('notesToast.pdfShared') : tr('notesToast.pdfFailed'), result.ok ? 'success' : 'error');
+              }}
+            >
+              <Ionicons name="document-text-outline" size={16} color={palette.fg} />
+              <Text style={{ color: palette.fg, fontSize: 13, fontWeight: '700' }}>{tr('notes.shareAsPdf')}</Text>
             </Pressable>
             {groups.length ? (
               <View style={{ marginTop: 10, gap: 8 }}>

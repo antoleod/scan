@@ -88,6 +88,8 @@ const nl = {
     cameraPermissionDenied: 'Cameratoestemming geweigerd. Geef toegang tot de camera om een foto te maken.',
     cameraFailed: 'Kon de camera niet openen',
     imagePasteFailed: 'Kon de afbeelding niet plakken',
+    pdfShared: 'PDF klaar',
+    pdfFailed: 'Kon de PDF niet maken',
   },
   dictation: {
     listening: 'Luisteren… spreek nu',
@@ -375,6 +377,7 @@ const nl = {
     shareNote: 'Notitie delen',
     shareHint: 'Stuur naar elke app op je apparaat, of deel met een interne groep.',
     shareToApps: 'Delen met apps…',
+    shareAsPdf: 'Delen als PDF',
     shareToGroup: 'Delen met een groep',
     noGroupsHint: 'Geen groepen gevonden. Ga naar Instellingen > Gedeelde groepen om er een te maken of lid te worden, en kom dan terug.',
     saveAsNote: 'Opslaan als notitie',

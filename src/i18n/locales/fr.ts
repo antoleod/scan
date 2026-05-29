@@ -88,6 +88,8 @@ const fr = {
     cameraPermissionDenied: 'Autorisation de la caméra refusée. Autorisez l’accès à la caméra pour prendre une photo.',
     cameraFailed: 'Impossible d’ouvrir la caméra',
     imagePasteFailed: 'Impossible de coller l’image',
+    pdfShared: 'PDF prêt',
+    pdfFailed: 'Impossible de créer le PDF',
   },
   dictation: {
     listening: 'Écoute… parlez maintenant',
@@ -375,6 +377,7 @@ const fr = {
     shareNote: 'Partager la note',
     shareHint: 'Envoyez vers n’importe quelle app de votre appareil, ou partagez à un groupe interne.',
     shareToApps: 'Partager vers des apps…',
+    shareAsPdf: 'Partager en PDF',
     shareToGroup: 'Partager à un groupe',
     noGroupsHint: 'Aucun groupe. Allez dans Paramètres > Groupes partagés pour en créer ou en rejoindre un, puis revenez ici.',
     saveAsNote: 'Enregistrer comme note',
