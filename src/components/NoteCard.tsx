@@ -15,7 +15,6 @@ import { useTranslation } from 'react-i18next';
 import { detectNoteEntities, buildSmartNoteModel, segmentNoteText, parseServiceNowFields, buildRedactedText, SmartNoteEntities, SmartNoteModel, ServiceNowField, ServiceNowModel, NoteSegment, SENSITIVE_FIELD_KEYS } from '../core/smartNotes';
 import { isShoppingList, parseShoppingList } from '../core/shoppingList';
 import { detectSmartNoteLabel, getSmartNoteLabelMeta } from '../core/noteIntelligence';
-import { ShoppingListBlock } from './ShoppingListBlock';
 import { MedicationCard } from './MedicationCard';
 import { NoteListBlock } from './NoteListBlock';
 import { NoteContentRenderer } from './NoteContentRenderer';
