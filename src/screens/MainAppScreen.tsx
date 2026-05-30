@@ -74,7 +74,8 @@ import { useCloudRelayGuard } from '../hooks/useCloudRelayGuard';
 import { SelectionFooter } from '../components/mainApp/SelectionFooter';
 import { SettingsTab } from '../components/mainApp/tabs/SettingsTab';
 import { hardDeleteAllNotes, hardDeleteAllTemplates, clearArchivedNotes, clearUnpinnedNotes, clearNotesOlderThan, loadNotes, saveNotes as saveWorkNotes, saveTemplates as saveNoteTemplates, type NoteItem } from '../core/notes';
-import { clearClipboardEntries, reinitClipboardFirebaseSync } from '../core/clipboard';
+import { clearClipboardEntries, reinitClipboardFirebaseSync, loadClipboardEntries } from '../core/clipboard';
+import type { ClipboardEntry } from '../core/clipboard.types';
 import { useTranslation } from 'react-i18next';
 import { requestNotificationPermission } from '../core/notifications';
 import { rescheduleAllMedicationReminders } from '../core/medicationReminders';
@@ -217,6 +218,7 @@ function MainApp() {
   const [commandPaletteVisible, setCommandPaletteVisible] = useState(false);
   const [commandPaletteQuery, setCommandPaletteQuery] = useState('');
   const [commandPaletteNotes, setCommandPaletteNotes] = useState<NoteItem[]>([]);
+  const [commandPaletteClips, setCommandPaletteClips] = useState<ClipboardEntry[]>([]);
 
   const { toast, show: showToast, hide: hideToast } = useToast();
 
@@ -261,6 +263,13 @@ function MainApp() {
       })
       .catch(() => {
         if (!cancelled) setCommandPaletteNotes([]);
+      });
+    loadClipboardEntries()
+      .then((entries) => {
+        if (!cancelled) setCommandPaletteClips(entries.filter((e) => e.content?.trim()).slice(0, 40));
+      })
+      .catch(() => {
+        if (!cancelled) setCommandPaletteClips([]);
       });
     return () => { cancelled = true; };
   }, [commandPaletteVisible]);
@@ -1778,21 +1787,21 @@ function MainApp() {
   const commandPaletteItems = useMemo<CommandPaletteItem[]>(() => {
     const navigate = (tab: Tab) => () => setActiveTab(tab);
     const baseItems: CommandPaletteItem[] = [
-      { id: 'nav-notes', title: 'Open Notes', subtitle: 'Saved notes and OCR tools', icon: 'document-text-outline', keywords: 'notes ocr draft private', onPress: navigate('notes') },
-      { id: 'nav-scan', title: 'Open Scanner', subtitle: 'Camera, image scan, NFC and batch mode', icon: 'scan-outline', keywords: 'scan camera barcode qr nfc batch', onPress: navigate('scan') },
-      { id: 'nav-history', title: 'Open History', subtitle: `${history.length} scan record(s)`, icon: 'time-outline', keywords: 'history records search filter', onPress: navigate('history') },
-      { id: 'nav-airdrop', title: 'Open AirDrop', subtitle: 'Local device sharing', icon: 'radio-outline', keywords: 'airdrop share transfer', onPress: navigate('airdrop') },
-      { id: 'nav-settings', title: 'Open Settings', subtitle: 'Preferences, logs, backup and maintenance', icon: 'settings-outline', keywords: 'settings logs health backup maintenance', onPress: navigate('settings') },
-      { id: 'cmd-backup', title: 'Export backup', subtitle: lastBackupAt ? `Last backup ${new Date(lastBackupAt).toLocaleString()}` : 'Create a local JSON backup', icon: 'cloud-upload-outline', keywords: 'backup export json local', onPress: () => { void exportBackup(); } },
-      { id: 'cmd-sync', title: syncBusy ? 'Sync in progress' : 'Sync now', subtitle: persistenceMode === 'firebase' ? 'Push/pull Firebase data' : 'Refresh local mode status', icon: 'sync-outline', keywords: 'sync firebase cloud', onPress: () => { if (!syncBusy) void syncNow(false); } },
-      { id: 'cmd-logs', title: 'Copy production logs', subtitle: 'Copy local behavior logs to clipboard', icon: 'bug-outline', keywords: 'logs diagnostics buttons functions', onPress: () => { void copyLogs(); } },
-      { id: 'cmd-health', title: 'Open Health Status', subtitle: 'Runtime, backup, logs and persistence status', icon: 'pulse-outline', keywords: 'health status maintenance', onPress: navigate('settings') },
+      { id: 'nav-notes', title: t('commandPalette.openNotes'), subtitle: t('commandPalette.openNotesSub'), icon: 'document-text-outline', keywords: 'notes ocr draft private', onPress: navigate('notes') },
+      { id: 'nav-scan', title: t('commandPalette.openScanner'), subtitle: t('commandPalette.openScannerSub'), icon: 'scan-outline', keywords: 'scan camera barcode qr nfc batch', onPress: navigate('scan') },
+      { id: 'nav-history', title: t('commandPalette.openHistory'), subtitle: t('commandPalette.openHistorySub', { count: history.length }), icon: 'time-outline', keywords: 'history records search filter', onPress: navigate('history') },
+      { id: 'nav-airdrop', title: t('commandPalette.openAirdrop'), subtitle: t('commandPalette.openAirdropSub'), icon: 'radio-outline', keywords: 'airdrop share transfer', onPress: navigate('airdrop') },
+      { id: 'nav-settings', title: t('commandPalette.openSettings'), subtitle: t('commandPalette.openSettingsSub'), icon: 'settings-outline', keywords: 'settings logs health backup maintenance', onPress: navigate('settings') },
+      { id: 'cmd-backup', title: t('commandPalette.exportBackup'), subtitle: lastBackupAt ? t('commandPalette.lastBackup', { date: new Date(lastBackupAt).toLocaleString() }) : t('commandPalette.exportBackupSub'), icon: 'cloud-upload-outline', keywords: 'backup export json local', onPress: () => { void exportBackup(); } },
+      { id: 'cmd-sync', title: syncBusy ? t('commandPalette.syncInProgress') : t('commandPalette.syncNow'), subtitle: persistenceMode === 'firebase' ? t('commandPalette.syncFirebaseSub') : t('commandPalette.syncLocalSub'), icon: 'sync-outline', keywords: 'sync firebase cloud', onPress: () => { if (!syncBusy) void syncNow(false); } },
+      { id: 'cmd-logs', title: t('commandPalette.copyLogs'), subtitle: t('commandPalette.copyLogsSub'), icon: 'bug-outline', keywords: 'logs diagnostics buttons functions', onPress: () => { void copyLogs(); } },
+      { id: 'cmd-health', title: t('commandPalette.openHealth'), subtitle: t('commandPalette.openHealthSub'), icon: 'pulse-outline', keywords: 'health status maintenance', onPress: navigate('settings') },
     ];
 
     const historyItems = history.slice(0, 40).map((record): CommandPaletteItem => ({
       id: `history-${record.id}`,
-      title: record.label || record.codeValue || record.codeNormalized || record.codeOriginal || 'Scan record',
-      subtitle: `History - ${visibleScanType(record.type)} - ${record.source}`,
+      title: record.label || record.codeValue || record.codeNormalized || record.codeOriginal || t('commandPalette.scanRecord'),
+      subtitle: `${t('commandPalette.historyTag')} · ${visibleScanType(record.type)} · ${record.source}`,
       icon: 'barcode-outline',
       keywords: `${record.codeOriginal} ${record.codeNormalized} ${record.ticketNumber ?? ''} ${record.notes ?? ''} ${record.officeCode ?? ''}`,
       onPress: () => {
@@ -1804,24 +1813,33 @@ function MainApp() {
 
     const noteItems = commandPaletteNotes.slice(0, 40).map((note): CommandPaletteItem => ({
       id: `note-${note.id}`,
-      title: note.title || note.text.split('\n')[0] || 'Untitled note',
-      subtitle: `Note - ${note.category}${note.pinned ? ' - pinned' : ''}${note.isSecret ? ' - private' : ''}`,
+      title: note.title || note.text.split('\n')[0] || t('commandPalette.untitledNote'),
+      subtitle: `${t('commandPalette.noteTag')} · ${note.category}${note.pinned ? ` · ${t('commandPalette.pinned')}` : ''}${note.isSecret ? ` · ${t('commandPalette.private')}` : ''}`,
       icon: note.isSecret ? 'lock-closed-outline' : 'document-outline',
       keywords: `${note.text} ${note.smartType ?? ''} ${note.smartLabel ?? ''}`,
       onPress: () => setActiveTab('notes'),
     }));
 
+    const clipboardItems = commandPaletteClips.map((entry): CommandPaletteItem => ({
+      id: `clip-${entry.id}`,
+      title: entry.content.split('\n')[0].slice(0, 80) || t('commandPalette.clipboardTag'),
+      subtitle: `${t('commandPalette.clipboardTag')} · ${entry.category}`,
+      icon: 'clipboard-outline',
+      keywords: entry.content,
+      onPress: () => setActiveTab('notes'),
+    }));
+
     const templateItems = templates.slice(0, 25).map((template): CommandPaletteItem => ({
       id: `template-${template.id}`,
-      title: template.name || 'Template',
-      subtitle: `Template - ${template.type}`,
+      title: template.name || t('commandPalette.template'),
+      subtitle: `${t('commandPalette.templateTag')} · ${template.type}`,
       icon: 'albums-outline',
       keywords: `${template.type} ${Object.values(template.regexRules).join(' ')} ${Object.values(template.mappingRules).join(' ')}`,
       onPress: () => setActiveTab('settings'),
     }));
 
-    return [...baseItems, ...historyItems, ...noteItems, ...templateItems];
-  }, [commandPaletteNotes, history, lastBackupAt, persistenceMode, settings, syncBusy, templates]);
+    return [...baseItems, ...historyItems, ...noteItems, ...clipboardItems, ...templateItems];
+  }, [commandPaletteNotes, commandPaletteClips, history, lastBackupAt, persistenceMode, settings, syncBusy, templates, t]);
 
   const cameraBarcodeTypes = useMemo(() => {
     const enabledTypes = settings.barcodeTypes || SCAN_BARCODE_TYPES;
