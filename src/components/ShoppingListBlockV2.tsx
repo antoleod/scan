@@ -14,12 +14,10 @@
 import React, { useCallback, useRef, useState, useMemo, useEffect } from 'react';
 import {
   Animated,
-  Dimensions,
   Modal,
   Platform,
   Pressable,
   ScrollView,
-  StyleSheet,
   Text,
   TextInput,
   View,
