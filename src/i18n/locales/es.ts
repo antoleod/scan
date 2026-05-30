@@ -283,6 +283,10 @@ const es = {
   composer: {
     saving: 'Guardando…',
     saved: 'Guardado',
+    editorSize: 'Tamaño',
+    sizeSmall: 'Editor pequeño',
+    sizeNormal: 'Editor normal',
+    sizeLarge: 'Editor grande',
     photo: 'Foto',
     paste: 'Pegar',
     dictate: 'Dictar',

@@ -289,6 +289,10 @@ const en = {
   composer: {
     saving: 'Saving…',
     saved: 'Saved',
+    editorSize: 'Size',
+    sizeSmall: 'Small editor',
+    sizeNormal: 'Normal editor',
+    sizeLarge: 'Large editor',
     photo: 'Photo',
     paste: 'Paste',
     dictate: 'Dictate',

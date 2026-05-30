@@ -283,6 +283,10 @@ const nl = {
   composer: {
     saving: 'Opslaan…',
     saved: 'Opgeslagen',
+    editorSize: 'Grootte',
+    sizeSmall: 'Kleine editor',
+    sizeNormal: 'Normale editor',
+    sizeLarge: 'Grote editor',
     photo: 'Foto',
     paste: 'Plakken',
     dictate: 'Dicteren',

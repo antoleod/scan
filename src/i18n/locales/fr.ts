@@ -283,6 +283,10 @@ const fr = {
   composer: {
     saving: 'Enregistrement…',
     saved: 'Enregistré',
+    editorSize: 'Taille',
+    sizeSmall: 'Éditeur petit',
+    sizeNormal: 'Éditeur normal',
+    sizeLarge: 'Éditeur grand',
     photo: 'Photo',
     paste: 'Coller',
     dictate: 'Dicter',

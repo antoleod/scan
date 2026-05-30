@@ -98,6 +98,9 @@ export const ComposerSection = forwardRef<TextInput, {
     const { t, i18n } = useTranslation();
     const draftTextValue = typeof draftText === 'string' ? draftText : '';
     const [inputHeight, setInputHeight] = useState(68);
+    // User-chosen size for the editor box (the text still auto-grows up to the
+    // selected level's cap). 'normal' keeps the previous behavior.
+    const [sizePref, setSizePref] = useState<'small' | 'normal' | 'large'>('normal');
     const [pickerVisible, setPickerVisible] = useState(false);
     const [mediaPickerVisible, setMediaPickerVisible] = useState(false);
     const [hoveredAction, setHoveredAction] = useState<string | null>(null);
@@ -109,7 +112,19 @@ export const ComposerSection = forwardRef<TextInput, {
     const [viewingImage, setViewingImage] = useState<string | null>(null);
     const { width, height: windowHeight } = useWindowDimensions();
     const isCompact = width < 520;
-    const maxInputHeight = Math.min(Math.max(160, Math.floor(windowHeight * 0.35)), 420);
+    // Per-size caps. 'large' lets the box grow to most of the screen; 'small'
+    // keeps it compact. The text input auto-grows up to whichever cap is active.
+    const maxInputHeight = useMemo(() => {
+      const fraction = sizePref === 'large' ? 0.7 : sizePref === 'small' ? 0.22 : 0.35;
+      const ceiling = sizePref === 'large' ? 760 : sizePref === 'small' ? 200 : 420;
+      const floor = sizePref === 'small' ? 96 : 160;
+      return Math.min(Math.max(floor, Math.floor(windowHeight * fraction)), ceiling);
+    }, [sizePref, windowHeight]);
+
+    // Keep the current height within the active cap when the size pref shrinks.
+    useEffect(() => {
+      setInputHeight((h) => Math.min(h, maxInputHeight));
+    }, [maxInputHeight]);
     const shoppingSignature = useMemo(() => safeText(draftTextValue).toLowerCase().replace(/\s+/g, ' ').trim(), [draftTextValue]);
     const showShoppingSuggestion = Boolean(
       shoppingAnalysis?.isCandidate
@@ -489,6 +504,38 @@ export const ComposerSection = forwardRef<TextInput, {
           </Pressable>
         </Modal>
 
+        {/* Editor size control — lets the user make the text box bigger/smaller. */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 4, marginTop: 8 }}>
+          <Text style={{ color: palette.textMuted, fontSize: 10, marginRight: 2 }}>{t('composer.editorSize')}</Text>
+          {(['small', 'normal', 'large'] as const).map((size) => {
+            const active = sizePref === size;
+            const icon = size === 'small' ? 'chevron-up' : size === 'large' ? 'chevron-down' : 'remove';
+            const label = size === 'small' ? t('composer.sizeSmall') : size === 'large' ? t('composer.sizeLarge') : t('composer.sizeNormal');
+            return (
+              <Pressable
+                key={size}
+                accessibilityRole="button"
+                accessibilityLabel={label}
+                accessibilityState={{ selected: active }}
+                onPress={() => setSizePref(size)}
+                hitSlop={6}
+                style={({ pressed }) => ({
+                  width: 28,
+                  height: 24,
+                  borderRadius: 7,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  borderWidth: 1,
+                  borderColor: active ? palette.accent : palette.border,
+                  backgroundColor: active ? `${palette.accent}22` : pressed ? `${palette.textDim}14` : 'transparent',
+                })}
+              >
+                <Ionicons name={icon as keyof typeof Ionicons.glyphMap} size={14} color={active ? palette.accent : palette.textDim} />
+              </Pressable>
+            );
+          })}
+        </View>
+
         <TextInput
           ref={(node) => {
             localInputRef.current = node;
@@ -516,7 +563,7 @@ export const ComposerSection = forwardRef<TextInput, {
             setInputHeight(nextHeight);
           }}
           style={{
-            marginTop: 8,
+            marginTop: 6,
             minHeight: 68,
             height: inputHeight,
             maxHeight: maxInputHeight,
