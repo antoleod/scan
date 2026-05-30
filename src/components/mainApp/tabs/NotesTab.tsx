@@ -1238,6 +1238,7 @@ export function NotesTab({
         0,
         focus.nextSuggestedAt,
         focus.name,
+        tr('notifications.medicationReminderTitle'),
       ).catch(() => undefined);
     }
 
@@ -1253,7 +1254,7 @@ export function NotesTab({
     const note = updated.find((n) => n.id === noteId);
     const focus = note?.workflowMetadata?.medications?.[medIndex];
     if (focus && typeof focus.nextSuggestedAt === 'number' && focus.nextSuggestedAt > Date.now()) {
-      await scheduleReminder(noteId, medIndex, focus.nextSuggestedAt, focus.name).catch(() => undefined);
+      await scheduleReminder(noteId, medIndex, focus.nextSuggestedAt, focus.name, tr('notifications.medicationReminderTitle')).catch(() => undefined);
       showToast(`Cycle reset · next ${new Date(focus.nextSuggestedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`);
     } else {
       showToast(tr('notesToast.markedTakenFollowPrescription'));
@@ -1266,7 +1267,7 @@ export function NotesTab({
     const note = updated.find((n) => n.id === noteId);
     const focus = note?.workflowMetadata?.medications?.[medIndex];
     if (focus && typeof focus.nextSuggestedAt === 'number') {
-      await scheduleReminder(noteId, medIndex, focus.nextSuggestedAt, focus.name).catch(() => undefined);
+      await scheduleReminder(noteId, medIndex, focus.nextSuggestedAt, focus.name, tr('notifications.medicationReminderTitle')).catch(() => undefined);
     } else {
       await snoozeReminder(noteId, medIndex, snoozeMs).catch(() => undefined);
     }
@@ -1286,7 +1287,7 @@ export function NotesTab({
     const note = updated.find((n) => n.id === noteId);
     const focus = note?.workflowMetadata?.medications?.[medIndex];
     if (focus && typeof focus.nextSuggestedAt === 'number' && focus.nextSuggestedAt > Date.now()) {
-      await scheduleReminder(noteId, medIndex, focus.nextSuggestedAt, focus.name).catch(() => undefined);
+      await scheduleReminder(noteId, medIndex, focus.nextSuggestedAt, focus.name, tr('notifications.medicationReminderTitle')).catch(() => undefined);
     }
     showToast(tr('notesToast.reminderReactivated'));
   }

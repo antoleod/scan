@@ -104,6 +104,9 @@ const fr = {
     permissionBlocked: 'L’autorisation du microphone est bloquée. Autorisez l’accès dans le navigateur et réessayez.',
     couldNotStart: 'La dictée vocale n’a pas pu démarrer. Utilisez Chrome ou Edge, puis autorisez l’accès au microphone.',
   },
+  notifications: {
+    medicationReminderTitle: 'Rappel de médicament',
+  },
   header: {
     offline: 'Hors ligne',
     offlineA11y: 'Hors ligne. Les modifications sont enregistrées localement et se synchroniseront à la reconnexion.',

@@ -51,6 +51,7 @@ const config: ExpoConfig = {
   plugins: [
     "expo-sharing",
     "expo-localization",
+    "expo-notifications",
     "expo-font",
     "@react-native-community/datetimepicker",
     "expo-secure-store",

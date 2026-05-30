@@ -110,6 +110,9 @@ const en = {
     permissionBlocked: 'Microphone permission is blocked. Allow microphone access in the browser and try again.',
     couldNotStart: 'Voice dictation could not start. Use Chrome or Edge, then allow microphone access.',
   },
+  notifications: {
+    medicationReminderTitle: 'Medication reminder',
+  },
   header: {
     offline: 'Offline',
     offlineA11y: 'Offline. Changes are saved locally and will sync when you reconnect.',

@@ -76,6 +76,8 @@ import { SettingsTab } from '../components/mainApp/tabs/SettingsTab';
 import { hardDeleteAllNotes, hardDeleteAllTemplates, clearArchivedNotes, clearUnpinnedNotes, clearNotesOlderThan, loadNotes, saveNotes as saveWorkNotes, saveTemplates as saveNoteTemplates, type NoteItem } from '../core/notes';
 import { clearClipboardEntries, reinitClipboardFirebaseSync } from '../core/clipboard';
 import { useTranslation } from 'react-i18next';
+import { requestNotificationPermission } from '../core/notifications';
+import { rescheduleAllMedicationReminders } from '../core/medicationReminders';
 import { Toast, useToast } from '../components/Toast';
 import { BatchSessionModal } from '../components/mainApp/BatchSessionModal';
 import { useVoiceCommands } from '../hooks/useVoiceCommands';
@@ -422,6 +424,38 @@ function MainApp() {
       }
     })();
   }, []);
+
+  // Medication notifications: request permission once, set the native foreground
+  // handler, and re-arm OS notifications for every active medication on app open
+  // (the OS drops scheduled local notifications when the app is killed, and web
+  // setTimeout notifications die with the tab). Non-blocking; never throws.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        if (Platform.OS !== 'web') {
+          const Notifications = await import('expo-notifications');
+          Notifications.setNotificationHandler({
+            handleNotification: async () => ({
+              shouldShowAlert: true,
+              shouldShowBanner: true,
+              shouldShowList: true,
+              shouldPlaySound: true,
+              shouldSetBadge: false,
+            }),
+          });
+        }
+        const granted = await requestNotificationPermission();
+        if (!granted || cancelled) return;
+        const notes = await loadNotes();
+        if (cancelled) return;
+        await rescheduleAllMedicationReminders(notes, t('notifications.medicationReminderTitle'));
+      } catch (error) {
+        await diag.warn('notifications.boot.error', { message: String(error) });
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [t]);
 
   useEffect(() => {
     let mounted = true;

@@ -104,6 +104,9 @@ const nl = {
     permissionBlocked: 'Microfoontoestemming is geblokkeerd. Geef toegang in de browser en probeer opnieuw.',
     couldNotStart: 'Spraakdictee kon niet starten. Gebruik Chrome of Edge en geef vervolgens toegang tot de microfoon.',
   },
+  notifications: {
+    medicationReminderTitle: 'Medicatieherinnering',
+  },
   header: {
     offline: 'Offline',
     offlineA11y: 'Offline. Wijzigingen worden lokaal opgeslagen en gesynchroniseerd zodra je weer verbinding hebt.',

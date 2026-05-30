@@ -104,6 +104,9 @@ const es = {
     permissionBlocked: 'El permiso del micrófono está bloqueado. Permite el acceso en el navegador e inténtalo de nuevo.',
     couldNotStart: 'No se pudo iniciar el dictado. Usa Chrome o Edge y permite el acceso al micrófono.',
   },
+  notifications: {
+    medicationReminderTitle: 'Recordatorio de medicación',
+  },
   header: {
     offline: 'Sin conexión',
     offlineA11y: 'Sin conexión. Los cambios se guardan localmente y se sincronizarán al reconectar.',
