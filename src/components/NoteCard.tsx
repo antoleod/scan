@@ -285,11 +285,18 @@ function NoteCardBase({
       PanResponder.create({
         onStartShouldSetPanResponder: () => false,
         onMoveShouldSetPanResponder: (_, gs) => {
-          const isHorizontal =
-            Math.abs(gs.dx) > 8 && Math.abs(gs.dx) > Math.abs(gs.dy) * 1.5;
-          if (!isHorizontal) return false;
+          // Only claim the gesture when it is decisively horizontal. A stricter
+          // ratio (2.5x) + a larger dx floor (14px) keeps near-vertical scrolls
+          // (e.g. scrolling a long shopping list inside the card) from
+          // accidentally triggering the swipe, which felt like an "overlap".
+          const horizontalDominant =
+            Math.abs(gs.dx) > 14 && Math.abs(gs.dx) > Math.abs(gs.dy) * 2.5;
+          if (!horizontalDominant) return false;
           return swipeOpenRef.current ? true : gs.dx < 0;
         },
+        // Yield the gesture to a child scroll view that asks to take over, so a
+        // vertical scroll started inside the card content wins over the swipe.
+        onPanResponderTerminationRequest: () => true,
         onPanResponderGrant: () => {
           translateX.stopAnimation();
         },

@@ -1419,8 +1419,6 @@ export function ShoppingListBlockV2({
   const total = filteredItems.length;
   const pct = total === 0 ? 0 : Math.round((done / total) * 100);
   const hasChecked = done > 0;
-  const compactMode = items.length > 6;
-  const listMaxHeight = compactMode ? 400 : undefined;
 
   return (
     <View style={{ gap: 8 }}>
@@ -1720,13 +1718,11 @@ export function ShoppingListBlockV2({
         />
       )}
 
-      {/* Items by category */}
-      <ScrollView
-        showsVerticalScrollIndicator={compactMode}
-        scrollEnabled={compactMode}
-        nestedScrollEnabled
-        style={listMaxHeight ? { maxHeight: listMaxHeight } : undefined}
-      >
+      {/* Items by category — rendered inline (no nested ScrollView). The note
+          already lives inside the scrollable notes list, so an inner ScrollView
+          with a fixed maxHeight trapped the gesture and prevented scrolling past
+          long lists. Letting the items flow lets the parent scroll handle it. */}
+      <View>
         {searchQuery.length > 0 && total === 0 ? (
           <View
             style={{
@@ -1777,7 +1773,7 @@ export function ShoppingListBlockV2({
             );
           })
         )}
-      </ScrollView>
+      </View>
 
       {/* Quantity editor sheet */}
       <QtyEditorSheet
