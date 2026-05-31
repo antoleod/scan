@@ -69,10 +69,34 @@ function drawCircle(png, cx, cy, radius, color, opacity = 1, stroke = 0) {
   }
 }
 
+function drawRoundRect(png, x, y, width, height, radius, color, opacity = 1) {
+  const rgb = hex(color);
+  const maxX = Math.min(png.width - 1, Math.ceil(x + width + 3));
+  const maxY = Math.min(png.height - 1, Math.ceil(y + height + 3));
+  const minX = Math.max(0, Math.floor(x - 3));
+  const minY = Math.max(0, Math.floor(y - 3));
+  const cx = x + width / 2;
+  const cy = y + height / 2;
+  const hx = width / 2 - radius;
+  const hy = height / 2 - radius;
+
+  for (let py = minY; py <= maxY; py++) {
+    for (let px = minX; px <= maxX; px++) {
+      const qx = Math.abs(px + 0.5 - cx) - hx;
+      const qy = Math.abs(py + 0.5 - cy) - hy;
+      const outside = Math.hypot(Math.max(qx, 0), Math.max(qy, 0));
+      const inside = Math.min(Math.max(qx, qy), 0);
+      const d = outside + inside - radius;
+      const a = (1 - smooth(-1.1, 1.1, d)) * opacity;
+      if (a > 0) blend(png.data, (py * png.width + px) * 4, rgb, a);
+    }
+  }
+}
+
 function drawIcon(size, variant = "full") {
   const png = new PNG({ width: size, height: size });
-  const bgA = hex(variant === "mono" ? "#F8FAFC" : "#06101F");
-  const bgB = hex(variant === "mono" ? "#EAF0F7" : "#10283A");
+  const bgA = hex(variant === "mono" ? "#F8FAFC" : "#08111C");
+  const bgB = hex(variant === "mono" ? "#EAF0F7" : "#14382F");
   const cx = size / 2;
   const cy = size / 2;
 
@@ -89,42 +113,32 @@ function drawIcon(size, variant = "full") {
     }
   }
 
-  const line = variant === "mono" ? "#172033" : "#E6F0FF";
-  const muted = variant === "mono" ? "#59677A" : "#86A3C5";
+  const ink = variant === "mono" ? "#172033" : "#102033";
+  const paper = variant === "mono" ? "#FFFFFF" : "#F4F8FF";
   const blue = variant === "mono" ? "#172033" : "#2F6BFF";
-  const mint = variant === "mono" ? "#172033" : "#27D6B6";
+  const mint = variant === "mono" ? "#172033" : "#24D6B8";
+  const lime = variant === "mono" ? "#172033" : "#B8F35C";
 
-  drawCircle(png, cx, cy, size * 0.286, muted, 0.34, size * 0.018);
-  drawCircle(png, cx, cy, size * 0.198, line, 0.88, size * 0.024);
-  drawCircle(png, cx, cy, size * 0.078, blue, 1);
+  drawRoundRect(png, size * 0.165, size * 0.19, size * 0.67, size * 0.64, size * 0.13, "#020812", 0.24);
+  drawRoundRect(png, size * 0.18, size * 0.17, size * 0.64, size * 0.64, size * 0.13, paper, 1);
+  drawRoundRect(png, size * 0.22, size * 0.21, size * 0.56, size * 0.56, size * 0.105, "#DCE8F8", 0.36);
 
-  const w = size * 0.034;
-  const q = size * 0.178;
-  const o = size * 0.304;
-  drawLine(png, cx - o, cy - o, cx - q, cy - o, w, mint);
-  drawLine(png, cx - o, cy - o, cx - o, cy - q, w, mint);
-  drawLine(png, cx + o, cy - o, cx + q, cy - o, w, mint);
-  drawLine(png, cx + o, cy - o, cx + o, cy - q, w, mint);
-  drawLine(png, cx - o, cy + o, cx - q, cy + o, w, mint);
-  drawLine(png, cx - o, cy + o, cx - o, cy + q, w, mint);
-  drawLine(png, cx + o, cy + o, cx + q, cy + o, w, mint);
-  drawLine(png, cx + o, cy + o, cx + o, cy + q, w, mint);
+  drawRoundRect(png, size * 0.19, size * 0.12, size * 0.19, size * 0.19, size * 0.045, mint, 1);
+  drawRoundRect(png, size * 0.62, size * 0.12, size * 0.19, size * 0.19, size * 0.045, blue, 1);
+  drawRoundRect(png, size * 0.62, size * 0.69, size * 0.19, size * 0.19, size * 0.045, lime, 1);
 
-  const markW = size * 0.052;
-  drawLine(png, cx - size * 0.292, cy + size * 0.178, cx - size * 0.292, cy - size * 0.178, markW, line, 0.96);
-  drawLine(png, cx - size * 0.292, cy - size * 0.178, cx - size * 0.128, cy + size * 0.018, markW, line, 0.96);
-  drawLine(png, cx - size * 0.128, cy + size * 0.018, cx + size * 0.018, cy - size * 0.178, markW, line, 0.96);
-  drawLine(png, cx + size * 0.106, cy + size * 0.178, cx + size * 0.106, cy - size * 0.178, markW, blue, 0.98);
-  drawLine(png, cx + size * 0.106, cy, cx + size * 0.306, cy - size * 0.178, markW, blue, 0.98);
-  drawLine(png, cx + size * 0.106, cy, cx + size * 0.306, cy + size * 0.178, markW, blue, 0.98);
+  const markW = size * 0.074;
+  drawLine(png, cx - size * 0.245, cy + size * 0.205, cx - size * 0.245, cy - size * 0.17, markW, ink, 1);
+  drawLine(png, cx - size * 0.245, cy - size * 0.17, cx - size * 0.02, cy + size * 0.065, markW, ink, 1);
+  drawLine(png, cx - size * 0.02, cy + size * 0.065, cx + size * 0.205, cy - size * 0.17, markW, ink, 1);
+  drawLine(png, cx + size * 0.205, cy - size * 0.17, cx + size * 0.205, cy + size * 0.205, markW, ink, 1);
 
-  drawLine(png, cx - size * 0.34, cy, cx - size * 0.14, cy, size * 0.014, muted, 0.72);
-  drawLine(png, cx + size * 0.14, cy, cx + size * 0.34, cy, size * 0.014, muted, 0.72);
-  drawLine(png, cx, cy - size * 0.34, cx, cy - size * 0.14, size * 0.014, muted, 0.72);
-  drawLine(png, cx, cy + size * 0.14, cx, cy + size * 0.34, size * 0.014, muted, 0.72);
+  drawRoundRect(png, cx - size * 0.055, cy - size * 0.055, size * 0.11, size * 0.11, size * 0.03, blue, 1);
+  drawCircle(png, cx + size * 0.275, cy - size * 0.225, size * 0.035, mint, 1);
+  drawCircle(png, cx - size * 0.285, cy + size * 0.245, size * 0.035, blue, 1);
 
   if (variant === "maskable") {
-    drawCircle(png, cx, cy, size * 0.42, "#07172A", 0.18, size * 0.012);
+    drawRoundRect(png, size * 0.11, size * 0.11, size * 0.78, size * 0.78, size * 0.17, "#07172A", 0.1);
   }
 
   return png;
