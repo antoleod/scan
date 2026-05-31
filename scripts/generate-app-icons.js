@@ -73,7 +73,6 @@ function drawIcon(size, variant = "full") {
   const png = new PNG({ width: size, height: size });
   const bgA = hex(variant === "mono" ? "#F8FAFC" : "#06101F");
   const bgB = hex(variant === "mono" ? "#EAF0F7" : "#10283A");
-  const r = size * 0.235;
   const cx = size / 2;
   const cy = size / 2;
 
@@ -111,9 +110,13 @@ function drawIcon(size, variant = "full") {
   drawLine(png, cx + o, cy + o, cx + q, cy + o, w, mint);
   drawLine(png, cx + o, cy + o, cx + o, cy + q, w, mint);
 
-  drawLine(png, cx - size * 0.248, cy + size * 0.158, cx - size * 0.055, cy - size * 0.072, size * 0.055, line, 0.96);
-  drawLine(png, cx - size * 0.055, cy - size * 0.072, cx + size * 0.102, cy + size * 0.112, size * 0.055, line, 0.96);
-  drawLine(png, cx + size * 0.102, cy + size * 0.112, cx + size * 0.27, cy - size * 0.166, size * 0.055, blue, 0.98);
+  const markW = size * 0.052;
+  drawLine(png, cx - size * 0.292, cy + size * 0.178, cx - size * 0.292, cy - size * 0.178, markW, line, 0.96);
+  drawLine(png, cx - size * 0.292, cy - size * 0.178, cx - size * 0.128, cy + size * 0.018, markW, line, 0.96);
+  drawLine(png, cx - size * 0.128, cy + size * 0.018, cx + size * 0.018, cy - size * 0.178, markW, line, 0.96);
+  drawLine(png, cx + size * 0.106, cy + size * 0.178, cx + size * 0.106, cy - size * 0.178, markW, blue, 0.98);
+  drawLine(png, cx + size * 0.106, cy, cx + size * 0.306, cy - size * 0.178, markW, blue, 0.98);
+  drawLine(png, cx + size * 0.106, cy, cx + size * 0.306, cy + size * 0.178, markW, blue, 0.98);
 
   drawLine(png, cx - size * 0.34, cy, cx - size * 0.14, cy, size * 0.014, muted, 0.72);
   drawLine(png, cx + size * 0.14, cy, cx + size * 0.34, cy, size * 0.014, muted, 0.72);
