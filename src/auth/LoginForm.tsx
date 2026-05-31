@@ -1132,7 +1132,6 @@ const styles = StyleSheet.create({
   logo: { fontSize: 32, lineHeight: 36, fontWeight: '900', letterSpacing: 1 },
   logoCompact: { fontSize: 24, lineHeight: 28 },
   logoSubtitle: { fontSize: 10, fontWeight: '700', letterSpacing: 2, textTransform: 'uppercase' },
-  logoBar: {},
   logoDivider: { height: 1, opacity: 0.2, width: '100%', marginTop: 8 },
   bgStarRing: { position: 'absolute', top: '6%', left: 0, right: 0, alignItems: 'center', pointerEvents: 'none' },
   iconRow: { alignItems: 'center', paddingVertical: 12 },
