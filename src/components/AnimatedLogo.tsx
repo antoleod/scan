@@ -18,23 +18,9 @@ interface AnimatedLogoProps {
 }
 
 export function AnimatedLogo({ size = 80, color, accentColor }: AnimatedLogoProps) {
-  const rotation = useSharedValue(0);
   const scale = useSharedValue(1);
-  const opacity = useSharedValue(0.8);
   const pulseRing1 = useSharedValue(0);
   const pulseRing2 = useSharedValue(0);
-
-  // Main rotation animation
-  useEffect(() => {
-    rotation.value = withRepeat(
-      withTiming(360, {
-        duration: 12000,
-        easing: Easing.linear,
-      }),
-      -1,
-      false
-    );
-  }, [rotation]);
 
   // Breathing scale effect
   useEffect(() => {
@@ -73,10 +59,7 @@ export function AnimatedLogo({ size = 80, color, accentColor }: AnimatedLogoProp
   }, [pulseRing1, pulseRing2]);
 
   const logoStyle = useAnimatedStyle(() => ({
-    transform: [
-      { rotate: `${rotation.value}deg` },
-      { scale: scale.value },
-    ],
+    transform: [{ scale: scale.value }],
   }));
 
   const pulseRing1Style = useAnimatedStyle(() => ({
@@ -109,44 +92,28 @@ export function AnimatedLogo({ size = 80, color, accentColor }: AnimatedLogoProp
         ]}
       />
 
-      {/* Main logo circle */}
+      {/* Main MyKit workflow mark */}
       <Animated.View
         style={[
           styles.logoBg,
-          { width: size, height: size, backgroundColor: accentColor + '15', borderColor: accentColor },
+          { width: size, height: size, borderColor: accentColor + '66' },
           logoStyle,
         ]}
       >
-        {/* Inner gradient effect */}
-        <View style={[styles.logoInner, { backgroundColor: accentColor }]}>
-          <View
-            style={[
-              styles.logoCorner1,
-              { backgroundColor: color, width: size * 0.4, height: size * 0.4 },
-            ]}
-          />
-          <View
-            style={[
-              styles.logoCorner2,
-              { backgroundColor: color, width: size * 0.35, height: size * 0.35 },
-            ]}
-          />
-          <View
-            style={[
-              styles.logoCenter,
-              { width: size * 0.3, height: size * 0.3, backgroundColor: color },
-            ]}
-          />
+        <View style={[styles.connector, styles.connectorLeft, { backgroundColor: accentColor, width: size * 0.24, height: size * 0.06 }]} />
+        <View style={[styles.connector, styles.connectorRight, { backgroundColor: '#2F6BFF', width: size * 0.24, height: size * 0.06 }]} />
+        <View style={[styles.connector, styles.connectorBottom, { backgroundColor: '#FFB84D', width: size * 0.06, height: size * 0.24 }]} />
+
+        <View style={[styles.node, styles.nodeLeft, { backgroundColor: accentColor, width: size * 0.18, height: size * 0.18, borderRadius: size * 0.09 }]} />
+        <View style={[styles.node, styles.nodeRight, { backgroundColor: '#2F6BFF', width: size * 0.18, height: size * 0.18, borderRadius: size * 0.09 }]} />
+        <View style={[styles.node, styles.nodeBottom, { backgroundColor: '#FFB84D', width: size * 0.18, height: size * 0.18, borderRadius: size * 0.09 }]} />
+
+        <View style={[styles.vault, { width: size * 0.44, height: size * 0.56, borderRadius: size * 0.09, borderColor: color, backgroundColor: '#07111E' }]}>
+          <View style={[styles.vaultLine, { backgroundColor: accentColor, width: size * 0.2 }]} />
+          <View style={[styles.vaultCore, { backgroundColor: color, width: size * 0.18, height: size * 0.18, borderRadius: size * 0.09 }]} />
+          <View style={[styles.vaultLine, { backgroundColor: '#FFB84D', width: size * 0.2 }]} />
         </View>
       </Animated.View>
-
-      {/* Static accent bar */}
-      <View
-        style={[
-          styles.accentBar,
-          { width: size * 0.3, height: 2, backgroundColor: accentColor, marginTop: size * 0.15 },
-        ]}
-      />
     </View>
   );
 }
@@ -162,41 +129,58 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
   },
   logoBg: {
-    borderRadius: 999,
+    borderRadius: 22,
     borderWidth: 2,
-    overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
+    position: 'relative',
+    backgroundColor: 'rgba(7, 17, 30, 0.72)',
   },
-  logoInner: {
-    width: '90%',
-    height: '90%',
+  connector: {
+    position: 'absolute',
     borderRadius: 999,
+    opacity: 0.85,
+  },
+  connectorLeft: {
+    left: '8%',
+    top: '31%',
+    transform: [{ rotate: '31deg' }],
+  },
+  connectorRight: {
+    right: '8%',
+    top: '31%',
+    transform: [{ rotate: '-31deg' }],
+  },
+  connectorBottom: {
+    bottom: '8%',
+  },
+  node: {
+    position: 'absolute',
+  },
+  nodeLeft: {
+    left: '-2%',
+    top: '20%',
+  },
+  nodeRight: {
+    right: '-2%',
+    top: '20%',
+  },
+  nodeBottom: {
+    bottom: '-2%',
+  },
+  vault: {
+    borderWidth: 4,
     alignItems: 'center',
-    justifyContent: 'center',
-    opacity: 0.95,
+    justifyContent: 'space-evenly',
+    zIndex: 4,
   },
-  logoCorner1: {
-    position: 'absolute',
+  vaultLine: {
+    height: 4,
     borderRadius: 999,
-    top: -10,
-    right: -10,
-    opacity: 0.6,
   },
-  logoCorner2: {
-    position: 'absolute',
-    borderRadius: 999,
-    bottom: -8,
-    left: -8,
-    opacity: 0.5,
-  },
-  logoCenter: {
-    borderRadius: 999,
-    opacity: 0.8,
-    zIndex: 10,
-  },
-  accentBar: {
-    borderRadius: 1,
-    marginTop: 12,
+  vaultCore: {
+    shadowColor: '#fff',
+    shadowOpacity: 0.18,
+    shadowRadius: 8,
   },
 });

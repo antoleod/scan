@@ -197,6 +197,7 @@ function write(file, png) {
 
 write(out("assets", "images", "icon.png"), drawIcon(1024));
 write(out("assets", "images", "favicon.png"), drawIcon(256));
+write(out("assets", "images", "splash-icon.png"), drawIcon(1024));
 write(out("public", "favicon.png"), drawIcon(256));
 write(out("public", "icon-192.png"), drawIcon(192));
 write(out("public", "icon-512.png"), drawIcon(512));
@@ -205,6 +206,7 @@ write(out("assets", "images", "android-icon-background.png"), drawIcon(1024, "ma
 write(out("assets", "images", "android-icon-monochrome.png"), drawIcon(1024, "mono"));
 write(out("assets", "icon.png"), drawIcon(1024));
 write(out("assets", "favicon.png"), drawIcon(256));
+write(out("assets", "splash-icon.png"), drawIcon(1024));
 write(out("assets", "android-icon-foreground.png"), drawIcon(1024, "maskable"));
 write(out("assets", "android-icon-background.png"), drawIcon(1024, "maskable"));
 write(out("assets", "android-icon-monochrome.png"), drawIcon(1024, "mono"));

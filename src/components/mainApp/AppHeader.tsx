@@ -61,12 +61,17 @@ function LogoMark({ accent, foreground }: { accent: string; foreground: string }
   }, [scaleAnim]);
 
   return (
-    <Animated.View style={[mainAppStyles.logoShell, { width: 32, height: 32, borderColor: accent, backgroundColor: accent, borderRadius: 8, transform: [{ scale: scaleAnim }] }]}>
-      <View style={mainAppStyles.logoBars}>
-        <View style={[mainAppStyles.logoBar, { height: 16, backgroundColor: foreground }]} />
-        <View style={[mainAppStyles.logoBarThin, { height: 12, backgroundColor: foreground }]} />
-        <View style={[mainAppStyles.logoBar, { height: 18, backgroundColor: foreground }]} />
-        <View style={[mainAppStyles.logoBarThin, { height: 14, backgroundColor: foreground }]} />
+    <Animated.View style={[mainAppStyles.logoShell, { width: 32, height: 32, borderColor: `${accent}66`, backgroundColor: '#07111E', borderRadius: 10, transform: [{ scale: scaleAnim }] }]}>
+      <View style={[mainAppStyles.logoConnector, mainAppStyles.logoConnectorLeft, { backgroundColor: accent }]} />
+      <View style={[mainAppStyles.logoConnector, mainAppStyles.logoConnectorRight, { backgroundColor: '#2F6BFF' }]} />
+      <View style={[mainAppStyles.logoConnectorVertical, { backgroundColor: '#FFB84D' }]} />
+      <View style={[mainAppStyles.logoNode, mainAppStyles.logoNodeLeft, { backgroundColor: accent }]} />
+      <View style={[mainAppStyles.logoNode, mainAppStyles.logoNodeRight, { backgroundColor: '#2F6BFF' }]} />
+      <View style={[mainAppStyles.logoNode, mainAppStyles.logoNodeBottom, { backgroundColor: '#FFB84D' }]} />
+      <View style={[mainAppStyles.logoVault, { borderColor: foreground }]}>
+        <View style={[mainAppStyles.logoVaultLine, { backgroundColor: accent }]} />
+        <View style={[mainAppStyles.logoVaultCore, { backgroundColor: foreground }]} />
+        <View style={[mainAppStyles.logoVaultLine, { backgroundColor: '#FFB84D' }]} />
       </View>
     </Animated.View>
   );
@@ -185,7 +190,7 @@ export function AppHeader({
       <View style={[mainAppStyles.header, { backgroundColor: palette.bg, borderColor: palette.border, height: 56, paddingHorizontal: 16 }]}>
         {/* Brand */}
         <View style={[mainAppStyles.brandBlock, { gap: 10 }]}>
-          <LogoMark accent={palette.accent} foreground="#000000" />
+          <LogoMark accent={palette.accent} foreground="#F7FBFF" />
           <Text style={{ color: palette.fg, fontSize: 15, fontWeight: '700', letterSpacing: 0.2 }} numberOfLines={1}>
             MyKit
           </Text>
