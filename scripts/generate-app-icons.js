@@ -93,10 +93,38 @@ function drawRoundRect(png, x, y, width, height, radius, color, opacity = 1) {
   }
 }
 
+function pointInPolygon(x, y, points) {
+  let inside = false;
+  for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
+    const xi = points[i][0];
+    const yi = points[i][1];
+    const xj = points[j][0];
+    const yj = points[j][1];
+    const intersect = yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi;
+    if (intersect) inside = !inside;
+  }
+  return inside;
+}
+
+function drawPolygon(png, points, color, opacity = 1) {
+  const rgb = hex(color);
+  const minX = Math.max(0, Math.floor(Math.min(...points.map(([x]) => x)) - 2));
+  const maxX = Math.min(png.width - 1, Math.ceil(Math.max(...points.map(([x]) => x)) + 2));
+  const minY = Math.max(0, Math.floor(Math.min(...points.map(([, y]) => y)) - 2));
+  const maxY = Math.min(png.height - 1, Math.ceil(Math.max(...points.map(([, y]) => y)) + 2));
+
+  for (let y = minY; y <= maxY; y++) {
+    for (let x = minX; x <= maxX; x++) {
+      if (!pointInPolygon(x + 0.5, y + 0.5, points)) continue;
+      blend(png.data, (y * png.width + x) * 4, rgb, opacity);
+    }
+  }
+}
+
 function drawIcon(size, variant = "full") {
   const png = new PNG({ width: size, height: size });
-  const bgA = hex(variant === "mono" ? "#F8FAFC" : "#08111C");
-  const bgB = hex(variant === "mono" ? "#EAF0F7" : "#14382F");
+  const bgA = hex(variant === "mono" ? "#F8FAFC" : "#07111E");
+  const bgB = hex(variant === "mono" ? "#EAF0F7" : "#142B3B");
   const cx = size / 2;
   const cy = size / 2;
 
@@ -113,32 +141,50 @@ function drawIcon(size, variant = "full") {
     }
   }
 
-  const ink = variant === "mono" ? "#172033" : "#102033";
-  const paper = variant === "mono" ? "#FFFFFF" : "#F4F8FF";
+  const ink = variant === "mono" ? "#172033" : "#DDEAFF";
+  const panel = variant === "mono" ? "#FFFFFF" : "#0D2233";
+  const panelEdge = variant === "mono" ? "#172033" : "#21445F";
   const blue = variant === "mono" ? "#172033" : "#2F6BFF";
-  const mint = variant === "mono" ? "#172033" : "#24D6B8";
-  const lime = variant === "mono" ? "#172033" : "#B8F35C";
+  const mint = variant === "mono" ? "#172033" : "#26D6B8";
+  const amber = variant === "mono" ? "#172033" : "#FFB84D";
 
-  drawRoundRect(png, size * 0.165, size * 0.19, size * 0.67, size * 0.64, size * 0.13, "#020812", 0.24);
-  drawRoundRect(png, size * 0.18, size * 0.17, size * 0.64, size * 0.64, size * 0.13, paper, 1);
-  drawRoundRect(png, size * 0.22, size * 0.21, size * 0.56, size * 0.56, size * 0.105, "#DCE8F8", 0.36);
+  drawCircle(png, cx, cy, size * 0.34, "#020812", 0.22);
+  drawLine(png, cx - size * 0.3, cy - size * 0.2, cx - size * 0.12, cy - size * 0.09, size * 0.026, mint, 0.82);
+  drawLine(png, cx + size * 0.3, cy - size * 0.2, cx + size * 0.12, cy - size * 0.09, size * 0.026, blue, 0.82);
+  drawLine(png, cx, cy + size * 0.33, cx, cy + size * 0.14, size * 0.026, amber, 0.82);
 
-  drawRoundRect(png, size * 0.19, size * 0.12, size * 0.19, size * 0.19, size * 0.045, mint, 1);
-  drawRoundRect(png, size * 0.62, size * 0.12, size * 0.19, size * 0.19, size * 0.045, blue, 1);
-  drawRoundRect(png, size * 0.62, size * 0.69, size * 0.19, size * 0.19, size * 0.045, lime, 1);
+  const hexOuter = [
+    [cx, cy - size * 0.285],
+    [cx + size * 0.247, cy - size * 0.142],
+    [cx + size * 0.247, cy + size * 0.142],
+    [cx, cy + size * 0.285],
+    [cx - size * 0.247, cy + size * 0.142],
+    [cx - size * 0.247, cy - size * 0.142],
+  ];
+  const hexInner = [
+    [cx, cy - size * 0.225],
+    [cx + size * 0.195, cy - size * 0.112],
+    [cx + size * 0.195, cy + size * 0.112],
+    [cx, cy + size * 0.225],
+    [cx - size * 0.195, cy + size * 0.112],
+    [cx - size * 0.195, cy - size * 0.112],
+  ];
+  drawPolygon(png, hexOuter, panelEdge, 1);
+  drawPolygon(png, hexInner, panel, 1);
 
-  const markW = size * 0.074;
-  drawLine(png, cx - size * 0.245, cy + size * 0.205, cx - size * 0.245, cy - size * 0.17, markW, ink, 1);
-  drawLine(png, cx - size * 0.245, cy - size * 0.17, cx - size * 0.02, cy + size * 0.065, markW, ink, 1);
-  drawLine(png, cx - size * 0.02, cy + size * 0.065, cx + size * 0.205, cy - size * 0.17, markW, ink, 1);
-  drawLine(png, cx + size * 0.205, cy - size * 0.17, cx + size * 0.205, cy + size * 0.205, markW, ink, 1);
+  drawRoundRect(png, cx - size * 0.118, cy - size * 0.178, size * 0.236, size * 0.356, size * 0.04, ink, 1);
+  drawRoundRect(png, cx - size * 0.078, cy - size * 0.138, size * 0.156, size * 0.276, size * 0.03, panel, 1);
+  drawLine(png, cx - size * 0.055, cy - size * 0.07, cx + size * 0.055, cy - size * 0.07, size * 0.018, mint, 1);
+  drawLine(png, cx - size * 0.055, cy, cx + size * 0.055, cy, size * 0.018, blue, 1);
+  drawLine(png, cx - size * 0.055, cy + size * 0.07, cx + size * 0.055, cy + size * 0.07, size * 0.018, amber, 1);
 
-  drawRoundRect(png, cx - size * 0.055, cy - size * 0.055, size * 0.11, size * 0.11, size * 0.03, blue, 1);
-  drawCircle(png, cx + size * 0.275, cy - size * 0.225, size * 0.035, mint, 1);
-  drawCircle(png, cx - size * 0.285, cy + size * 0.245, size * 0.035, blue, 1);
+  drawCircle(png, cx - size * 0.34, cy - size * 0.22, size * 0.074, mint, 1);
+  drawCircle(png, cx + size * 0.34, cy - size * 0.22, size * 0.074, blue, 1);
+  drawCircle(png, cx, cy + size * 0.38, size * 0.074, amber, 1);
+  drawCircle(png, cx, cy, size * 0.052, "#F7FBFF", variant === "mono" ? 0 : 1);
 
   if (variant === "maskable") {
-    drawRoundRect(png, size * 0.11, size * 0.11, size * 0.78, size * 0.78, size * 0.17, "#07172A", 0.1);
+    drawCircle(png, cx, cy, size * 0.43, "#07172A", 0.12);
   }
 
   return png;
